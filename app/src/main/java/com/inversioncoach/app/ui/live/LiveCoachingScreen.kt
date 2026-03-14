@@ -2,8 +2,10 @@ package com.inversioncoach.app.ui.live
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,14 +36,18 @@ import androidx.core.content.ContextCompat
 import com.inversioncoach.app.camera.CameraSessionManager
 import com.inversioncoach.app.coaching.VoiceCoach
 import com.inversioncoach.app.model.DrillType
+import com.inversioncoach.app.model.LiveSessionOptions
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.overlay.OverlayRenderer
 import com.inversioncoach.app.pose.PoseAnalyzer
+import com.inversioncoach.app.recording.SessionRecorder
 import com.inversioncoach.app.storage.ServiceLocator
 import java.util.concurrent.Executors
 
+private const val TAG = "LiveCoachingScreen"
+
 @Composable
-fun LiveCoachingScreen(drillType: DrillType, onStop: (Long) -> Unit) {
+fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop: (Long) -> Unit) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
 
@@ -50,6 +57,7 @@ fun LiveCoachingScreen(drillType: DrillType, onStop: (Long) -> Unit) {
             metricsEngine = ServiceLocator.metricsEngine(),
             cueEngine = ServiceLocator.cueEngine(),
             repository = repository,
+            options = options,
         )
     }
     val uiState by vm.uiState.collectAsState()
@@ -58,6 +66,8 @@ fun LiveCoachingScreen(drillType: DrillType, onStop: (Long) -> Unit) {
     val settings by repository.observeSettings().collectAsState(initial = UserSettings())
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val voiceCoach = remember(context) { VoiceCoach(context) }
+    val sessionRecorder = remember(context) { SessionRecorder(context) }
+    val currentSessionTitle by rememberUpdatedState(newValue = vm.sessionTitle)
 
     val cameraManager = remember { CameraSessionManager(context) }
     val analyzer = remember {
@@ -81,14 +91,17 @@ fun LiveCoachingScreen(drillType: DrillType, onStop: (Long) -> Unit) {
 
     DisposableEffect(Unit) {
         onDispose {
+            if (uiState.isRecording) {
+                sessionRecorder.stopRecording()
+            }
             cameraManager.release()
             voiceCoach.shutdown()
         }
     }
 
-
-    LaunchedEffect(spokenCue?.generatedAtMs, settings.audioVolume) {
+    LaunchedEffect(spokenCue?.generatedAtMs, settings.audioVolume, options.voiceEnabled) {
         val cue = spokenCue ?: return@LaunchedEffect
+        if (!options.voiceEnabled) return@LaunchedEffect
         if (settings.audioVolume <= 0f) return@LaunchedEffect
         if (cue.generatedAtMs != uiState.currentCueGeneratedAtMs || cue.id != uiState.currentCueId) return@LaunchedEffect
         voiceCoach.speak(cue, volume = settings.audioVolume)
@@ -108,12 +121,14 @@ fun LiveCoachingScreen(drillType: DrillType, onStop: (Long) -> Unit) {
                     }
                 },
             )
-            OverlayRenderer(
-                frame = smoothed,
-                modifier = Modifier.fillMaxSize(),
-                showIdealLine = uiState.showIdealLine,
-                problematicJointName = "left_shoulder",
-            )
+            if (options.showSkeletonOverlay) {
+                OverlayRenderer(
+                    frame = smoothed,
+                    modifier = Modifier.fillMaxSize(),
+                    showIdealLine = options.showIdealLine,
+                    problematicJointName = "left_shoulder",
+                )
+            }
         }
 
         Column(
@@ -152,10 +167,39 @@ fun LiveCoachingScreen(drillType: DrillType, onStop: (Long) -> Unit) {
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             Button(
-                enabled = uiState.cameraPermissionGranted && uiState.cameraReady,
-                onClick = vm::toggleRecording,
+                enabled = options.recordingEnabled && uiState.cameraPermissionGranted && uiState.cameraReady,
+                onClick = {
+                    if (uiState.isRecording) {
+                        sessionRecorder.stopRecording()
+                        vm.toggleRecording()
+                    } else {
+                        val capture = cameraManager.videoCapture()
+                        if (capture == null) {
+                            vm.onAnalyzerWarning("Recording unavailable until camera is ready")
+                        } else {
+                            sessionRecorder.startRecording(
+                                capture = capture,
+                                title = currentSessionTitle,
+                                onEvent = { event ->
+                                    if (event is VideoRecordEvent.Finalize) {
+                                        vm.onRecordingFinalized(event.outputResults.outputUri.toString())
+                                        if (event.hasError()) {
+                                            Log.e(TAG, "Recording finalize error code=${event.error}")
+                                        }
+                                    }
+                                },
+                            )
+                            vm.toggleRecording()
+                        }
+                    }
+                },
             ) { Text(if (uiState.isRecording) "Stop Rec" else "Record") }
-            Button(onClick = { vm.stopSession(onStop) }) { Text("Stop") }
+            Button(onClick = {
+                if (uiState.isRecording) {
+                    sessionRecorder.stopRecording()
+                }
+                vm.stopSession(onStop)
+            }) { Text("Stop") }
         }
     }
 }

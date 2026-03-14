@@ -5,18 +5,20 @@ import androidx.lifecycle.viewModelScope
 import com.inversioncoach.app.biomechanics.AlignmentMetricsEngine
 import com.inversioncoach.app.biomechanics.DrillConfigs
 import com.inversioncoach.app.coaching.CueEngine
+import com.inversioncoach.app.model.CoachingCue
 import com.inversioncoach.app.model.DrillScore
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.IssueEvent
+import com.inversioncoach.app.model.LiveSessionOptions
 import com.inversioncoach.app.model.LiveSessionUiState
 import com.inversioncoach.app.model.PoseFrame
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.model.UserSettings
-import com.inversioncoach.app.model.CoachingCue
 import com.inversioncoach.app.pose.PoseSmoother
 import com.inversioncoach.app.storage.repository.SessionRepository
+import com.inversioncoach.app.summary.SummaryGenerator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,10 +30,19 @@ class LiveCoachingViewModel(
     private val metricsEngine: AlignmentMetricsEngine,
     private val cueEngine: CueEngine,
     private val repository: SessionRepository,
+    private val options: LiveSessionOptions,
+    private val summaryGenerator: SummaryGenerator = SummaryGenerator(com.inversioncoach.app.summary.RecommendationEngine()),
     private val smoother: PoseSmoother = PoseSmoother(),
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(LiveSessionUiState(drillType = drillType))
+    private val _uiState = MutableStateFlow(
+        LiveSessionUiState(
+            drillType = drillType,
+            isRecording = options.recordingEnabled,
+            showOverlay = options.showSkeletonOverlay,
+            showIdealLine = options.showIdealLine,
+        ),
+    )
     val uiState: StateFlow<LiveSessionUiState> = _uiState.asStateFlow()
 
     private val _smoothedFrame = MutableStateFlow<SmoothedPoseFrame?>(null)
@@ -44,6 +55,10 @@ class LiveCoachingViewModel(
     private var sessionId: Long? = null
     private var sessionStartedAtMs: Long = 0L
     private var lastFramePersistAt = 0L
+    private var rawVideoUri: String? = null
+
+    val sessionTitle: String
+        get() = "${drillType.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }} session"
 
     init {
         startSession()
@@ -62,6 +77,10 @@ class LiveCoachingViewModel(
 
     fun onAnalyzerWarning(message: String) {
         _uiState.value = _uiState.value.copy(warningMessage = message)
+    }
+
+    fun onRecordingFinalized(uri: String?) {
+        rawVideoUri = uri?.takeIf { it.isNotBlank() }
     }
 
     fun onPoseFrame(frame: PoseFrame, settings: UserSettings) {
@@ -167,10 +186,16 @@ class LiveCoachingViewModel(
                 .joinToString(", ") { it.first }
                 .ifBlank { "No major issues detected" }
             val wins = "Strongest area: ${latestScore.strongestArea.replace('_', ' ')}"
+            val summary = summaryGenerator.generate(
+                drillType = drillType,
+                score = latestScore,
+                issues = issues.map { it.issue },
+                wins = listOf(wins),
+            )
             repository.saveSession(
                 SessionRecord(
                     id = activeSessionId,
-                    title = "${drillType.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }} session",
+                    title = sessionTitle,
                     drillType = drillType,
                     startedAtMs = sessionStartedAtMs,
                     completedAtMs = System.currentTimeMillis(),
@@ -178,13 +203,13 @@ class LiveCoachingViewModel(
                     strongestArea = latestScore.strongestArea,
                     limitingFactor = latestScore.limitingFactor,
                     issues = topIssues,
-                    wins = wins,
+                    wins = summary.whatWentWell.joinToString(" "),
                     metricsJson = latestScore.subScores.entries.joinToString(",") { "${it.key}:${it.value}" },
                     annotatedVideoUri = null,
-                    rawVideoUri = null,
+                    rawVideoUri = rawVideoUri,
                     bestFrameTimestampMs = bestFrame,
                     worstFrameTimestampMs = worstFrame,
-                    topImprovementFocus = latestScore.limitingFactor.replace('_', ' '),
+                    topImprovementFocus = summary.nextFocus,
                 ),
             )
             onSessionFinalized(activeSessionId)
@@ -199,10 +224,10 @@ class LiveCoachingViewModel(
             sessionStartedAtMs = now
             val newSessionId = repository.saveSession(
                 SessionRecord(
-                    title = "${drillType.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }} session",
+                    title = sessionTitle,
                     drillType = drillType,
                     startedAtMs = now,
-                    completedAtMs = now,
+                    completedAtMs = 0L,
                     overallScore = 0,
                     strongestArea = "pending",
                     limitingFactor = "pending",

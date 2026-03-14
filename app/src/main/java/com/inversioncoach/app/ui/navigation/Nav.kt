@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.inversioncoach.app.model.DrillType
+import com.inversioncoach.app.model.LiveSessionOptions
 import com.inversioncoach.app.ui.history.HistoryScreen
 import com.inversioncoach.app.ui.home.HomeScreen
 import com.inversioncoach.app.ui.live.LiveCoachingScreen
@@ -18,8 +19,9 @@ import com.inversioncoach.app.ui.startdrill.StartDrillScreen
 sealed class Route(val value: String) {
     data object Home : Route("home")
     data object Start : Route("start")
-    data object Live : Route("live/{drill}") {
-        fun create(drillType: DrillType) = "live/${drillType.name}"
+    data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}") {
+        fun create(drillType: DrillType, options: LiveSessionOptions): String =
+            "live/${drillType.name}/${options.voiceEnabled}/${options.recordingEnabled}/${options.showSkeletonOverlay}/${options.showIdealLine}"
     }
     data object Results : Route("results/{sessionId}") {
         fun create(sessionId: Long) = "results/$sessionId"
@@ -42,13 +44,30 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         composable(Route.Start.value) {
             StartDrillScreen(
                 onBack = { navController.popBackStack() },
-                onStart = { navController.navigate(Route.Live.create(it)) },
+                onStart = { drillType, options -> navController.navigate(Route.Live.create(drillType, options)) },
             )
         }
-        composable(Route.Live.value, arguments = listOf(navArgument("drill") { type = NavType.StringType })) { backStack ->
-            val drill = DrillType.valueOf(backStack.arguments?.getString("drill") ?: DrillType.CHEST_TO_WALL_HANDSTAND.name)
+        composable(
+            Route.Live.value,
+            arguments = listOf(
+                navArgument("drill") { type = NavType.StringType },
+                navArgument("voice") { type = NavType.BoolType },
+                navArgument("record") { type = NavType.BoolType },
+                navArgument("skeleton") { type = NavType.BoolType },
+                navArgument("idealLine") { type = NavType.BoolType },
+            ),
+        ) { backStack ->
+            val args = backStack.arguments
+            val drill = DrillType.valueOf(args?.getString("drill") ?: DrillType.CHEST_TO_WALL_HANDSTAND.name)
+            val options = LiveSessionOptions(
+                voiceEnabled = args?.getBoolean("voice") ?: true,
+                recordingEnabled = args?.getBoolean("record") ?: true,
+                showSkeletonOverlay = args?.getBoolean("skeleton") ?: true,
+                showIdealLine = args?.getBoolean("idealLine") ?: true,
+            )
             LiveCoachingScreen(
                 drillType = drill,
+                options = options,
                 onStop = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
             )
         }

@@ -2,7 +2,6 @@ package com.inversioncoach.app.ui.startdrill
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,10 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.biomechanics.DrillConfigs
 import com.inversioncoach.app.model.DrillType
+import com.inversioncoach.app.model.LiveSessionOptions
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 
 @Composable
-fun StartDrillScreen(onBack: () -> Unit, onStart: (DrillType) -> Unit) {
+fun StartDrillScreen(onBack: () -> Unit, onStart: (DrillType, LiveSessionOptions) -> Unit) {
     val selected = remember { mutableStateOf(DrillType.CHEST_TO_WALL_HANDSTAND) }
     val voiceOn = remember { mutableStateOf(true) }
     val recordOn = remember { mutableStateOf(true) }
@@ -50,7 +50,20 @@ fun StartDrillScreen(onBack: () -> Unit, onStart: (DrillType) -> Unit) {
             ToggleRow("Record session", recordOn.value) { recordOn.value = it }
             ToggleRow("Show skeleton overlay", skeletonOn.value) { skeletonOn.value = it }
             ToggleRow("Show ideal line", idealLineOn.value) { idealLineOn.value = it }
-            Button(onClick = { onStart(selected.value) }, modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = {
+                    onStart(
+                        selected.value,
+                        LiveSessionOptions(
+                            voiceEnabled = voiceOn.value,
+                            recordingEnabled = recordOn.value,
+                            showSkeletonOverlay = skeletonOn.value,
+                            showIdealLine = idealLineOn.value,
+                        ),
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Text("Start 3s Countdown")
             }
         }

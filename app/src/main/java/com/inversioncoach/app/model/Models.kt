@@ -150,3 +150,10 @@ data class LiveSessionUiState(
     val debugAngles: List<AngleDebugMetric> = emptyList(),
     val debugMetrics: List<AlignmentMetric> = emptyList(),
 )
+
+data class LiveSessionOptions(
+    val voiceEnabled: Boolean = true,
+    val recordingEnabled: Boolean = true,
+    val showSkeletonOverlay: Boolean = true,
+    val showIdealLine: Boolean = true,
+)

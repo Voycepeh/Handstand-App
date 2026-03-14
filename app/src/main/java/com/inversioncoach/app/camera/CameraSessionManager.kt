@@ -60,6 +60,9 @@ class CameraSessionManager(
         }, ContextCompat.getMainExecutor(context))
     }
 
+
+    fun videoCapture(): VideoCapture<Recorder>? = videoCapture
+
     fun release() {
         cameraExecutor.shutdown()
     }

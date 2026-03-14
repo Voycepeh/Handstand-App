@@ -10,25 +10,36 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.inversioncoach.app.model.DrillType
-import com.inversioncoach.app.model.SessionRecord
+import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
-
-private val samples = listOf(
-    SessionRecord(1, "Morning chest-to-wall", DrillType.CHEST_TO_WALL_HANDSTAND, 0, 1, 74, "line_quality", "rib_pelvis_control", "ribs flare", "good shoulders", "{}", null, null, 18000, 42000, "shoulder elevation"),
-    SessionRecord(2, "Pike strength", DrillType.PIKE_PUSH_UP, 0, 1, 81, "tempo_control", "hip_height", "hips low", "great tempo", "{}", null, null, 21000, 51000, "hip height"),
-)
+import kotlin.math.roundToInt
 
 @Composable
 fun HistoryScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val repository = remember { ServiceLocator.repository(context) }
+    val sessions by repository.observeSessions().collectAsState(initial = emptyList())
+    val avgScore = sessions.map { it.overallScore }.average().takeIf { !it.isNaN() }?.roundToInt() ?: 0
+    val topIssue = sessions
+        .flatMap { it.issues.split(",").map(String::trim).filter(String::isNotBlank) }
+        .groupingBy { it }
+        .eachCount()
+        .maxByOrNull { it.value }
+        ?.key
+        ?: "No consistent issue yet"
+
     ScaffoldedScreen(title = "History", onBack = onBack) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Trend: Avg score ↑ 6% in last 2 weeks")
-            Text("Most common fault: ribs flaring")
+            Text("Trend: Avg score $avgScore across ${sessions.size} sessions")
+            Text("Most common fault: $topIssue")
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(samples) { session ->
+                items(sessions) { session ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp)) {
                             Text(session.title)
