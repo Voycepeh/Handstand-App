@@ -1,6 +1,7 @@
 package com.inversioncoach.app.ui.results
 
 import android.content.Intent
+import android.content.ActivityNotFoundException
 import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
@@ -166,19 +167,22 @@ private fun openVideo(context: android.content.Context, videoUri: String?) {
         Toast.makeText(context, "Unable to open video file.", Toast.LENGTH_SHORT).show()
         return
     }
+    val mimeType = context.contentResolver.getType(resolvedUri) ?: "video/*"
     val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(resolvedUri, "video/mp4")
+        setDataAndType(resolvedUri, mimeType)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    val canOpen = intent.resolveActivity(context.packageManager) != null
-    if (!canOpen) {
-        Toast.makeText(context, "No video player available to open this file.", Toast.LENGTH_SHORT).show()
-        return
-    }
-    runCatching { context.startActivity(intent) }
-        .onFailure {
+    runCatching {
+        val chooser = Intent.createChooser(intent, "Open video")
+        chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        context.startActivity(chooser)
+    }.onFailure { error ->
+        if (error is ActivityNotFoundException) {
+            Toast.makeText(context, "No video player available to open this file.", Toast.LENGTH_SHORT).show()
+        } else {
             Toast.makeText(context, "Unable to open video file.", Toast.LENGTH_SHORT).show()
         }
+    }
 }
 
 private fun toSharableVideoUri(context: android.content.Context, sourceUri: Uri): Uri? {
