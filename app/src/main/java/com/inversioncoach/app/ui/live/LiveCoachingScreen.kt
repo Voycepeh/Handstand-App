@@ -129,6 +129,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             if (options.showSkeletonOverlay) {
                 OverlayRenderer(
                     frame = smoothed,
+                    drillType = drillType,
                     modifier = Modifier.fillMaxSize(),
                     showIdealLine = options.showIdealLine,
                     problematicJointName = "left_shoulder",
