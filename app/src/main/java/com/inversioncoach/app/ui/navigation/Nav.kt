@@ -19,9 +19,9 @@ import com.inversioncoach.app.ui.startdrill.StartDrillScreen
 sealed class Route(val value: String) {
     data object Home : Route("home")
     data object Start : Route("start")
-    data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}") {
+    data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}/{zoomOutCamera}") {
         fun create(drillType: DrillType, options: LiveSessionOptions): String =
-            "live/${drillType.name}/${options.voiceEnabled}/${options.recordingEnabled}/${options.showSkeletonOverlay}/${options.showIdealLine}"
+            "live/${drillType.name}/${options.voiceEnabled}/${options.recordingEnabled}/${options.showSkeletonOverlay}/${options.showIdealLine}/${options.zoomOutCamera}"
     }
     data object Results : Route("results/{sessionId}") {
         fun create(sessionId: Long) = "results/$sessionId"
@@ -55,6 +55,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 navArgument("record") { type = NavType.BoolType },
                 navArgument("skeleton") { type = NavType.BoolType },
                 navArgument("idealLine") { type = NavType.BoolType },
+                navArgument("zoomOutCamera") { type = NavType.BoolType },
             ),
         ) { backStack ->
             val args = backStack.arguments
@@ -64,6 +65,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 recordingEnabled = args?.getBoolean("record") ?: true,
                 showSkeletonOverlay = args?.getBoolean("skeleton") ?: true,
                 showIdealLine = args?.getBoolean("idealLine") ?: true,
+                zoomOutCamera = args?.getBoolean("zoomOutCamera") ?: true,
             )
             LiveCoachingScreen(
                 drillType = drill,
