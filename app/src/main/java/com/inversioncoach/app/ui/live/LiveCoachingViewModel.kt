@@ -241,8 +241,8 @@ class LiveCoachingViewModel(
         }
     }
 
-    fun toggleRecording() {
-        _uiState.value = _uiState.value.copy(isRecording = !_uiState.value.isRecording)
+    fun setRecording(isRecording: Boolean) {
+        _uiState.value = _uiState.value.copy(isRecording = isRecording)
     }
 
     fun stopSession(onSessionFinalized: (Long) -> Unit) {

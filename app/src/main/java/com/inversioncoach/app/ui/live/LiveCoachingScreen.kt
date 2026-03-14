@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -112,6 +112,37 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
         voiceCoach.speak(cue, volume = settings.audioVolume)
     }
 
+    LaunchedEffect(options.recordingEnabled, uiState.cameraPermissionGranted, uiState.cameraReady, uiState.isRecording) {
+        if (!options.recordingEnabled) return@LaunchedEffect
+        if (!uiState.cameraPermissionGranted || !uiState.cameraReady || uiState.isRecording) return@LaunchedEffect
+
+        val capture = cameraManager.videoCapture()
+        if (capture == null) {
+            vm.onAnalyzerWarning("Recording unavailable until camera is ready")
+            return@LaunchedEffect
+        }
+
+        sessionRecorder.startRecording(
+            capture = capture,
+            title = currentSessionTitle,
+            onEvent = { event: VideoRecordEvent ->
+                if (event is VideoRecordEvent.Finalize) {
+                    if (event.hasError()) {
+                        Log.e(TAG, "Recording finalize error code=${event.error}")
+                        vm.onAnalyzerWarning("Recording failed to finalize (code ${event.error})")
+                    } else {
+                        vm.onRecordingFinalized(event.outputResults.outputUri.toString())
+                    }
+                    if (pendingStopAfterRecordingFinalize) {
+                        pendingStopAfterRecordingFinalize = false
+                        vm.stopSession(onStop)
+                    }
+                }
+            },
+        )
+        vm.setRecording(true)
+    }
+
     Box(Modifier.fillMaxSize()) {
         if (uiState.cameraPermissionGranted) {
             AndroidView(
@@ -170,51 +201,13 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
 
         Row(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            horizontalArrangement = Arrangement.Center,
         ) {
-            Button(
-                enabled = options.recordingEnabled && uiState.cameraPermissionGranted && uiState.cameraReady,
-                onClick = {
-                    if (uiState.isRecording) {
-                        sessionRecorder.stopRecording()
-                        vm.toggleRecording()
-                    } else {
-                        val capture = cameraManager.videoCapture()
-                        if (capture == null) {
-                            vm.onAnalyzerWarning("Recording unavailable until camera is ready")
-                        } else {
-                            sessionRecorder.startRecording(
-                                capture = capture,
-                                title = currentSessionTitle,
-                                onEvent = { event: VideoRecordEvent ->
-                                    if (event is VideoRecordEvent.Finalize) {
-                                        if (event.hasError()) {
-                                            Log.e(TAG, "Recording finalize error code=${event.error}")
-                                            vm.onAnalyzerWarning("Recording failed to finalize (code ${event.error})")
-                                        } else {
-                                            val finalizedUri = event.outputResults.outputUri
-                                                .toString()
-                                                .takeIf { it.isNotBlank() }
-                                                ?: sessionRecorder.fallbackOutputUri()
-                                            vm.onRecordingFinalized(finalizedUri)
-                                        }
-                                        if (pendingStopAfterRecordingFinalize) {
-                                            pendingStopAfterRecordingFinalize = false
-                                            vm.stopSession(onStop)
-                                        }
-                                    }
-                                },
-                            )
-                            vm.toggleRecording()
-                        }
-                    }
-                },
-            ) { Text(if (uiState.isRecording) "Stop Rec" else "Record") }
-            Button(onClick = {
+            FilledTonalButton(onClick = {
                 if (uiState.isRecording) {
                     pendingStopAfterRecordingFinalize = true
                     sessionRecorder.stopRecording()
-                    vm.toggleRecording()
+                    vm.setRecording(false)
                 } else {
                     vm.stopSession(onStop)
                 }
