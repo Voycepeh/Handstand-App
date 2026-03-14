@@ -208,22 +208,64 @@ object DrillCatalog {
             )
         }
 
-    private fun symmetricSpec(id: String, upright: Boolean = false): SkeletonAnimationSpec {
-        val pelvisY = if (upright) 0.52f else 0.62f
+    private fun symmetricSpec(
+        id: String,
+        pelvisY: Float,
+        shoulderY: Float,
+        armReach: Float,
+        legSpread: Float,
+        wristY: Float,
+    ): SkeletonAnimationSpec {
         return SkeletonAnimationSpec(
             id = id,
             fpsHint = 15,
             loop = true,
             mirroredSupported = false,
             keyframes = listOf(
-                frame("neutral", 0f, pelvisY = pelvisY, armDelta = 0.0f, legDelta = 0.0f),
-                frame("mid_eccentric", 0.25f, pelvisY = pelvisY + 0.05f, armDelta = 0.04f, legDelta = 0.02f),
-                frame("bottom", 0.5f, pelvisY = pelvisY + 0.1f, armDelta = 0.07f, legDelta = 0.04f),
-                frame("mid_concentric", 0.75f, pelvisY = pelvisY + 0.05f, armDelta = 0.03f, legDelta = 0.02f),
-                frame("top", 1f, pelvisY = pelvisY, armDelta = 0.0f, legDelta = 0.0f),
+                frame("neutral", 0f, pelvisY = pelvisY, shoulderY = shoulderY, armDelta = 0.0f, legDelta = 0.0f, armReach = armReach, wristY = wristY),
+                frame("mid_eccentric", 0.25f, pelvisY = pelvisY + 0.05f, shoulderY = shoulderY + 0.03f, armDelta = 0.04f, legDelta = 0.02f + legSpread, armReach = armReach, wristY = wristY + 0.02f),
+                frame("bottom", 0.5f, pelvisY = pelvisY + 0.1f, shoulderY = shoulderY + 0.06f, armDelta = 0.08f, legDelta = 0.04f + legSpread, armReach = armReach + 0.01f, wristY = wristY + 0.04f),
+                frame("mid_concentric", 0.75f, pelvisY = pelvisY + 0.05f, shoulderY = shoulderY + 0.03f, armDelta = 0.03f, legDelta = 0.02f + legSpread, armReach = armReach, wristY = wristY + 0.02f),
+                frame("top", 1f, pelvisY = pelvisY, shoulderY = shoulderY, armDelta = 0.0f, legDelta = 0.0f, armReach = armReach, wristY = wristY),
             ),
         )
     }
+
+    private fun horizontalPushSpec(id: String): SkeletonAnimationSpec = symmetricSpec(
+        id = id,
+        pelvisY = 0.62f,
+        shoulderY = 0.31f,
+        armReach = 0.07f,
+        legSpread = 0.0f,
+        wristY = 0.52f,
+    )
+
+    private fun squatSpec(id: String): SkeletonAnimationSpec = symmetricSpec(
+        id = id,
+        pelvisY = 0.56f,
+        shoulderY = 0.28f,
+        armReach = 0.05f,
+        legSpread = 0.03f,
+        wristY = 0.48f,
+    )
+
+    private fun verticalPullSpec(id: String): SkeletonAnimationSpec = symmetricSpec(
+        id = id,
+        pelvisY = 0.54f,
+        shoulderY = 0.27f,
+        armReach = 0.03f,
+        legSpread = 0.01f,
+        wristY = 0.40f,
+    )
+
+    private fun holdSpec(id: String, inverted: Boolean): SkeletonAnimationSpec = symmetricSpec(
+        id = id,
+        pelvisY = if (inverted) 0.42f else 0.62f,
+        shoulderY = if (inverted) 0.22f else 0.30f,
+        armReach = if (inverted) 0.01f else 0.06f,
+        legSpread = if (inverted) 0.0f else 0.01f,
+        wristY = if (inverted) 0.32f else 0.50f,
+    )
 
     private fun lungeSpec(id: String): SkeletonAnimationSpec = SkeletonAnimationSpec(
         id = id,
@@ -231,11 +273,11 @@ object DrillCatalog {
         loop = true,
         mirroredSupported = true,
         keyframes = listOf(
-            frame("neutral", 0f, pelvisY = 0.58f, armDelta = 0f, legDelta = 0f),
-            frame("start", 0.2f, pelvisY = 0.6f, armDelta = 0.02f, legDelta = 0.03f),
-            frame("bottom", 0.5f, pelvisY = 0.68f, armDelta = 0.02f, legDelta = 0.08f, asymmetry = true),
-            frame("rise", 0.8f, pelvisY = 0.62f, armDelta = 0.01f, legDelta = 0.04f, asymmetry = true),
-            frame("top", 1f, pelvisY = 0.58f, armDelta = 0f, legDelta = 0f),
+            frame("neutral", 0f, pelvisY = 0.58f, shoulderY = 0.30f, armDelta = 0f, legDelta = 0f),
+            frame("start", 0.2f, pelvisY = 0.6f, shoulderY = 0.31f, armDelta = 0.02f, legDelta = 0.03f),
+            frame("bottom", 0.5f, pelvisY = 0.68f, shoulderY = 0.33f, armDelta = 0.02f, legDelta = 0.08f, asymmetry = true),
+            frame("rise", 0.8f, pelvisY = 0.62f, shoulderY = 0.32f, armDelta = 0.01f, legDelta = 0.04f, asymmetry = true),
+            frame("top", 1f, pelvisY = 0.58f, shoulderY = 0.30f, armDelta = 0f, legDelta = 0f),
         ),
     )
 
@@ -243,8 +285,11 @@ object DrillCatalog {
         name: String,
         progress: Float,
         pelvisY: Float,
+        shoulderY: Float,
         armDelta: Float,
         legDelta: Float,
+        armReach: Float = 0.06f,
+        wristY: Float = 0.50f,
         asymmetry: Boolean = false,
     ): SkeletonKeyframe {
         val leftLegX = if (asymmetry) 0.43f else 0.47f
@@ -256,13 +301,13 @@ object DrillCatalog {
             joints = mapOf(
                 BodyJoint.HEAD to NormalizedPoint(0.5f, 0.14f + armDelta / 4f),
                 BodyJoint.NECK to NormalizedPoint(0.5f, 0.23f + armDelta / 4f),
-                BodyJoint.LEFT_SHOULDER to NormalizedPoint(0.44f, 0.30f + armDelta),
-                BodyJoint.RIGHT_SHOULDER to NormalizedPoint(0.56f, 0.30f + armDelta),
-                BodyJoint.LEFT_ELBOW to NormalizedPoint(0.40f, 0.39f + armDelta),
-                BodyJoint.RIGHT_ELBOW to NormalizedPoint(0.60f, 0.39f + armDelta),
-                BodyJoint.LEFT_WRIST to NormalizedPoint(0.38f, 0.50f + armDelta),
-                BodyJoint.RIGHT_WRIST to NormalizedPoint(0.62f, 0.50f + armDelta),
-                BodyJoint.RIBCAGE to NormalizedPoint(0.5f, 0.38f + armDelta / 2f),
+                BodyJoint.LEFT_SHOULDER to NormalizedPoint(0.44f, shoulderY + armDelta),
+                BodyJoint.RIGHT_SHOULDER to NormalizedPoint(0.56f, shoulderY + armDelta),
+                BodyJoint.LEFT_ELBOW to NormalizedPoint(0.44f - armReach, shoulderY + 0.09f + armDelta),
+                BodyJoint.RIGHT_ELBOW to NormalizedPoint(0.56f + armReach, shoulderY + 0.09f + armDelta),
+                BodyJoint.LEFT_WRIST to NormalizedPoint(0.44f - armReach - 0.02f, wristY + armDelta),
+                BodyJoint.RIGHT_WRIST to NormalizedPoint(0.56f + armReach + 0.02f, wristY + armDelta),
+                BodyJoint.RIBCAGE to NormalizedPoint(0.5f, shoulderY + 0.08f + armDelta / 2f),
                 BodyJoint.PELVIS to NormalizedPoint(0.5f, pelvisY),
                 BodyJoint.LEFT_HIP to NormalizedPoint(leftLegX, pelvisY + legDelta / 2f),
                 BodyJoint.RIGHT_HIP to NormalizedPoint(rightLegX, pelvisY + legDelta / 2f),
@@ -305,25 +350,25 @@ object DrillCatalog {
 
     // Wave 1 seeded drills (shipping now)
     private val wave1 = listOf(
-        def(DrillType.WALL_PUSH_UP, "Wall Push-Up", "push-up progression", DrillLevel.BEGINNER, listOf("wall"), MovementPattern.HORIZONTAL_PUSH, listOf("neutral", "start", "mid_eccentric", "bottom", "mid_concentric", "top"), listOf("hip_sag", "elbow_flare", "head_forward"), listOf("Brace line", "Lower under control", "Finish with reach"), RepMode.REP_BASED, symmetricSpec("wall_push_up")),
-        def(DrillType.STANDARD_PUSH_UP, "Push-Up", "push-up progression", DrillLevel.INTERMEDIATE, listOf("floor"), MovementPattern.HORIZONTAL_PUSH, listOf("neutral", "start", "mid_eccentric", "bottom", "mid_concentric", "top"), listOf("snake_rep", "incomplete_depth", "locked_ribs"), listOf("Keep hollow body", "Chest and hips rise together", "Lock out softly"), RepMode.REP_BASED, symmetricSpec("push_up")),
-        def(DrillType.BODYWEIGHT_SQUAT, "Squat", "squat progression", DrillLevel.BEGINNER, listOf("none"), MovementPattern.SQUAT_PATTERN, listOf("neutral", "start", "mid_eccentric", "bottom", "mid_concentric", "top"), listOf("knee_valgus", "heel_lift", "depth_short"), listOf("Sit between heels", "Track knees over toes", "Stand tall at top"), RepMode.REP_BASED, symmetricSpec("squat", upright = true)),
+        def(DrillType.WALL_PUSH_UP, "Wall Push-Up", "push-up progression", DrillLevel.BEGINNER, listOf("wall"), MovementPattern.HORIZONTAL_PUSH, listOf("neutral", "start", "mid_eccentric", "bottom", "mid_concentric", "top"), listOf("hip_sag", "elbow_flare", "head_forward"), listOf("Brace line", "Lower under control", "Finish with reach"), RepMode.REP_BASED, horizontalPushSpec("wall_push_up")),
+        def(DrillType.STANDARD_PUSH_UP, "Push-Up", "push-up progression", DrillLevel.INTERMEDIATE, listOf("floor"), MovementPattern.HORIZONTAL_PUSH, listOf("neutral", "start", "mid_eccentric", "bottom", "mid_concentric", "top"), listOf("snake_rep", "incomplete_depth", "locked_ribs"), listOf("Keep hollow body", "Chest and hips rise together", "Lock out softly"), RepMode.REP_BASED, horizontalPushSpec("push_up")),
+        def(DrillType.BODYWEIGHT_SQUAT, "Squat", "squat progression", DrillLevel.BEGINNER, listOf("none"), MovementPattern.SQUAT_PATTERN, listOf("neutral", "start", "mid_eccentric", "bottom", "mid_concentric", "top"), listOf("knee_valgus", "heel_lift", "depth_short"), listOf("Sit between heels", "Track knees over toes", "Stand tall at top"), RepMode.REP_BASED, squatSpec("squat")),
         def(DrillType.REVERSE_LUNGE, "Reverse Lunge", "squat progression", DrillLevel.BEGINNER, listOf("none"), MovementPattern.SQUAT_PATTERN, listOf("neutral", "start", "mid_eccentric", "bottom", "mid_concentric", "top"), listOf("front_knee_collapse", "torso_drop", "unstable_step"), listOf("Step back long", "Stay tall", "Push through front foot"), RepMode.REP_BASED, lungeSpec("reverse_lunge")),
-        def(DrillType.FOREARM_PLANK, "Plank", "line control", DrillLevel.BEGINNER, listOf("mat"), MovementPattern.ANTI_EXTENSION_LINE_CONTROL, listOf("neutral", "start", "hold", "top"), listOf("hip_sag", "hip_pike", "head_drop"), listOf("Pull ribs down", "Squeeze glutes", "Reach elbows forward"), RepMode.HOLD_BASED, symmetricSpec("plank")),
-        def(DrillType.GLUTE_BRIDGE, "Glute Bridge", "bridge progression", DrillLevel.BEGINNER, listOf("mat"), MovementPattern.HIP_EXTENSION, listOf("neutral", "start", "mid_concentric", "top", "mid_eccentric"), listOf("overarch", "knee_wobble", "short_extension"), listOf("Drive through heels", "Ribs stay down", "Pause at top"), RepMode.REP_BASED, symmetricSpec("glute_bridge", upright = true)),
-        def(DrillType.PULL_UP_OR_ASSISTED_PULL_UP, "Pull-Up", "pull-up progression", DrillLevel.INTERMEDIATE, listOf("bar", "band_optional"), MovementPattern.VERTICAL_PULL, listOf("neutral", "start", "mid_concentric", "top", "mid_eccentric"), listOf("kip_swing", "chin_short", "shrugged_pull"), listOf("Start active hang", "Pull elbows to ribs", "Control descent"), RepMode.REP_BASED, symmetricSpec("pull_up", upright = true)),
-        def(DrillType.PARALLEL_BAR_DIP, "Dip", "dip progression", DrillLevel.INTERMEDIATE, listOf("parallel_bars"), MovementPattern.VERTICAL_PUSH, listOf("neutral", "start", "mid_eccentric", "bottom", "mid_concentric", "top"), listOf("shoulder_dump", "depth_short", "forward_head"), listOf("Shoulders down", "Lean slightly", "Press to support"), RepMode.REP_BASED, symmetricSpec("dip", upright = true)),
-        def(DrillType.HANGING_KNEE_RAISE, "Hanging Knee Raise", "leg raise progression", DrillLevel.INTERMEDIATE, listOf("bar"), MovementPattern.CORE_FLEXION_COMPRESSION, listOf("neutral", "start", "mid_concentric", "top", "mid_eccentric"), listOf("swing", "low_knee_height", "passive_hang"), listOf("Own the hang", "Posterior tilt at top", "Lower slowly"), RepMode.REP_BASED, symmetricSpec("hanging_knee_raise", upright = true)),
-        def(DrillType.PIKE_PUSH_UP, "Pike Push-Up", "handstand prep", DrillLevel.INTERMEDIATE, listOf("floor", "box_optional"), MovementPattern.VERTICAL_PUSH, listOf("neutral", "start", "mid_eccentric", "bottom", "mid_concentric", "top"), listOf("hips_low", "elbow_flare", "head_path_forward"), listOf("Hips high", "Tripod head path", "Push away hard"), RepMode.REP_BASED, symmetricSpec("pike_push_up")),
-        def(DrillType.HOLLOW_BODY_HOLD, "Hollow Hold", "hollow/plank", DrillLevel.INTERMEDIATE, listOf("mat"), MovementPattern.ANTI_EXTENSION_LINE_CONTROL, listOf("neutral", "start", "hold", "top"), listOf("rib_flare", "lumbar_gap", "knee_bend"), listOf("Crush low back down", "Reach long", "Breathe quietly"), RepMode.HOLD_BASED, symmetricSpec("hollow_hold")),
-        def(DrillType.WALL_FACING_HANDSTAND_HOLD, "Wall-Facing Handstand", "handstand prep", DrillLevel.ADVANCED, listOf("wall"), MovementPattern.ANTI_EXTENSION_LINE_CONTROL, listOf("neutral", "start", "hold", "top"), listOf("banana_line", "passive_shoulder", "head_poke"), listOf("Push tall", "Stack ribs over pelvis", "Eyes between hands"), RepMode.HOLD_BASED, symmetricSpec("wall_facing_handstand", upright = true)),
-        def(DrillType.L_SIT_HOLD, "L-Sit", "L-sit progression", DrillLevel.ADVANCED, listOf("parallettes", "dip_bars"), MovementPattern.CORE_FLEXION_COMPRESSION, listOf("neutral", "start", "lift", "hold", "lower"), listOf("elbow_bend", "knee_soft", "collapsed_support"), listOf("Lock elbows", "Lift from hips", "Press shoulders down"), RepMode.HOLD_BASED, symmetricSpec("l_sit", upright = true)),
+        def(DrillType.FOREARM_PLANK, "Plank", "line control", DrillLevel.BEGINNER, listOf("mat"), MovementPattern.ANTI_EXTENSION_LINE_CONTROL, listOf("neutral", "start", "hold", "top"), listOf("hip_sag", "hip_pike", "head_drop"), listOf("Pull ribs down", "Squeeze glutes", "Reach elbows forward"), RepMode.HOLD_BASED, holdSpec("plank", inverted = false)),
+        def(DrillType.GLUTE_BRIDGE, "Glute Bridge", "bridge progression", DrillLevel.BEGINNER, listOf("mat"), MovementPattern.HIP_EXTENSION, listOf("neutral", "start", "mid_concentric", "top", "mid_eccentric"), listOf("overarch", "knee_wobble", "short_extension"), listOf("Drive through heels", "Ribs stay down", "Pause at top"), RepMode.REP_BASED, squatSpec("glute_bridge")),
+        def(DrillType.PULL_UP_OR_ASSISTED_PULL_UP, "Pull-Up", "pull-up progression", DrillLevel.INTERMEDIATE, listOf("bar", "band_optional"), MovementPattern.VERTICAL_PULL, listOf("neutral", "start", "mid_concentric", "top", "mid_eccentric"), listOf("kip_swing", "chin_short", "shrugged_pull"), listOf("Start active hang", "Pull elbows to ribs", "Control descent"), RepMode.REP_BASED, verticalPullSpec("pull_up")),
+        def(DrillType.PARALLEL_BAR_DIP, "Dip", "dip progression", DrillLevel.INTERMEDIATE, listOf("parallel_bars"), MovementPattern.VERTICAL_PUSH, listOf("neutral", "start", "mid_eccentric", "bottom", "mid_concentric", "top"), listOf("shoulder_dump", "depth_short", "forward_head"), listOf("Shoulders down", "Lean slightly", "Press to support"), RepMode.REP_BASED, verticalPullSpec("dip")),
+        def(DrillType.HANGING_KNEE_RAISE, "Hanging Knee Raise", "leg raise progression", DrillLevel.INTERMEDIATE, listOf("bar"), MovementPattern.CORE_FLEXION_COMPRESSION, listOf("neutral", "start", "mid_concentric", "top", "mid_eccentric"), listOf("swing", "low_knee_height", "passive_hang"), listOf("Own the hang", "Posterior tilt at top", "Lower slowly"), RepMode.REP_BASED, verticalPullSpec("hanging_knee_raise")),
+        def(DrillType.PIKE_PUSH_UP, "Pike Push-Up", "handstand prep", DrillLevel.INTERMEDIATE, listOf("floor", "box_optional"), MovementPattern.VERTICAL_PUSH, listOf("neutral", "start", "mid_eccentric", "bottom", "mid_concentric", "top"), listOf("hips_low", "elbow_flare", "head_path_forward"), listOf("Hips high", "Tripod head path", "Push away hard"), RepMode.REP_BASED, holdSpec("pike_push_up", inverted = true)),
+        def(DrillType.HOLLOW_BODY_HOLD, "Hollow Hold", "hollow/plank", DrillLevel.INTERMEDIATE, listOf("mat"), MovementPattern.ANTI_EXTENSION_LINE_CONTROL, listOf("neutral", "start", "hold", "top"), listOf("rib_flare", "lumbar_gap", "knee_bend"), listOf("Crush low back down", "Reach long", "Breathe quietly"), RepMode.HOLD_BASED, holdSpec("hollow_hold", inverted = false)),
+        def(DrillType.WALL_FACING_HANDSTAND_HOLD, "Wall-Facing Handstand", "handstand prep", DrillLevel.ADVANCED, listOf("wall"), MovementPattern.ANTI_EXTENSION_LINE_CONTROL, listOf("neutral", "start", "hold", "top"), listOf("banana_line", "passive_shoulder", "head_poke"), listOf("Push tall", "Stack ribs over pelvis", "Eyes between hands"), RepMode.HOLD_BASED, holdSpec("wall_facing_handstand", inverted = true)),
+        def(DrillType.L_SIT_HOLD, "L-Sit", "L-sit progression", DrillLevel.ADVANCED, listOf("parallettes", "dip_bars"), MovementPattern.CORE_FLEXION_COMPRESSION, listOf("neutral", "start", "lift", "hold", "lower"), listOf("elbow_bend", "knee_soft", "collapsed_support"), listOf("Lock elbows", "Lift from hips", "Press shoulders down"), RepMode.HOLD_BASED, verticalPullSpec("l_sit")),
     )
 
     // Wave 2 expansion TODO: add richer asymmetrical/skill-specific keyframes.
     private val wave2 = listOf(
-        def(DrillType.INCLINE_OR_KNEE_PUSH_UP, "Archer Push-Up (stub)", "push-up progression", DrillLevel.ADVANCED, listOf("floor"), MovementPattern.HORIZONTAL_PUSH, listOf("neutral", "start", "bottom", "top"), listOf("arm_shift_loss"), listOf("Shift over working arm"), RepMode.REP_BASED, symmetricSpec("archer_push_up")),
-        def(DrillType.BURPEE, "Archer Pull-Up / Skill Prep (stub)", "pull-up progression", DrillLevel.ADVANCED, listOf("bar"), MovementPattern.VERTICAL_PULL, listOf("neutral", "start", "top", "lower"), listOf("swing"), listOf("Pause at top"), RepMode.REP_BASED, symmetricSpec("archer_pull_up")),
+        def(DrillType.INCLINE_OR_KNEE_PUSH_UP, "Archer Push-Up (stub)", "push-up progression", DrillLevel.ADVANCED, listOf("floor"), MovementPattern.HORIZONTAL_PUSH, listOf("neutral", "start", "bottom", "top"), listOf("arm_shift_loss"), listOf("Shift over working arm"), RepMode.REP_BASED, horizontalPushSpec("archer_push_up")),
+        def(DrillType.BURPEE, "Archer Pull-Up / Skill Prep (stub)", "pull-up progression", DrillLevel.ADVANCED, listOf("bar"), MovementPattern.VERTICAL_PULL, listOf("neutral", "start", "top", "lower"), listOf("swing"), listOf("Pause at top"), RepMode.REP_BASED, verticalPullSpec("archer_pull_up")),
     )
 
     val all: List<DrillDefinition> = wave1 + wave2
