@@ -29,6 +29,7 @@ object PreviewData {
             metricsJson = "{}",
             annotatedVideoUri = null,
             rawVideoUri = null,
+            notesUri = null,
             bestFrameTimestampMs = 20000,
             worstFrameTimestampMs = 47000,
             topImprovementFocus = "rib and pelvis control",

@@ -25,7 +25,12 @@ object ServiceLocator {
 
     fun repository(context: Context): SessionRepository {
         val db = db(context)
-        return SessionRepository(db.sessionDao(), db.userSettingsDao(), db.frameMetricDao())
+        return SessionRepository(
+            db.sessionDao(),
+            db.userSettingsDao(),
+            db.frameMetricDao(),
+            SessionBlobStorage(context.applicationContext),
+        )
     }
 
     fun summaryGenerator(): SummaryGenerator = SummaryGenerator(RecommendationEngine())

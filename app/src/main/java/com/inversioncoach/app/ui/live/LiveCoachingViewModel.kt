@@ -56,6 +56,7 @@ class LiveCoachingViewModel(
     private var sessionStartedAtMs: Long = 0L
     private var lastFramePersistAt = 0L
     private var rawVideoUri: String? = null
+    private var annotatedVideoUri: String? = null
 
     val sessionTitle: String
         get() = "${drillType.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }} session"
@@ -80,7 +81,19 @@ class LiveCoachingViewModel(
     }
 
     fun onRecordingFinalized(uri: String?) {
-        rawVideoUri = uri?.takeIf { it.isNotBlank() }
+        val finalizedUri = uri?.takeIf { it.isNotBlank() } ?: return
+        val activeSessionId = sessionId ?: return
+        viewModelScope.launch {
+            rawVideoUri = repository.saveRawVideoBlob(activeSessionId, finalizedUri)
+        }
+    }
+
+    fun onAnnotatedRecordingFinalized(uri: String?) {
+        val finalizedUri = uri?.takeIf { it.isNotBlank() } ?: return
+        val activeSessionId = sessionId ?: return
+        viewModelScope.launch {
+            annotatedVideoUri = repository.saveAnnotatedVideoBlob(activeSessionId, finalizedUri)
+        }
     }
 
     fun onPoseFrame(frame: PoseFrame, settings: UserSettings) {
@@ -224,8 +237,9 @@ class LiveCoachingViewModel(
                     issues = topIssues,
                     wins = summary.whatWentWell.joinToString(" "),
                     metricsJson = latestScore.subScores.entries.joinToString(",") { "${it.key}:${it.value}" },
-                    annotatedVideoUri = null,
+                    annotatedVideoUri = annotatedVideoUri,
                     rawVideoUri = rawVideoUri,
+                    notesUri = null,
                     bestFrameTimestampMs = bestFrame,
                     worstFrameTimestampMs = worstFrame,
                     topImprovementFocus = summary.nextFocus,
@@ -255,6 +269,7 @@ class LiveCoachingViewModel(
                     metricsJson = "",
                     annotatedVideoUri = null,
                     rawVideoUri = null,
+                    notesUri = null,
                     bestFrameTimestampMs = null,
                     worstFrameTimestampMs = null,
                     topImprovementFocus = "pending",

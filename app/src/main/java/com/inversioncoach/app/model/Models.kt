@@ -85,6 +85,7 @@ data class SessionRecord(
     val metricsJson: String,
     val annotatedVideoUri: String?,
     val rawVideoUri: String?,
+    val notesUri: String?,
     val bestFrameTimestampMs: Long?,
     val worstFrameTimestampMs: Long?,
     val topImprovementFocus: String,

@@ -73,7 +73,12 @@ fun SettingsScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save settings") }
             Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Enable local-only privacy mode") }
-            Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Delete all sessions") }
+            Button(
+                onClick = {
+                    scope.launch { repository.clearAllSessions() }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Delete all sessions") }
         }
     }
 }

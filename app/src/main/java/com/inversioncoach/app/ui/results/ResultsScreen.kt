@@ -9,16 +9,22 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @Composable
@@ -29,6 +35,12 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val frameMetrics by repository.observeSessionFrameMetrics(sessionId).collectAsState(initial = emptyList())
     val issueTimeline by repository.observeIssueTimeline(sessionId).collectAsState(initial = emptyList())
     val avgScore = frameMetrics.map { it.overallScore }.average().takeIf { !it.isNaN() }?.roundToInt() ?: 0
+    val scope = rememberCoroutineScope()
+    var notes by remember { mutableStateOf("") }
+
+    LaunchedEffect(sessionId) {
+        notes = repository.readSessionNotes(sessionId).orEmpty()
+    }
 
     ScaffoldedScreen(title = "Results") { padding ->
         Column(
@@ -73,9 +85,23 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 }
             }
 
+            OutlinedTextField(
+                value = notes,
+                onValueChange = { notes = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Session notes") },
+            )
+
             Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Replay annotated video") }
             Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Replay raw video") }
-            Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Save note") }
+            Button(
+                onClick = {
+                    scope.launch {
+                        repository.saveSessionNotes(sessionId, notes)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Save note") }
             Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Share summary") }
             Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Done") }
         }

@@ -22,6 +22,12 @@ interface SessionDao {
     @Query("SELECT * FROM session_records WHERE id = :sessionId LIMIT 1")
     fun observeById(sessionId: Long): Flow<SessionRecord?>
 
+    @Query("SELECT * FROM session_records WHERE id = :sessionId LIMIT 1")
+    suspend fun getById(sessionId: Long): SessionRecord?
+
+    @Query("SELECT id FROM session_records")
+    suspend fun getAllIds(): List<Long>
+
     @Query("DELETE FROM session_records")
     suspend fun deleteAll()
 }
