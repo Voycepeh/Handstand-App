@@ -25,8 +25,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -69,6 +71,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     val voiceCoach = remember(context) { VoiceCoach(context) }
     val sessionRecorder = remember(context) { SessionRecorder(context) }
     val currentSessionTitle by rememberUpdatedState(newValue = vm.sessionTitle)
+    var pendingStopAfterRecordingFinalize by remember { mutableStateOf(false) }
 
     val cameraManager = remember { CameraSessionManager(context) }
     val analyzerExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -198,9 +201,15 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                                 title = currentSessionTitle,
                                 onEvent = { event: VideoRecordEvent ->
                                     if (event is VideoRecordEvent.Finalize) {
-                                        vm.onRecordingFinalized(event.outputResults.outputUri.toString())
                                         if (event.hasError()) {
                                             Log.e(TAG, "Recording finalize error code=${event.error}")
+                                            vm.onAnalyzerWarning("Recording failed to finalize (code ${event.error})")
+                                        } else {
+                                            vm.onRecordingFinalized(event.outputResults.outputUri.toString())
+                                        }
+                                        if (pendingStopAfterRecordingFinalize) {
+                                            pendingStopAfterRecordingFinalize = false
+                                            vm.stopSession(onStop)
                                         }
                                     }
                                 },
@@ -212,9 +221,12 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             ) { Text(if (uiState.isRecording) "Stop Rec" else "Record") }
             Button(onClick = {
                 if (uiState.isRecording) {
+                    pendingStopAfterRecordingFinalize = true
                     sessionRecorder.stopRecording()
+                    vm.toggleRecording()
+                } else {
+                    vm.stopSession(onStop)
                 }
-                vm.stopSession(onStop)
             }) { Text("Stop") }
         }
     }

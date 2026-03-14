@@ -26,6 +26,10 @@ class SessionBlobStorage(
         return notesFile.readText()
     }
 
+    fun sessionSizeBytes(sessionId: Long): Long = directorySizeBytes(sessionDir(sessionId))
+
+    fun totalSizeBytes(): Long = directorySizeBytes(rootDir())
+
     fun deleteSessionBlob(sessionId: Long) {
         sessionDir(sessionId).deleteRecursively()
     }
@@ -44,7 +48,24 @@ class SessionBlobStorage(
                 inStream.copyTo(outStream)
             }
         }
+        deleteIfCacheFileUri(uri)
         return targetFile.toURI().toString()
+    }
+
+    private fun deleteIfCacheFileUri(uri: Uri) {
+        if (uri.scheme != "file") return
+        val path = uri.path ?: return
+        val file = File(path)
+        if (file.exists() && file.parentFile?.canonicalPath?.startsWith(context.cacheDir.canonicalPath) == true) {
+            file.delete()
+        }
+    }
+
+    private fun directorySizeBytes(dir: File): Long {
+        if (!dir.exists()) return 0L
+        return dir.walkTopDown()
+            .filter { it.isFile }
+            .sumOf { it.length() }
     }
 
     private fun rootDir(): File = File(context.filesDir, ROOT_DIRECTORY)

@@ -1,15 +1,13 @@
 package com.inversioncoach.app.recording
 
-import android.content.ContentValues
 import android.content.Context
-import android.os.Build
-import android.provider.MediaStore
-import androidx.camera.video.MediaStoreOutputOptions
+import androidx.camera.video.FileOutputOptions
 import androidx.camera.video.PendingRecording
 import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
+import java.io.File
 
 class SessionRecorder(
     private val context: Context,
@@ -22,19 +20,8 @@ class SessionRecorder(
         withAudio: Boolean = false,
         onEvent: (VideoRecordEvent) -> Unit,
     ) {
-        val collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        val values = ContentValues().apply {
-            put(MediaStore.Video.Media.DISPLAY_NAME, title)
-            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/InversionCoach")
-            }
-        }
-
-        val outputOptions = MediaStoreOutputOptions.Builder(
-            context.contentResolver,
-            collection,
-        ).setContentValues(values).build()
+        val outputFile = createOutputFile(title)
+        val outputOptions = FileOutputOptions.Builder(outputFile).build()
 
         var pending: PendingRecording = capture.output.prepareRecording(context, outputOptions)
         if (withAudio) pending = pending.withAudioEnabled()
@@ -44,5 +31,15 @@ class SessionRecorder(
     fun stopRecording() {
         recording?.stop()
         recording = null
+    }
+
+    private fun createOutputFile(title: String): File {
+        val recordingsDir = File(context.cacheDir, "recordings").apply { mkdirs() }
+        val safeTitle = title
+            .lowercase()
+            .replace(Regex("[^a-z0-9]+"), "_")
+            .trim('_')
+            .ifBlank { "session" }
+        return File(recordingsDir, "${safeTitle}_${System.currentTimeMillis()}.mp4")
     }
 }

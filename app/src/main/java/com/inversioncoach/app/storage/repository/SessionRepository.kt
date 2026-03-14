@@ -29,6 +29,7 @@ class SessionRepository(
         val persistedUri = sessionBlobStorage.persistRawVideo(sessionId, sourceUri) ?: return null
         val session = sessionDao.getById(sessionId) ?: return persistedUri
         sessionDao.upsert(session.copy(rawVideoUri = persistedUri))
+        enforceConfiguredStorageLimit()
         return persistedUri
     }
 
@@ -36,6 +37,7 @@ class SessionRepository(
         val persistedUri = sessionBlobStorage.persistAnnotatedVideo(sessionId, sourceUri) ?: return null
         val session = sessionDao.getById(sessionId) ?: return persistedUri
         sessionDao.upsert(session.copy(annotatedVideoUri = persistedUri))
+        enforceConfiguredStorageLimit()
         return persistedUri
     }
 
@@ -49,6 +51,27 @@ class SessionRepository(
     }
 
     fun readSessionNotes(sessionId: Long): String? = sessionBlobStorage.readNotes(sessionId)
+
+    fun sessionStorageBytes(sessionId: Long): Long = sessionBlobStorage.sessionSizeBytes(sessionId)
+
+    fun totalStorageBytes(): Long = sessionBlobStorage.totalSizeBytes()
+
+    suspend fun enforceStorageLimit(maxStorageMb: Int) {
+        val maxBytes = maxStorageMb.coerceAtLeast(1).toLong() * 1024L * 1024L
+        val sessionsByOldest = sessionDao.getAllOldestFirst()
+
+        var currentBytes = sessionBlobStorage.totalSizeBytes()
+        for (session in sessionsByOldest) {
+            if (currentBytes <= maxBytes) break
+            val sessionBytes = sessionBlobStorage.sessionSizeBytes(session.id)
+            if (sessionBytes <= 0L) continue
+            frameMetricDao.deleteFrameMetricsForSession(session.id)
+            frameMetricDao.deleteIssueEventsForSession(session.id)
+            sessionDao.deleteById(session.id)
+            sessionBlobStorage.deleteSessionBlob(session.id)
+            currentBytes -= sessionBytes
+        }
+    }
 
     suspend fun deleteSessionBlob(sessionId: Long) = sessionBlobStorage.deleteSessionBlob(sessionId)
 
@@ -80,5 +103,13 @@ class SessionRepository(
     fun observeSettings(): Flow<UserSettings> =
         userSettingsDao.observeSettings().map { it ?: UserSettings() }
 
-    suspend fun saveSettings(settings: UserSettings) = userSettingsDao.upsert(settings)
+    suspend fun saveSettings(settings: UserSettings) {
+        userSettingsDao.upsert(settings)
+        enforceStorageLimit(settings.maxStorageMb)
+    }
+
+    private suspend fun enforceConfiguredStorageLimit() {
+        val settings = userSettingsDao.getSettings() ?: UserSettings()
+        enforceStorageLimit(settings.maxStorageMb)
+    }
 }

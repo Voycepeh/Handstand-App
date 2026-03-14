@@ -41,7 +41,7 @@ class LiveCoachingViewModel(
     private val _uiState = MutableStateFlow(
         LiveSessionUiState(
             drillType = drillType,
-            isRecording = options.recordingEnabled,
+            isRecording = false,
             showOverlay = options.showSkeletonOverlay,
             showIdealLine = options.showIdealLine,
         ),

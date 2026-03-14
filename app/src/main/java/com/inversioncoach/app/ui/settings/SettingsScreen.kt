@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -38,6 +39,7 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
     var overlay by remember { mutableFloatStateOf(1f) }
     var debug by remember { mutableStateOf(false) }
     var localOnlyPrivacyMode by remember { mutableStateOf(true) }
+    var maxStorageMb by remember { mutableIntStateOf(1024) }
 
     LaunchedEffect(Unit) {
         repository.observeSettings().collect { s ->
@@ -45,6 +47,7 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
             overlay = s.overlayIntensity
             debug = s.debugOverlayEnabled
             localOnlyPrivacyMode = s.localOnlyPrivacyMode
+            maxStorageMb = s.maxStorageMb
         }
     }
 
@@ -62,9 +65,19 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
             Slider(value = cueFrequency, onValueChange = { cueFrequency = it }, valueRange = 1.5f..4f)
             Text("Overlay intensity: ${"%.1f".format(overlay)}")
             Slider(value = overlay, onValueChange = { overlay = it }, valueRange = 0.2f..1f)
+            Text("Max video storage: ${maxStorageMb} MB")
+            Slider(
+                value = maxStorageMb.toFloat(),
+                onValueChange = { maxStorageMb = it.toInt().coerceIn(256, 4096) },
+                valueRange = 256f..4096f,
+            )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Debug overlay (raw metrics/angles)")
                 Checkbox(checked = debug, onCheckedChange = { debug = it })
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Local-only privacy mode")
+                Checkbox(checked = localOnlyPrivacyMode, onCheckedChange = { localOnlyPrivacyMode = it })
             }
             Button(
                 onClick = {
@@ -75,16 +88,13 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
                                 overlayIntensity = overlay,
                                 debugOverlayEnabled = debug,
                                 localOnlyPrivacyMode = localOnlyPrivacyMode,
+                                maxStorageMb = maxStorageMb,
                             ),
                         )
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save settings") }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Local-only privacy mode")
-                Checkbox(checked = localOnlyPrivacyMode, onCheckedChange = { localOnlyPrivacyMode = it })
-            }
             Button(onClick = onDeveloperTuning, modifier = Modifier.fillMaxWidth()) { Text("Developer threshold tuning") }
             Button(
                 onClick = {

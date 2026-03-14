@@ -150,6 +150,7 @@ data class UserSettings(
     val localOnlyPrivacyMode: Boolean = true,
     val retainDays: Int = 60,
     val debugOverlayEnabled: Boolean = false,
+    val maxStorageMb: Int = 1024,
 )
 
 data class LiveSessionUiState(

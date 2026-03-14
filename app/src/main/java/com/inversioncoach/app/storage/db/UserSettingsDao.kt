@@ -14,4 +14,7 @@ interface UserSettingsDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(settings: UserSettings)
+
+    @Query("SELECT * FROM user_settings WHERE id = 1 LIMIT 1")
+    suspend fun getSettings(): UserSettings?
 }
