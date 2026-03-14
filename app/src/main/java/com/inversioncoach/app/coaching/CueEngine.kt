@@ -8,6 +8,8 @@ import com.inversioncoach.app.model.CueStyle
 class CueEngine {
     private val lastCueAt = mutableMapOf<String, Long>()
     private val issueStartAt = mutableMapOf<String, Long>()
+    private var lastCueId: String? = null
+    private var lastCueIssuedAtMs: Long = 0L
 
     fun nextCue(
         config: DrillModeConfig,
@@ -21,13 +23,20 @@ class CueEngine {
         val primary = sorted.firstOrNull() ?: return null
         val secondary = sorted.getOrNull(1)
 
+        metrics
+            .filter { it.score >= STABLE_SCORE_THRESHOLD }
+            .forEach { issueStartAt.remove(it.key) }
+
         if (primary.score >= 85 && (secondary == null || secondary.score >= 82)) {
             return buildCue("encourage", styleText(style, "good"), nowMs, minSpacingMs, 1)
         }
 
-        val issueKey = config.cuePriority.firstOrNull { wanted -> sorted.any { it.key == wanted } }
-            ?: primary.key
-        val chosen = sorted.firstOrNull { it.key == issueKey } ?: primary
+        val chosen = sorted
+            .filter { metric ->
+                metric.key in config.cuePriority && metric.score < PRIORITY_CUE_SCORE_THRESHOLD
+            }
+            .minByOrNull { it.score }
+            ?: primary
 
         val issueStartedAt = issueStartAt.getOrPut(chosen.key) { nowMs }
         if (nowMs - issueStartedAt < persistMs) return null
@@ -77,9 +86,19 @@ class CueEngine {
     private fun buildCue(id: String, text: String, nowMs: Long, minSpacingMs: Long, severity: Int): CoachingCue? {
         val last = lastCueAt[id] ?: 0L
         if (nowMs - last < minSpacingMs) return null
+        if (lastCueId == id && nowMs - lastCueIssuedAtMs < (minSpacingMs * SAME_CUE_REPEAT_MULTIPLIER).toLong()) return null
+
         lastCueAt[id] = nowMs
+        lastCueId = id
+        lastCueIssuedAtMs = nowMs
         return CoachingCue(id = id, text = text, severity = severity, generatedAtMs = nowMs)
     }
 
     private fun severity(score: Int): Int = ((100 - score) / 20).coerceIn(1, 5)
+
+    companion object {
+        private const val STABLE_SCORE_THRESHOLD = 85
+        private const val PRIORITY_CUE_SCORE_THRESHOLD = 82
+        private const val SAME_CUE_REPEAT_MULTIPLIER = 2
+    }
 }
