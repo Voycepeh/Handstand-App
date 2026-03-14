@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class LiveCoachingViewModel(
@@ -60,6 +61,8 @@ class LiveCoachingViewModel(
     private var lastFramePersistAt = 0L
     private var rawVideoUri: String? = null
     private var annotatedVideoUri: String? = null
+    private var rawVideoSaveJob: Job? = null
+    private var annotatedVideoSaveJob: Job? = null
     private var pendingStopCallback: ((Long) -> Unit)? = null
     private val frameGate = FrameValidityGate(drillType, DrillConfigs.byType(drillType))
     private val issueAggregator = IssueEventAggregator()
@@ -94,7 +97,7 @@ class LiveCoachingViewModel(
     fun onRecordingFinalized(uri: String?) {
         val finalizedUri = uri?.takeIf { it.isNotBlank() } ?: return
         val activeSessionId = sessionId ?: return
-        viewModelScope.launch {
+        rawVideoSaveJob = viewModelScope.launch {
             rawVideoUri = repository.saveRawVideoBlob(activeSessionId, finalizedUri)
         }
     }
@@ -102,7 +105,7 @@ class LiveCoachingViewModel(
     fun onAnnotatedRecordingFinalized(uri: String?) {
         val finalizedUri = uri?.takeIf { it.isNotBlank() } ?: return
         val activeSessionId = sessionId ?: return
-        viewModelScope.launch {
+        annotatedVideoSaveJob = viewModelScope.launch {
             annotatedVideoUri = repository.saveAnnotatedVideoBlob(activeSessionId, finalizedUri)
         }
     }
@@ -248,6 +251,8 @@ class LiveCoachingViewModel(
                 )
                 return@launch
             }
+            rawVideoSaveJob?.join()
+            annotatedVideoSaveJob?.join()
             val frameMetrics = repository.observeSessionFrameMetrics(activeSessionId).first()
             val aggregatedIssues = issueAggregator.flushAll(System.currentTimeMillis())
             val validFrameMetrics = frameMetrics.filter { it.confidence >= 0.45f }
