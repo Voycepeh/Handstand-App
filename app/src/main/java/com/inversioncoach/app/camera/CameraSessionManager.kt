@@ -27,6 +27,7 @@ class CameraSessionManager(
         lifecycleOwner: LifecycleOwner,
         previewView: PreviewView,
         analyzer: PoseAnalyzer,
+        zoomOutCamera: Boolean,
         onReady: (Boolean, String?) -> Unit,
     ) {
         val providerFuture = ProcessCameraProvider.getInstance(context)
@@ -47,14 +48,24 @@ class CameraSessionManager(
                 videoCapture = VideoCapture.withOutput(Recorder.Builder().build())
 
                 provider.unbindAll()
-                provider.bindToLifecycle(
+                val camera = provider.bindToLifecycle(
                     lifecycleOwner,
                     CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
                     imageAnalysis,
                     videoCapture,
                 )
-                Log.i("CameraSessionManager", "CameraX bound with KEEP_ONLY_LATEST queueDepth=2")
+
+                val zoomState = camera.cameraInfo.zoomState.value
+                val minZoomRatio = zoomState?.minZoomRatio ?: 1f
+                val maxZoomRatio = zoomState?.maxZoomRatio ?: 1f
+                val requestedZoomRatio = if (zoomOutCamera) 0.5f else 1f
+                val zoomedOutRatio = requestedZoomRatio.coerceIn(minZoomRatio, maxZoomRatio)
+                camera.cameraControl.setZoomRatio(zoomedOutRatio)
+                Log.i(
+                    "CameraSessionManager",
+                    "CameraX bound with KEEP_ONLY_LATEST queueDepth=2 zoomRatio=$zoomedOutRatio (requested=$requestedZoomRatio min=$minZoomRatio max=$maxZoomRatio)",
+                )
             }.onSuccess {
                 onReady(true, null)
             }.onFailure {

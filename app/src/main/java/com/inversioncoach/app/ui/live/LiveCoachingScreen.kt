@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
+import androidx.camera.view.PreviewView.ScaleType
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -116,8 +117,9 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
                     PreviewView(ctx).apply {
+                        scaleType = ScaleType.FIT_CENTER
                         post {
-                            cameraManager.bind(lifecycleOwner, this, analyzer) { ready, error ->
+                            cameraManager.bind(lifecycleOwner, this, analyzer, options.zoomOutCamera) { ready, error ->
                                 vm.onCameraReady(ready, error)
                             }
                         }
