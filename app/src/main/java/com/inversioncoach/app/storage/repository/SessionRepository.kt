@@ -52,6 +52,13 @@ class SessionRepository(
 
     suspend fun deleteSessionBlob(sessionId: Long) = sessionBlobStorage.deleteSessionBlob(sessionId)
 
+    suspend fun deleteSession(sessionId: Long) {
+        frameMetricDao.deleteFrameMetricsForSession(sessionId)
+        frameMetricDao.deleteIssueEventsForSession(sessionId)
+        sessionDao.deleteById(sessionId)
+        sessionBlobStorage.deleteSessionBlob(sessionId)
+    }
+
     suspend fun saveFrameMetric(record: FrameMetricRecord) = frameMetricDao.insertFrameMetric(record)
 
     suspend fun saveIssueEvent(event: IssueEvent) = frameMetricDao.insertIssueEvent(event)

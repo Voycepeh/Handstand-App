@@ -80,7 +80,12 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onDone = { navController.popBackStack(Route.Home.value, false) },
             )
         }
-        composable(Route.History.value) { HistoryScreen(onBack = { navController.popBackStack() }) }
+        composable(Route.History.value) {
+            HistoryScreen(
+                onBack = { navController.popBackStack() },
+                onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
+            )
+        }
         composable(Route.Settings.value) { SettingsScreen(onBack = { navController.popBackStack() }) }
     }
 }

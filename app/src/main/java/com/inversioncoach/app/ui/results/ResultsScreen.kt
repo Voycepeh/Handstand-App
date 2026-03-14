@@ -1,5 +1,7 @@
 package com.inversioncoach.app.ui.results
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,6 +51,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
         ) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Session ID: $sessionId")
                     Text("Overall score: ${session?.overallScore ?: avgScore}")
                     Text("Average sampled score: $avgScore")
                     Text("Top wins: ${session?.wins ?: "No wins captured yet"}")
@@ -92,8 +95,20 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 label = { Text("Session notes") },
             )
 
-            Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Replay annotated video") }
-            Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Replay raw video") }
+            Button(
+                onClick = { openVideo(context, session?.annotatedVideoUri) },
+                enabled = !session?.annotatedVideoUri.isNullOrBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Replay annotated video")
+            }
+            Button(
+                onClick = { openVideo(context, session?.rawVideoUri) },
+                enabled = !session?.rawVideoUri.isNullOrBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Replay raw video")
+            }
             Button(
                 onClick = {
                     scope.launch {
@@ -103,6 +118,17 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save note") }
             Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Share summary") }
+            Button(
+                onClick = {
+                    scope.launch {
+                        repository.deleteSession(sessionId)
+                        onDone()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Delete this session and videos")
+            }
             Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Done") }
         }
     }
@@ -112,4 +138,13 @@ private fun formatElapsed(startedAtMs: Long?, timestampMs: Long?): String {
     if (startedAtMs == null || timestampMs == null || timestampMs < startedAtMs) return "--:--"
     val elapsedSeconds = ((timestampMs - startedAtMs) / 1000).toInt()
     return "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60)
+}
+
+private fun openVideo(context: android.content.Context, videoUri: String?) {
+    if (videoUri.isNullOrBlank()) return
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(Uri.parse(videoUri), "video/mp4")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(intent)
 }

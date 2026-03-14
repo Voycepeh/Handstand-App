@@ -1,5 +1,6 @@
 package com.inversioncoach.app.ui.history
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,7 +22,7 @@ import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import kotlin.math.roundToInt
 
 @Composable
-fun HistoryScreen(onBack: () -> Unit) {
+fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
@@ -40,11 +41,17 @@ fun HistoryScreen(onBack: () -> Unit) {
             Text("Most common fault: $topIssue")
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(sessions) { session ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenSession(session.id) },
+                    ) {
                         Column(Modifier.padding(12.dp)) {
                             Text(session.title)
+                            Text("Session ID: ${session.id}")
                             Text("${session.drillType} • Score ${session.overallScore}")
                             Text("Limiter: ${session.limitingFactor}")
+                            Text("Tap to review session")
                         }
                     }
                 }

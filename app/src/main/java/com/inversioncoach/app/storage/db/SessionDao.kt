@@ -28,6 +28,9 @@ interface SessionDao {
     @Query("SELECT id FROM session_records")
     suspend fun getAllIds(): List<Long>
 
+    @Query("DELETE FROM session_records WHERE id = :sessionId")
+    suspend fun deleteById(sessionId: Long)
+
     @Query("DELETE FROM session_records")
     suspend fun deleteAll()
 }

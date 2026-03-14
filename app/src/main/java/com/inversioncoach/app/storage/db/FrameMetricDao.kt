@@ -22,6 +22,12 @@ interface FrameMetricDao {
     @Query("SELECT * FROM issue_events WHERE sessionId = :sessionId ORDER BY timestampMs ASC")
     fun observeIssueTimeline(sessionId: Long): Flow<List<IssueEvent>>
 
+    @Query("DELETE FROM frame_metric_records WHERE sessionId = :sessionId")
+    suspend fun deleteFrameMetricsForSession(sessionId: Long)
+
+    @Query("DELETE FROM issue_events WHERE sessionId = :sessionId")
+    suspend fun deleteIssueEventsForSession(sessionId: Long)
+
     @Query("DELETE FROM frame_metric_records")
     suspend fun deleteAllFrameMetrics()
 
