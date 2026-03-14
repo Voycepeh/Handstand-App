@@ -1,10 +1,14 @@
 package com.inversioncoach.app.motion
 
 import com.inversioncoach.app.model.PoseFrame as LegacyPoseFrame
+import com.inversioncoach.app.model.DrillType
 
-class MotionAnalysisPipeline {
+class MotionAnalysisPipeline(
+    drillType: DrillType = DrillType.CHEST_TO_WALL_HANDSTAND,
+) {
     private val smoother = TemporalPoseSmoother()
     private val angleEngine = AngleEngine()
+    private val drillDefinition = DrillCatalog.byType(drillType)
     private val phaseDetector = MovementPhaseDetector(
         thresholds = PhaseThresholds(
             downStartDeg = 165f,
@@ -12,9 +16,12 @@ class MotionAnalysisPipeline {
             upStartDeg = 110f,
             topDeg = 168f,
         ),
-        trackedAngle = "left_elbow_flexion",
+        trackedAngle = trackedAngleFor(drillDefinition.movementPattern),
     )
-    private val faultEngine = FaultDetectionEngine()
+    private val faultEngine = FaultDetectionEngine(
+        movementPattern = drillDefinition.movementPattern,
+        allowedFaultCodes = drillDefinition.commonFaults,
+    )
     private val feedbackEngine = FeedbackEngine()
 
     data class Output(
@@ -58,5 +65,18 @@ class MotionAnalysisPipeline {
         "left_ankle" -> JointId.LEFT_ANKLE
         "right_ankle" -> JointId.RIGHT_ANKLE
         else -> null
+    }
+
+    private fun trackedAngleFor(pattern: MovementPattern): String = when (pattern) {
+        MovementPattern.SQUAT_PATTERN,
+        MovementPattern.HIP_EXTENSION,
+        MovementPattern.CORE_FLEXION_COMPRESSION,
+        -> "left_knee_flexion"
+
+        MovementPattern.HORIZONTAL_PUSH,
+        MovementPattern.VERTICAL_PUSH,
+        MovementPattern.VERTICAL_PULL,
+        MovementPattern.ANTI_EXTENSION_LINE_CONTROL,
+        -> "left_elbow_flexion"
     }
 }

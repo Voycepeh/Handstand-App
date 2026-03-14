@@ -61,6 +61,6 @@ class AlignmentMetricsEngine {
         com.inversioncoach.app.model.DrillType.PIKE_PUSH_UP -> PikePushUpAnalyzer()
         com.inversioncoach.app.model.DrillType.ELEVATED_PIKE_PUSH_UP -> ElevatedPikeAnalyzer()
         com.inversioncoach.app.model.DrillType.NEGATIVE_WALL_HANDSTAND_PUSH_UP -> NegativeHspuAnalyzer()
-        else -> ChestToWallAnalyzer()
+        else -> StandingPostureAnalyzer()
     }
 }

@@ -1,6 +1,8 @@
 package com.inversioncoach.app.motion
 
 class FaultDetectionEngine(
+    private val movementPattern: MovementPattern,
+    private val allowedFaultCodes: List<String>,
     private val persistenceFrames: Int = 5,
 ) {
     private val counters = mutableMapOf<String, Int>()
@@ -8,16 +10,18 @@ class FaultDetectionEngine(
     fun detect(angleFrame: AngleFrame, movementState: MovementState): List<FaultEvent> {
         val faults = mutableListOf<FaultEvent>()
 
-        maybeFault(
-            key = "elbows_flare",
-            condition = (angleFrame.anglesDeg["left_shoulder_opening"] ?: 180f) < 55f ||
-                (angleFrame.anglesDeg["right_shoulder_opening"] ?: 180f) < 55f,
-            faults = faults,
-            message = "Keep elbows closer to your line",
-            severity = FaultSeverity.MEDIUM,
-            side = BodySide.BOTH,
-            ts = angleFrame.timestampMs,
-        )
+        if (movementPattern == MovementPattern.HORIZONTAL_PUSH || movementPattern == MovementPattern.VERTICAL_PUSH) {
+            maybeFault(
+                key = "elbow_flare",
+                condition = (angleFrame.anglesDeg["left_shoulder_opening"] ?: 180f) < 55f ||
+                    (angleFrame.anglesDeg["right_shoulder_opening"] ?: 180f) < 55f,
+                faults = faults,
+                message = "Keep elbows closer to your line",
+                severity = FaultSeverity.MEDIUM,
+                side = BodySide.BOTH,
+                ts = angleFrame.timestampMs,
+            )
+        }
 
         maybeFault(
             key = "head_forward",
@@ -39,7 +43,10 @@ class FaultDetectionEngine(
             ts = angleFrame.timestampMs,
         )
 
-        if (movementState.currentPhase == MovementPhase.BOTTOM) {
+        if (
+            movementState.currentPhase == MovementPhase.BOTTOM &&
+            (movementPattern == MovementPattern.HORIZONTAL_PUSH || movementPattern == MovementPattern.VERTICAL_PUSH)
+        ) {
             maybeFault(
                 key = "incomplete_rom",
                 condition = (angleFrame.anglesDeg["left_elbow_flexion"] ?: 180f) > ThresholdTuningStore.elbowBottomThresholdDeg,
@@ -65,7 +72,7 @@ class FaultDetectionEngine(
     ) {
         val count = if (condition) (counters[key] ?: 0) + 1 else 0
         counters[key] = count
-        if (count >= persistenceFrames) {
+        if (count >= persistenceFrames && allowedFaultCodes.contains(key)) {
             faults += FaultEvent(
                 code = key,
                 severity = severity,

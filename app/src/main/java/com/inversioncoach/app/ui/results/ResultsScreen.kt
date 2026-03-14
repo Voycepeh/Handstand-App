@@ -25,9 +25,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import com.inversioncoach.app.ui.live.mediaAssetExists
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -39,6 +41,8 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val frameMetrics by repository.observeSessionFrameMetrics(sessionId).collectAsState(initial = emptyList())
     val issueTimeline by repository.observeIssueTimeline(sessionId).collectAsState(initial = emptyList())
     val avgScore = frameMetrics.map { it.overallScore }.average().takeIf { !it.isNaN() }?.roundToInt() ?: 0
+    val annotatedReady = mediaAssetExists(session?.annotatedVideoUri)
+    val rawReady = mediaAssetExists(session?.rawVideoUri)
     val scope = rememberCoroutineScope()
     var notes by remember { mutableStateOf("") }
 
@@ -60,9 +64,9 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     Text("Session ID: $sessionId")
                     Text("Overall score: ${session?.overallScore ?: avgScore}")
                     Text("Average sampled score: $avgScore")
-                    Text("Top wins: ${session?.wins ?: "No wins captured yet"}")
-                    Text("Top issues: ${session?.issues ?: "No issues captured"}")
-                    Text("Top improvement focus: ${session?.topImprovementFocus ?: "-"}")
+                    Text("Top wins: ${session?.wins ?: "No wins captured yet"}", maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    Text("Top issues: ${session?.issues ?: "No issues captured"}", maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    Text("Top improvement focus: ${session?.topImprovementFocus ?: "-"}", maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
 
@@ -88,7 +92,11 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                         Text("No issue events captured for this session")
                     } else {
                         issueTimeline.forEach {
-                            Text("${formatElapsed(session?.startedAtMs, it.timestampMs)} ${it.issue} (sev ${it.severity})")
+                            Text(
+                                "${formatElapsed(session?.startedAtMs, it.timestampMs)} ${it.issue} (sev ${it.severity})",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 }
@@ -103,14 +111,14 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
 
             Button(
                 onClick = { openVideo(context, session?.annotatedVideoUri) },
-                enabled = !session?.annotatedVideoUri.isNullOrBlank(),
+                enabled = annotatedReady,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Replay annotated video")
             }
             Button(
                 onClick = { openVideo(context, session?.rawVideoUri) },
-                enabled = !session?.rawVideoUri.isNullOrBlank(),
+                enabled = rawReady,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Replay raw video")

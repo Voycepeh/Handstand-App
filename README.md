@@ -119,6 +119,19 @@ flowchart TD
 - Settings includes navigation to **Developer threshold tuning** screen.
 - Developer screen supports live threshold tuning for key posture/fault limits.
 
+## Session validity gating and issue aggregation (developer note)
+
+- Live scoring now applies an explicit frame-validity gate before analysis persistence.
+- A frame must satisfy confidence, drill-required landmark visibility, scale/distance bounds, and expected orientation (side-view drills).
+- Invalid frames are excluded from score computation, issue timeline generation, and end-of-session summary metrics.
+- Invalid-frame reasons are counted and persisted in session metrics metadata for diagnostics (`low_confidence`, `missing_required_landmarks`, `too_close_to_camera`, `wrong_orientation`, etc.).
+- Per-frame duplicate issue spam is replaced by event aggregation:
+  - identical consecutive issues are merged
+  - each merged event tracks start/end/duration, peak severity, and representative cue
+  - short transient events are debounced out via a minimum-duration threshold
+- Session summary output is derived from valid-frame metrics + aggregated issue events.
+- If valid frame count is below threshold, session is marked invalid/insufficient-data and the user gets a retry-oriented focus message instead of misleading coaching output.
+
 ## How to add a new drill
 
 1. Add/confirm the app drill enum (`model/Models.kt`) for runtime routing.

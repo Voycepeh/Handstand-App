@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 
@@ -59,9 +60,11 @@ private fun Content(
                     "Chest-to-wall handstand",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Text("Recent average score: 76")
-                Text("Most common issue: ribs flaring")
+                Text("Recent average score: 76", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Most common issue: ribs flaring", maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
 

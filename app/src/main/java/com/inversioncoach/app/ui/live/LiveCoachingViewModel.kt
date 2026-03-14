@@ -16,6 +16,7 @@ import com.inversioncoach.app.model.PoseFrame
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.model.UserSettings
+import com.inversioncoach.app.motion.DrillCatalog
 import com.inversioncoach.app.motion.MotionAnalysisPipeline
 import com.inversioncoach.app.pose.PoseSmoother
 import com.inversioncoach.app.storage.repository.SessionRepository
@@ -34,7 +35,7 @@ class LiveCoachingViewModel(
     private val options: LiveSessionOptions,
     private val summaryGenerator: SummaryGenerator = SummaryGenerator(com.inversioncoach.app.summary.RecommendationEngine()),
     private val smoother: PoseSmoother = PoseSmoother(),
-    private val motionPipeline: MotionAnalysisPipeline = MotionAnalysisPipeline(),
+    private val motionPipeline: MotionAnalysisPipeline = MotionAnalysisPipeline(drillType),
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -59,11 +60,18 @@ class LiveCoachingViewModel(
     private var lastFramePersistAt = 0L
     private var rawVideoUri: String? = null
     private var annotatedVideoUri: String? = null
+    private val frameGate = FrameValidityGate(drillType, DrillConfigs.byType(drillType))
+    private val issueAggregator = IssueEventAggregator()
+    private val invalidReasonCounts = mutableMapOf<String, Int>()
+    private var validFrameCount = 0
+    private var invalidFrameCount = 0
+    private val validFrameScores = mutableListOf<Int>()
 
     val sessionTitle: String
         get() = "${drillType.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }} session"
 
     init {
+        SessionDiagnostics.log("session_started drill=$drillType analyzer=${metricsEngine::class.simpleName} motionPattern=${DrillCatalog.byType(drillType).movementPattern}")
         startSession()
     }
 
@@ -102,7 +110,8 @@ class LiveCoachingViewModel(
         val smoothed = smoother.smooth(frame)
         val motion = motionPipeline.analyze(frame)
         _smoothedFrame.value = smoothed
-        val rejectionReason = frame.rejectionReason
+        val frameValidity = frameGate.evaluate(frame)
+        val rejectionReason = if (frame.rejectionReason != "none") frame.rejectionReason else if (frameValidity.isValid) "none" else frameValidity.reason
         val rejectionMessage = rejectionMessageFor(rejectionReason)
 
         _uiState.value = _uiState.value.copy(
@@ -116,12 +125,15 @@ class LiveCoachingViewModel(
         )
 
         if (rejectionReason != "none") {
+            invalidFrameCount += 1
+            invalidReasonCounts[rejectionReason] = (invalidReasonCounts[rejectionReason] ?: 0) + 1
             _uiState.value = _uiState.value.copy(
                 debugMetrics = emptyList(),
                 debugAngles = emptyList(),
             )
             return
         }
+        validFrameCount += 1
 
         val config = DrillConfigs.byType(drillType)
         val analysis = metricsEngine.analyze(config, smoothed.toPoseFrame())
@@ -148,9 +160,22 @@ class LiveCoachingViewModel(
             currentPhase = motion.movement.currentPhase.name.lowercase(),
             activeFault = motion.faults.firstOrNull()?.code ?: "",
         )
+        if (motion.faults.isNotEmpty()) {
+            SessionDiagnostics.log("raw_faults drill=$drillType faults=${motion.faults.map { it.code }}")
+        }
 
         if (cue != null) {
             _spokenCue.value = cue
+        }
+
+        validFrameScores += analysis.score.overall
+        if (!analysis.fault.isNullOrBlank()) {
+            issueAggregator.onIssue(
+                ts = smoothed.timestampMs,
+                issue = analysis.fault,
+                severity = cue?.severity ?: 1,
+                cue = cue?.text,
+            )
         }
 
         persistFrameData(smoothed, analysis.score.overall, analysis.score.limitingFactor, analysis.metrics, analysis.angles, analysis.fault, cue?.severity ?: 1)
@@ -160,6 +185,10 @@ class LiveCoachingViewModel(
         "no_person_detected" -> "No person detected. Step back until your full body is visible in side view."
         "body_not_fully_visible" -> "Body not fully visible. Keep head, hips, and feet inside frame."
         "low_confidence" -> "Low confidence. Improve lighting and hold a stable side view."
+        "missing_required_landmarks" -> "Required body landmarks are missing for this drill. Step back and keep full body visible."
+        "too_close_to_camera" -> "You're too close to camera. Step back so your full body fits comfortably in frame."
+        "too_far_from_camera" -> "You're too far from camera. Move a little closer while keeping full body in frame."
+        "wrong_orientation" -> "Wrong orientation for this drill. Use a clear side view."
         "frame_processing_failure" -> "Frame processing failure. Hold steady and retry."
         else -> null
     }
@@ -212,23 +241,27 @@ class LiveCoachingViewModel(
         viewModelScope.launch {
             val activeSessionId = sessionId ?: return@launch
             val frameMetrics = repository.observeSessionFrameMetrics(activeSessionId).first()
-            val issues = repository.observeIssueTimeline(activeSessionId).first()
-            val bestFrame = frameMetrics.maxByOrNull { it.overallScore }?.timestampMs
-            val worstFrame = frameMetrics.minByOrNull { it.overallScore }?.timestampMs
-            val topIssues = issues
-                .groupingBy { it.issue }
-                .eachCount()
-                .toList()
-                .sortedByDescending { it.second }
+            val aggregatedIssues = issueAggregator.flushAll(System.currentTimeMillis())
+            val validFrameMetrics = frameMetrics.filter { it.confidence >= 0.45f }
+            val bestFrame = validFrameMetrics.maxByOrNull { it.overallScore }?.timestampMs
+            val worstFrame = validFrameMetrics.minByOrNull { it.overallScore }?.timestampMs
+            val sessionComputation = SessionSummaryComputer.compute(validFrameScores, latestScore, aggregatedIssues)
+            val topIssues = aggregatedIssues
+                .sortedByDescending { it.durationMs }
                 .take(3)
-                .joinToString(", ") { it.first }
-                .ifBlank { "No major issues detected" }
-            val wins = "Strongest area: ${latestScore.strongestArea.replace('_', ' ')}"
+                .joinToString(", ") { "${it.issue} (${it.durationMs / 1000.0}s)" }
+                .ifBlank { if (sessionComputation.status == "invalid") "insufficient_data" else "No major issues detected" }
+            val wins = sessionComputation.summaryWins
             val summary = summaryGenerator.generate(
                 drillType = drillType,
-                score = latestScore,
-                issues = issues.map { it.issue },
+                score = sessionComputation.score,
+                issues = aggregatedIssues.map { it.issue },
                 wins = listOf(wins),
+            )
+            val invalidReasonSummary = invalidReasonCounts.entries.sortedByDescending { it.value }.joinToString(";") { "${it.key}:${it.value}" }
+            SessionDiagnostics.log(
+                "session_finalize drill=$drillType validFrames=$validFrameCount invalidFrames=$invalidFrameCount invalidReasons={$invalidReasonSummary} " +
+                    "aggregatedIssues=${aggregatedIssues.size} savedRaw=$rawVideoUri savedAnnotated=$annotatedVideoUri",
             )
             repository.saveSession(
                 SessionRecord(
@@ -237,18 +270,30 @@ class LiveCoachingViewModel(
                     drillType = drillType,
                     startedAtMs = sessionStartedAtMs,
                     completedAtMs = System.currentTimeMillis(),
-                    overallScore = latestScore.overall,
-                    strongestArea = latestScore.strongestArea,
-                    limitingFactor = latestScore.limitingFactor,
+                    overallScore = sessionComputation.score.overall,
+                    strongestArea = sessionComputation.strongestArea,
+                    limitingFactor = sessionComputation.score.limitingFactor,
                     issues = topIssues,
                     wins = summary.whatWentWell.joinToString(" "),
-                    metricsJson = latestScore.subScores.entries.joinToString(",") { "${it.key}:${it.value}" },
+                    metricsJson = buildString {
+                        append(sessionComputation.score.subScores.entries.joinToString(",") { "${it.key}:${it.value}" })
+                        append("|status:")
+                        append(sessionComputation.status)
+                        append("|validFrames:")
+                        append(validFrameCount)
+                        append("|invalidFrames:")
+                        append(invalidFrameCount)
+                        if (invalidReasonSummary.isNotBlank()) {
+                            append("|invalidReasons:")
+                            append(invalidReasonSummary)
+                        }
+                    },
                     annotatedVideoUri = annotatedVideoUri,
                     rawVideoUri = rawVideoUri,
                     notesUri = null,
                     bestFrameTimestampMs = bestFrame,
                     worstFrameTimestampMs = worstFrame,
-                    topImprovementFocus = summary.nextFocus,
+                    topImprovementFocus = if (sessionComputation.status == "invalid") sessionComputation.topImprovementFocus else summary.nextFocus,
                 ),
             )
             onSessionFinalized(activeSessionId)
