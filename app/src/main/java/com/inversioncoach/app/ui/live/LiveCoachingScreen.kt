@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -136,6 +134,12 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                     modifier = Modifier.fillMaxSize(),
                     showIdealLine = options.showIdealLine,
                     problematicJointName = null,
+                    showDebugOverlay = uiState.showDebugOverlay,
+                    debugMetrics = uiState.debugMetrics,
+                    debugAngles = uiState.debugAngles,
+                    currentPhase = uiState.currentPhase,
+                    activeFault = uiState.activeFault,
+                    cueText = uiState.currentCue,
                 )
             }
         }
@@ -162,24 +166,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             uiState.errorMessage?.let { Text(it, color = Color.Red) }
         }
 
-        if (uiState.showDebugOverlay) {
-            Column(
-                modifier = Modifier.align(Alignment.CenterEnd).padding(8.dp)
-                    .background(Color(0xAA101820)).padding(8.dp).verticalScroll(rememberScrollState()),
-            ) {
-                Text("DEBUG", color = Color.Cyan)
-                uiState.debugMetrics.forEach { Text("${it.key}: ${it.score}", color = Color.White) }
-                uiState.debugAngles.forEach { Text("${it.key}: ${"%.1f".format(it.degrees)}°", color = Color.White) }
-                Text("conf: ${(uiState.confidence * 100).toInt()}%", color = Color.White)
-                Text("landmarks: ${uiState.debugLandmarksDetected}", color = Color.White)
-                Text("infer: ${uiState.debugInferenceTimeMs}ms", color = Color.White)
-                Text("drops: ${uiState.debugFrameDrops}", color = Color.White)
-                Text("reject: ${uiState.debugRejectionReason}", color = Color.White)
-                Text("phase(debug): ${uiState.currentPhase}", color = Color.White)
-                Text("fault(debug): ${uiState.activeFault.ifBlank { "none" }}", color = Color.White)
-                Text("reps(debug): ${uiState.repCount}", color = Color.White)
-            }
-        }
+
 
         Row(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp),
