@@ -144,6 +144,7 @@ flowchart TD
   - short transient events are debounced out via a minimum-duration threshold
 - Session summary output is derived from valid-frame metrics + aggregated issue events.
 - If valid frame count is below threshold, session is marked invalid/insufficient-data and the user gets a retry-oriented focus message instead of misleading coaching output.
+- Live session finalization is lifecycle-safe: if the Live Coaching screen is disposed (navigation/system interruption), the current session is finalized in the background to avoid orphaned `completedAtMs=0` records.
 
 ## How to add a new drill
 
@@ -203,6 +204,12 @@ Unit tests cover:
 
 ```bash
 gradle :app:testDebugUnitTest
+```
+
+### Lint
+
+```bash
+gradle :app:lintDebug
 ```
 
 ### Debug APK

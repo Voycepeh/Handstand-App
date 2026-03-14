@@ -20,7 +20,7 @@ data class AggregatedIssueEvent(
 
 data class FrameValidityResult(
     val isValid: Boolean,
-    val reason: String = "valid",
+    val reason: String = "none",
 )
 
 class FrameValidityGate(
@@ -31,6 +31,12 @@ class FrameValidityGate(
         DrillType.BODYWEIGHT_SQUAT to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"),
         DrillType.REVERSE_LUNGE to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"),
         DrillType.FOREARM_PLANK to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle"),
+        DrillType.CHEST_TO_WALL_HANDSTAND to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
+        DrillType.BACK_TO_WALL_HANDSTAND to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
+        DrillType.PIKE_PUSH_UP to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
+        DrillType.ELEVATED_PIKE_PUSH_UP to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
+        DrillType.NEGATIVE_WALL_HANDSTAND_PUSH_UP to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
+        DrillType.FREESTANDING_HANDSTAND_FUTURE to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
     )
 
     fun evaluate(frame: PoseFrame): FrameValidityResult {
@@ -45,8 +51,9 @@ class FrameValidityGate(
 
         val xs = joints.values.map { it.x }
         val ys = joints.values.map { it.y }
-        val width = xs.maxOrNull()!! - xs.minOrNull()!!
-        val height = ys.maxOrNull()!! - ys.minOrNull()!!
+        if (xs.isEmpty() || ys.isEmpty()) return FrameValidityResult(false, "missing_required_landmarks")
+        val width = (xs.maxOrNull() ?: 0f) - (xs.minOrNull() ?: 0f)
+        val height = (ys.maxOrNull() ?: 0f) - (ys.minOrNull() ?: 0f)
         if (height > MAX_BODY_SCALE || width > MAX_BODY_SCALE) return FrameValidityResult(false, "too_close_to_camera")
         if (height < MIN_BODY_SCALE) return FrameValidityResult(false, "too_far_from_camera")
 
