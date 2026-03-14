@@ -7,7 +7,10 @@ import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
+import android.util.Log
 import java.io.File
+
+private const val TAG = "SessionRecorder"
 
 class SessionRecorder(
     private val context: Context,
@@ -29,7 +32,11 @@ class SessionRecorder(
     }
 
     fun stopRecording() {
-        recording?.stop()
+        runCatching {
+            recording?.stop()
+        }.onFailure { throwable ->
+            Log.w(TAG, "Ignoring recorder stop failure", throwable)
+        }
         recording = null
     }
 
