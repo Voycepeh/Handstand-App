@@ -1,14 +1,12 @@
 package com.inversioncoach.app.pose
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Matrix
 import android.util.Log
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import androidx.camera.core.toBitmap
-import com.google.mediapipe.framework.image.BitmapImageBuilder
+import com.google.mediapipe.framework.image.MediaImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.vision.core.ImageProcessingOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
@@ -27,6 +25,7 @@ class PoseAnalyzer(
         private const val TAG = "PoseAnalyzer"
         private const val MIN_VISIBLE_JOINT_CONFIDENCE = 0.25f
         private const val LOG_INTERVAL_MS = 2_000L
+        private const val MIN_PIPELINE_CONFIDENCE = 0.45f
     }
 
     private val landmarkNames = listOf(
@@ -39,7 +38,11 @@ class PoseAnalyzer(
 
     private var lastWarningAtMs = 0L
     private var lastPerfLogAtMs = 0L
-    private var reusableBitmap: Bitmap? = null
+    private var lastFrameTimestampMs = 0L
+    private val closeLock = Any()
+    private val pendingFrames = linkedMapOf<Long, ImageProxy>()
+    @Volatile
+    private var frameInFlight = false
 
     @Suppress("unused")
     private val poseLandmarker: PoseLandmarker by lazy {
@@ -50,12 +53,17 @@ class PoseAnalyzer(
             .setMinPoseDetectionConfidence(0.5f)
             .setMinTrackingConfidence(0.5f)
             .setResultListener(::onResult)
-            .setErrorListener { _, _ -> onAnalyzerWarning("Pose model error. Reposition camera and retry.") }
+            .setErrorListener { error, _ ->
+                Log.e(TAG, "Pose model error", error)
+                closePendingFrames()
+                onAnalyzerWarning("Pose model error. Reposition camera and retry.")
+            }
             .build()
         PoseLandmarker.createFromOptions(context, options)
     }
 
     private fun onResult(result: PoseLandmarkerResult, inputImage: com.google.mediapipe.framework.image.MPImage) {
+        releaseFrame(result.timestampMs())
         val landmarks = result.landmarks().firstOrNull().orEmpty()
         val joints = landmarks.mapIndexedNotNull { index, lm ->
             val visibility = lm.visibility().orElse(0f)
@@ -82,7 +90,7 @@ class PoseAnalyzer(
             onPoseFrame(PoseFrame(timestampMs = timestampMs, joints = joints, confidence = confidence))
         }
 
-        if (confidence < 0.45f) {
+        if (confidence < MIN_PIPELINE_CONFIDENCE) {
             throttleWarning("Low landmark confidence. Improve lighting and keep full body in side view.")
         }
 
@@ -94,28 +102,69 @@ class PoseAnalyzer(
     }
 
     override fun analyze(image: ImageProxy) {
+        if (frameInFlight) {
+            image.close()
+            return
+        }
+
         try {
-            val sourceBitmap = image.toBitmap()
-            val rotatedBitmap = sourceBitmap.rotate(image.imageInfo.rotationDegrees, reusableBitmap)
-            reusableBitmap = rotatedBitmap
-            val frameTimestampMs = TimeUnit.NANOSECONDS.toMillis(image.imageInfo.timestamp)
-            val mpImage = BitmapImageBuilder(rotatedBitmap).build()
-            poseLandmarker.detectAsync(mpImage, frameTimestampMs)
+            val mediaImage = image.image ?: run {
+                image.close()
+                return
+            }
+            val frameTimestampMs = nextTimestampMs(image.imageInfo.timestamp)
+            val mpImage = MediaImageBuilder(mediaImage).build()
+            val imageProcessingOptions = ImageProcessingOptions.builder()
+                .setRotationDegrees(image.imageInfo.rotationDegrees)
+                .build()
+
+            synchronized(closeLock) {
+                frameInFlight = true
+                pendingFrames[frameTimestampMs] = image
+            }
+            poseLandmarker.detectAsync(mpImage, imageProcessingOptions, frameTimestampMs)
         } catch (t: Throwable) {
             Log.e(TAG, "Pose analysis frame failed", t)
+            releaseFrameForImage(image)
             throttleWarning("Pose inference dropped a frame. Hold steady and retry.")
-        } finally {
-            image.close()
         }
     }
 
-    private fun Bitmap.rotate(rotationDegrees: Int, reuseBuffer: Bitmap?): Bitmap {
-        if (rotationDegrees == 0) return this
-        val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
-        val rotated = Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
-        if (reuseBuffer == null || reuseBuffer == rotated) return rotated
-        if (reuseBuffer != this && !reuseBuffer.isRecycled) reuseBuffer.recycle()
-        return rotated
+    private fun nextTimestampMs(timestampNs: Long): Long {
+        val convertedMs = TimeUnit.NANOSECONDS.toMillis(timestampNs)
+        return synchronized(closeLock) {
+            val timestampMs = if (convertedMs <= lastFrameTimestampMs) lastFrameTimestampMs + 1 else convertedMs
+            lastFrameTimestampMs = timestampMs
+            timestampMs
+        }
+    }
+
+    private fun releaseFrame(frameTimestampMs: Long) {
+        val toClose = synchronized(closeLock) {
+            val frame = pendingFrames.remove(frameTimestampMs)
+            frameInFlight = pendingFrames.isNotEmpty()
+            frame
+        }
+        toClose?.close()
+    }
+
+    private fun releaseFrameForImage(image: ImageProxy) {
+        synchronized(closeLock) {
+            val key = pendingFrames.entries.firstOrNull { it.value === image }?.key
+            if (key != null) pendingFrames.remove(key)
+            frameInFlight = pendingFrames.isNotEmpty()
+        }
+        image.close()
+    }
+
+    private fun closePendingFrames() {
+        val frames = synchronized(closeLock) {
+            val snapshot = pendingFrames.values.toList()
+            pendingFrames.clear()
+            frameInFlight = false
+            snapshot
+        }
+        frames.forEach { it.close() }
     }
 
     private fun throttleWarning(message: String) {
