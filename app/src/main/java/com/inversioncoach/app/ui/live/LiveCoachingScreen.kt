@@ -192,7 +192,11 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                                             Log.e(TAG, "Recording finalize error code=${event.error}")
                                             vm.onAnalyzerWarning("Recording failed to finalize (code ${event.error})")
                                         } else {
-                                            vm.onRecordingFinalized(event.outputResults.outputUri.toString())
+                                            val finalizedUri = event.outputResults.outputUri
+                                                .toString()
+                                                .takeIf { it.isNotBlank() }
+                                                ?: sessionRecorder.fallbackOutputUri()
+                                            vm.onRecordingFinalized(finalizedUri)
                                         }
                                         if (pendingStopAfterRecordingFinalize) {
                                             pendingStopAfterRecordingFinalize = false

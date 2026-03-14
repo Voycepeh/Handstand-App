@@ -1,6 +1,7 @@
 package com.inversioncoach.app.recording
 
 import android.content.Context
+import android.net.Uri
 import androidx.camera.video.FileOutputOptions
 import androidx.camera.video.PendingRecording
 import androidx.camera.video.Recorder
@@ -16,6 +17,7 @@ class SessionRecorder(
     private val context: Context,
 ) {
     private var recording: Recording? = null
+    private var activeOutputFile: File? = null
 
     fun startRecording(
         capture: VideoCapture<Recorder>,
@@ -24,12 +26,18 @@ class SessionRecorder(
         onEvent: (VideoRecordEvent) -> Unit,
     ) {
         val outputFile = createOutputFile(title)
+        activeOutputFile = outputFile
         val outputOptions = FileOutputOptions.Builder(outputFile).build()
 
         var pending: PendingRecording = capture.output.prepareRecording(context, outputOptions)
         if (withAudio) pending = pending.withAudioEnabled()
         recording = pending.start(context.mainExecutor, onEvent)
     }
+
+    fun fallbackOutputUri(): String? =
+        activeOutputFile
+            ?.takeIf { it.exists() }
+            ?.let { Uri.fromFile(it).toString() }
 
     fun stopRecording() {
         runCatching {
