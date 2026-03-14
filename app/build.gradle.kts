@@ -8,20 +8,52 @@ android {
     namespace = "com.inversioncoach.app"
     compileSdk = 34
 
+    val appVersionCode = (project.findProperty("APP_VERSION_CODE") as String?)?.toIntOrNull() ?: 1
+    val appVersionName = (project.findProperty("APP_VERSION_NAME") as String?) ?: "1.0.0"
+
+    val releaseStoreFile = project.findProperty("RELEASE_STORE_FILE") as String?
+    val releaseStorePassword = project.findProperty("RELEASE_STORE_PASSWORD") as String?
+    val releaseKeyAlias = project.findProperty("RELEASE_KEY_ALIAS") as String?
+    val releaseKeyPassword = project.findProperty("RELEASE_KEY_PASSWORD") as String?
+
+    val hasLocalReleaseSigning =
+        !releaseStoreFile.isNullOrBlank() &&
+            !releaseStorePassword.isNullOrBlank() &&
+            !releaseKeyAlias.isNullOrBlank() &&
+            !releaseKeyPassword.isNullOrBlank()
+
     defaultConfig {
         applicationId = "com.inversioncoach.app"
         minSdk = 28
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }
 
+    signingConfigs {
+        create("localRelease") {
+            if (hasLocalReleaseSigning) {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            versionNameSuffix = "-debug"
+        }
+
         release {
             isMinifyEnabled = false
+            signingConfig =
+                if (hasLocalReleaseSigning) signingConfigs.getByName("localRelease")
+                else signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
