@@ -24,7 +24,7 @@ sealed class Route(val value: String) {
     data object DrillDetail : Route("drillDetail/{drill}") {
         fun create(drillType: DrillType): String = "drillDetail/${drillType.name}"
     }
-    data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}") {
+    data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}/{zoomOutCamera}") {
         fun create(drillType: DrillType, options: LiveSessionOptions): String =
             "live/${drillType.name}/${options.voiceEnabled}/${options.recordingEnabled}/${options.showSkeletonOverlay}/${options.showIdealLine}/${options.zoomOutCamera}"
     }
@@ -91,7 +91,12 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onDone = { navController.popBackStack(Route.Home.value, false) },
             )
         }
-        composable(Route.History.value) { HistoryScreen(onBack = { navController.popBackStack() }) }
+        composable(Route.History.value) {
+            HistoryScreen(
+                onBack = { navController.popBackStack() },
+                onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
+            )
+        }
         composable(Route.Settings.value) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },

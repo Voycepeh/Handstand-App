@@ -39,7 +39,10 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Trend: Avg score $avgScore across ${sessions.size} sessions")
             Text("Most common fault: $topIssue")
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 items(sessions) { session ->
                     Card(
                         modifier = Modifier
