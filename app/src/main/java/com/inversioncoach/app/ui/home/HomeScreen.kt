@@ -28,15 +28,22 @@ import com.inversioncoach.app.ui.components.ScaffoldedScreen
 fun HomeScreen(
     onStart: () -> Unit,
     onHistory: () -> Unit,
+    onProgress: () -> Unit,
     onSettings: () -> Unit,
 ) {
     ScaffoldedScreen(title = "Inversion Coach") { padding ->
-        Content(padding, onStart, onHistory, onSettings)
+        Content(padding, onStart, onHistory, onProgress, onSettings)
     }
 }
 
 @Composable
-private fun Content(padding: PaddingValues, onStart: () -> Unit, onHistory: () -> Unit, onSettings: () -> Unit) {
+private fun Content(
+    padding: PaddingValues,
+    onStart: () -> Unit,
+    onHistory: () -> Unit,
+    onProgress: () -> Unit,
+    onSettings: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -71,7 +78,7 @@ private fun Content(padding: PaddingValues, onStart: () -> Unit, onHistory: () -
         ActionButton(
             label = "Progress",
             icon = { Icon(Icons.Default.BarChart, contentDescription = null) },
-            onClick = onHistory,
+            onClick = onProgress,
         )
         ActionButton(
             label = "Settings",

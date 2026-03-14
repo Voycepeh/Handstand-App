@@ -22,66 +22,102 @@ Core code paths:
 - Live UI integration: `ui/live/*`
 - Drill selection + preview animation: `ui/startdrill/*`, `ui/components/DrillPreviewAnimation.kt`
 
-## Procedural 2D skeleton animation engine
+## Motion pipeline modules
 
-The preview system is now a code-driven 2D skeleton renderer using Compose Canvas:
-- Source of truth: `SkeletonAnimationSpec` + `SkeletonKeyframe` in `motion/DrillCatalog.kt`
-- Shared joints: `BodyJoint` (`head`, `neck`, shoulders, elbows, wrists, ribcage, pelvis, hips, knees, ankles)
-- Shared bones: `SkeletonRig.bones`
-- Runtime interpolation: `SkeletonAnimationEngine.interpolate(...)`
-- Easing support: `LINEAR`, `EASE_IN_OUT`
-- Looping target: ~12–18 fps visual smoothness (`fpsHint` defaults to 15)
-- Mirroring support for asymmetrical drills (for example reverse lunges)
+New reusable modules under `app/src/main/java/com/inversioncoach/app/motion`:
+- `PoseFrame`: timestamp + landmarks + per-landmark confidence
+- `SmoothedPoseFrame`: filtered landmarks + per-joint velocity
+- `AngleFrame`: named angles, trunk lean, pelvic tilt proxy, line deviation
+- `MovementState`: phase, progress, confidence, start time, rep count
+- `FaultEvent`: code, severity, message, side, start/end
+- `TemporalPoseSmoother`: EMA smoothing with confidence weighting and missing-joint fallback
+- `AngleEngine`: 2D angle calculations (extensible for future 3D)
+- `MovementPhaseDetector`: FSM with hysteresis via dwell time
+- `FaultDetectionEngine`: persistence-gated fault rules
+- `FeedbackEngine`: one-cue-at-a-time, cooldown-based cueing
+- `MotionAnalysisPipeline`: end-to-end orchestrator
 
-### Why code-driven animation over stored video files
+## Drill metadata system
 
-- Much smaller app footprint than storing multiple video files
-- Consistent visual language across drills
-- Editable in code and easy to tune keyframes
-- Reusable skeleton and naming conventions for future pose-overlay matching
-- Supports dynamic highlighting/theming paths later without asset regeneration
+`DrillCatalog.kt` defines drill metadata using Kotlin data classes (JSON-like shape):
+- id, displayName, category, level, equipment, movementPattern
+- primaryJoints, trackedAngles, requiredLandmarks
+- phaseModel, postureRules, cueLibrary
+- thumbnail/animation refs
+- repCountingEnabled, holdModeEnabled
+- checkpoints and keyframe animation source
 
-## Drill schema
+The catalog includes **15 drills** (including beginner drills).
 
-`DrillDefinition` includes:
-- `id`, `displayName`, `category`, `level`, `equipment`
-- `movementPattern`
-- `requiredLandmarks`
-- `mainPhases`
-- `commonFaults`
-- `cues`
-- `repMode` (`REP_BASED` or `HOLD_BASED`)
-- `previewAnimationId`
-- `animationSpec`
-- `postureRulePlaceholders`
+## Drill preview animation system
 
-Rule placeholder philosophy (v1):
-- Rep drills: phase thresholds + persistence + symmetry/tempo guards
-- Hold drills: line deviation + fault timers + quality score
+- Previews are procedural 2D dummy animations.
+- Source of truth: keyframes (`DrillPreviewKeyframe`) in `DrillCatalog.kt`.
+- Runtime interpolation and rendering on Compose `Canvas` in `DrillPreviewAnimation.kt`.
+- No external copyrighted videos are used.
 
-## Seeded drill catalog
+## Drill selection UX
 
-Wave 1 (implemented):
-- Wall Push-Up
-- Push-Up
-- Squat
-- Reverse Lunge
-- Plank
-- Glute Bridge
-- Pull-Up
-- Dip
-- Hanging Knee Raise
-- Pike Push-Up
-- Hollow Hold
-- Wall-Facing Handstand
-- L-Sit
+Start Drill screen now includes:
+- looping preview animation per drill
+- level tag + movement pattern tag
+- tracked checkpoints summary
+- details button that opens a drill detail screen with posture checklist
 
-Wave 2 (scaffolded with TODO slots):
-- Archer Push-Up
-- Archer Pull-Up
-- (planned next) pistol squat, hanging leg raise, wall walk, freestanding handstand, muscle-up prep, full bridge
+## App page map (navigation flow)
 
-Exercise descriptions/cues in-app are normalized summaries derived from public calisthenics technique references and written originally for the app (not copied verbatim).
+Current app navigation pages and routes:
+- `Home` (`home`)
+- `Start Drill` (`start`)
+- `Drill Detail` (`drillDetail/{drill}`)
+- `Live Coaching` (`live/{drill}/{voice}/{record}/{skeleton}/{idealLine}/{zoomOutCamera}`)
+- `Results` (`results/{sessionId}`)
+- `History` (`history`)
+- `Progress` (`progress`)
+- `Settings` (`settings`)
+- `Developer Tuning` (`settings/dev-tuning`)
+
+```mermaid
+flowchart TD
+    H[Home]
+    S[Start Drill]
+    D[Drill Detail]
+    L[Live Coaching]
+    R[Results]
+    HI[History]
+    P[Progress]
+    SE[Settings]
+    DEV[Developer Tuning]
+
+    H -->|Choose Drill| S
+    H -->|Review Sessions| HI
+    H -->|Progress| P
+    H -->|Settings| SE
+
+    S -->|Back| H
+    S -->|Details| D
+    S -->|Start| L
+
+    D -->|Back| S
+
+    L -->|Stop session| R
+    R -->|Done| H
+
+    HI -->|Select session| R
+    HI -->|Back| H
+
+    P -->|Back| H
+
+    SE -->|Developer Threshold Tuning| DEV
+    SE -->|Back| H
+    DEV -->|Back| SE
+```
+
+## Debug / tuning tools
+
+- Live debug overlay now includes current phase, active fault, and rep count.
+- Settings includes navigation to **Developer threshold tuning** screen.
+- Developer screen supports live threshold tuning for key posture/fault limits.
 
 ## How to add a new drill
 
