@@ -25,7 +25,7 @@ sealed class Route(val value: String) {
     data object DrillDetail : Route("drillDetail/{drill}") {
         fun create(drillType: DrillType): String = "drillDetail/${drillType.name}"
     }
-    data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}") {
+    data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}/{zoomOutCamera}") {
         fun create(drillType: DrillType, options: LiveSessionOptions): String =
             "live/${drillType.name}/${options.voiceEnabled}/${options.recordingEnabled}/${options.showSkeletonOverlay}/${options.showIdealLine}/${options.zoomOutCamera}"
     }

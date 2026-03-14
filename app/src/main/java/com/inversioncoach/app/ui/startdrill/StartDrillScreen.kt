@@ -43,7 +43,7 @@ fun StartDrillScreen(
     onStart: (DrillType, LiveSessionOptions) -> Unit,
     onOpenDetail: (DrillType) -> Unit,
 ) {
-    val selected = remember { mutableStateOf(DrillType.STANDING_POSTURE_HOLD) }
+    val selected = remember { mutableStateOf(DrillType.WALL_PUSH_UP) }
     val voiceOn = remember { mutableStateOf(true) }
     val recordOn = remember { mutableStateOf(true) }
     val skeletonOn = remember { mutableStateOf(true) }
@@ -65,10 +65,11 @@ fun StartDrillScreen(
                     val metadata = DrillCatalog.byType(drill.type)
                     DrillItem(
                         label = drill.label,
-                        level = metadata.level,
-                        movementPattern = metadata.movementPattern,
-                        checkpoints = metadata.checkpoints.take(3),
-                        keyframes = metadata.keyframes,
+                        level = metadata.level.name.lowercase(),
+                        movementPattern = metadata.movementPattern.name.lowercase(),
+                        checkpoints = metadata.cues.take(3),
+                        animationSpec = metadata.animationSpec,
+                        mirrored = drill.type == DrillType.REVERSE_LUNGE,
                         selected = selected.value == drill.type,
                         onClick = { selected.value = drill.type },
                         onOpenDetail = { onOpenDetail(drill.type) },
@@ -115,7 +116,8 @@ private fun DrillItem(
     level: String,
     movementPattern: String,
     checkpoints: List<String>,
-    keyframes: List<com.inversioncoach.app.motion.DrillPreviewKeyframe>,
+    animationSpec: com.inversioncoach.app.motion.SkeletonAnimationSpec,
+    mirrored: Boolean,
     selected: Boolean,
     onClick: () -> Unit,
     onOpenDetail: () -> Unit,
@@ -132,7 +134,7 @@ private fun DrillItem(
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                DrillPreviewAnimation(keyframes = keyframes)
+                DrillPreviewAnimation(animationSpec = animationSpec, mirrored = mirrored, isPlaying = selected)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                     Text("$level • $movementPattern", style = MaterialTheme.typography.bodySmall)

@@ -3,6 +3,8 @@ package com.inversioncoach.app.ui.results
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,7 +48,11 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
 
     ScaffoldedScreen(title = "Results") { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -117,7 +123,10 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save note") }
-            Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Share summary") }
+            Button(
+                onClick = { shareSummary(context, sessionId, session?.overallScore ?: avgScore, session?.issues.orEmpty(), notes) },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Share summary") }
             Button(
                 onClick = {
                     scope.launch {
@@ -147,4 +156,22 @@ private fun openVideo(context: android.content.Context, videoUri: String?) {
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     context.startActivity(intent)
+}
+
+
+private fun shareSummary(context: android.content.Context, sessionId: Long, score: Int, issues: String, notes: String) {
+    val summary = buildString {
+        appendLine("Inversion Coach session #$sessionId")
+        appendLine("Overall score: $score")
+        appendLine("Top issues: ${issues.ifBlank { "No issues captured" }}")
+        if (notes.isNotBlank()) {
+            appendLine("Notes: $notes")
+        }
+    }.trim()
+
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, summary)
+    }
+    context.startActivity(Intent.createChooser(intent, "Share session summary"))
 }

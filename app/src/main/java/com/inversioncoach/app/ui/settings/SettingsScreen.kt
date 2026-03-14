@@ -1,6 +1,8 @@
 package com.inversioncoach.app.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,18 +37,24 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
     var cueFrequency by remember { mutableFloatStateOf(2f) }
     var overlay by remember { mutableFloatStateOf(1f) }
     var debug by remember { mutableStateOf(false) }
+    var localOnlyPrivacyMode by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         repository.observeSettings().collect { s ->
             cueFrequency = s.cueFrequencySeconds
             overlay = s.overlayIntensity
             debug = s.debugOverlayEnabled
+            localOnlyPrivacyMode = s.localOnlyPrivacyMode
         }
     }
 
     ScaffoldedScreen(title = "Settings", onBack = onBack) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Voice style: concise / technical / encouraging")
@@ -66,13 +74,17 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
                                 cueFrequencySeconds = cueFrequency,
                                 overlayIntensity = overlay,
                                 debugOverlayEnabled = debug,
+                                localOnlyPrivacyMode = localOnlyPrivacyMode,
                             ),
                         )
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save settings") }
-            Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Enable local-only privacy mode") }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Local-only privacy mode")
+                Checkbox(checked = localOnlyPrivacyMode, onCheckedChange = { localOnlyPrivacyMode = it })
+            }
             Button(onClick = onDeveloperTuning, modifier = Modifier.fillMaxWidth()) { Text("Developer threshold tuning") }
             Button(
                 onClick = {

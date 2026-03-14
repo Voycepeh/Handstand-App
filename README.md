@@ -121,33 +121,40 @@ flowchart TD
 
 ## How to add a new drill
 
-1. Add drill enum (`model/Models.kt`) if needed.
-2. Add biomechanics config (`biomechanics/DrillModeConfig.kt`) and scoring weights.
-3. Add metadata in `motion/DrillCatalog.kt`:
-   - tags, checkpoints, required landmarks, keyframes.
-4. Add/adjust phase thresholds (`MovementPhaseDetector`) and fault rules (`FaultDetectionEngine`).
-5. If required, add dedicated analyzer mapping in `AlignmentMetricsEngine`.
-6. Validate in live debug overlay and tune in Developer threshold screen.
+1. Add/confirm the app drill enum (`model/Models.kt`) for runtime routing.
+2. Add drill metadata in `motion/DrillCatalog.kt` using `def(...)`.
+3. Add an animation spec (`symmetricSpec`, `lungeSpec`, or a new custom spec).
+4. Define phases, faults, cues, movement pattern, and rep mode.
+5. Add future rule placeholders for expected analysis strategy.
+6. Wire analyzer thresholds in the motion pipeline when posture detection is added for that drill.
 
-## Threshold tuning guidance
+## Defining joints and keyframes
 
-- Start conservative for beginner drills (wider tolerance).
-- Increase persistence frames first to reduce false positives.
-- Then tighten angle/line thresholds incrementally.
-- Use real session recordings and side-view consistency before hardening limits.
+- Use normalized coordinates (`0f..1f`) in `NormalizedPoint`
+- Include key poses when applicable:
+  - neutral
+  - start
+  - mid eccentric
+  - bottom
+  - mid concentric
+  - top
+  - optional hold
+- Keep first/last poses compatible for smooth loops
 
-## 2D pose estimation limitations
+## Mirroring rules
 
-- Perspective distortion can bias angle estimates.
-- Occlusion and poor lighting reduce landmark confidence.
-- Fast movement introduces motion blur and reduced stability.
-- Pelvic tilt/rib-flare proxies are approximations from 2D landmarks.
+- Enable `mirroredSupported = true` on `SkeletonAnimationSpec`
+- Renderer can request mirrored playback
+- Engine swaps left/right joint keys and flips x-axis (`x -> 1 - x`)
 
 ## Tests
 
-Unit tests were added for:
-- angle calculation sanity (`AngleEngineTest`)
-- movement phase FSM rep counting (`MovementPhaseDetectorTest`)
+Unit tests cover:
+- keyframe interpolation
+- mirroring
+- loop continuity
+- animation loading
+- drill schema field integrity
 
 ## Build
 
