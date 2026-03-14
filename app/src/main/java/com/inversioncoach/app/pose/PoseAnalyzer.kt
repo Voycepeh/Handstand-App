@@ -14,6 +14,7 @@ import java.util.concurrent.ExecutorService
 class PoseAnalyzer(
     context: Context,
     private val onPoseFrame: (PoseFrame) -> Unit,
+    private val onAnalyzerWarning: (String) -> Unit,
     private val backgroundExecutor: ExecutorService,
 ) : ImageAnalysis.Analyzer {
 
@@ -25,6 +26,9 @@ class PoseAnalyzer(
         "left_heel", "right_heel", "left_foot_index", "right_foot_index",
     )
 
+    private var lastWarningAtMs = 0L
+
+    @Suppress("unused")
     private val poseLandmarker: PoseLandmarker by lazy {
         val baseOptions = BaseOptions.builder().setModelAssetPath("pose_landmarker_lite.task").build()
         val options = PoseLandmarker.PoseLandmarkerOptions.builder()
@@ -33,7 +37,7 @@ class PoseAnalyzer(
             .setMinPoseDetectionConfidence(0.5f)
             .setMinTrackingConfidence(0.5f)
             .setResultListener(::onResult)
-            .setErrorListener { _, _ -> }
+            .setErrorListener { _, _ -> onAnalyzerWarning("Pose model error. Reposition camera and retry.") }
             .build()
         PoseLandmarker.createFromOptions(context, options)
     }
@@ -45,7 +49,6 @@ class PoseAnalyzer(
             JointPoint(jointName, lm.x(), lm.y(), lm.z(), lm.visibility().orElse(0f))
         }.toMutableList()
 
-        // Small helper proxy for trunk/rib line even when landmarks flicker.
         val shoulder = joints.firstOrNull { it.name == "left_shoulder" }
         val hip = joints.firstOrNull { it.name == "left_hip" }
         if (shoulder != null && hip != null) {
@@ -68,8 +71,13 @@ class PoseAnalyzer(
     }
 
     override fun analyze(image: ImageProxy) {
-        // Intentional MVP stub: convert ImageProxy to MPImage and call poseLandmarker.detectAsync.
-        // Keeping deterministic fallback so app remains usable even if landmarker input conversion is not configured yet.
+        // TODO: Wire ImageProxy -> MPImage conversion and detectAsync() call.
+        // Until then, surface explicit warning once per 3 seconds instead of silently dropping frames.
+        val now = System.currentTimeMillis()
+        if (now - lastWarningAtMs > 3000) {
+            lastWarningAtMs = now
+            onAnalyzerWarning("Pose analyzer is not fully initialized yet. Live scoring is degraded.")
+        }
         image.close()
     }
 }

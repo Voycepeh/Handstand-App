@@ -1,6 +1,8 @@
 package com.inversioncoach.app.camera
 
 import android.content.Context
+import android.util.Log
+import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -24,28 +26,37 @@ class CameraSessionManager(
         lifecycleOwner: LifecycleOwner,
         previewView: PreviewView,
         analyzer: PoseAnalyzer,
+        onReady: (Boolean, String?) -> Unit,
     ) {
         val providerFuture = ProcessCameraProvider.getInstance(context)
         providerFuture.addListener({
-            val provider = providerFuture.get()
-            val preview = Preview.Builder().build().apply {
-                setSurfaceProvider(previewView.surfaceProvider)
-            }
-            val imageAnalysis = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build().apply {
-                    setAnalyzer(cameraExecutor, analyzer)
+            runCatching {
+                val provider = providerFuture.get()
+                val preview = Preview.Builder().build().apply {
+                    setSurfaceProvider(previewView.surfaceProvider)
                 }
-            videoCapture = VideoCapture.withOutput(Recorder.Builder().build())
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setTargetResolution(Size(1280, 720))
+                    .build().apply {
+                        setAnalyzer(cameraExecutor, analyzer)
+                    }
+                videoCapture = VideoCapture.withOutput(Recorder.Builder().build())
 
-            provider.unbindAll()
-            provider.bindToLifecycle(
-                lifecycleOwner,
-                CameraSelector.DEFAULT_BACK_CAMERA,
-                preview,
-                imageAnalysis,
-                videoCapture,
-            )
+                provider.unbindAll()
+                provider.bindToLifecycle(
+                    lifecycleOwner,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    preview,
+                    imageAnalysis,
+                    videoCapture,
+                )
+            }.onSuccess {
+                onReady(true, null)
+            }.onFailure {
+                Log.e("CameraSessionManager", "Failed binding camera", it)
+                onReady(false, "Unable to start camera session")
+            }
         }, ContextCompat.getMainExecutor(context))
     }
 

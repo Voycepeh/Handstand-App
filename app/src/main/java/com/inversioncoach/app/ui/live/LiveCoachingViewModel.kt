@@ -36,6 +36,22 @@ class LiveCoachingViewModel(
 
     private var latestScore: DrillScore = DrillScore(0, emptyMap(), "-", "-")
     private val sessionId = System.currentTimeMillis()
+    private var lastFramePersistAt = 0L
+
+    fun onCameraPermissionChanged(granted: Boolean) {
+        _uiState.value = _uiState.value.copy(cameraPermissionGranted = granted)
+    }
+
+    fun onCameraReady(ready: Boolean, error: String? = null) {
+        _uiState.value = _uiState.value.copy(
+            cameraReady = ready,
+            errorMessage = error,
+        )
+    }
+
+    fun onAnalyzerWarning(message: String) {
+        _uiState.value = _uiState.value.copy(warningMessage = message)
+    }
 
     fun onPoseFrame(frame: PoseFrame, settings: UserSettings) {
         val config = DrillConfigs.byType(drillType)
@@ -65,10 +81,27 @@ class LiveCoachingViewModel(
             confidence = smoothed.confidence,
             currentCue = cue?.text ?: _uiState.value.currentCue,
             warningMessage = null,
+            errorMessage = null,
             showDebugOverlay = settings.debugOverlayEnabled,
             debugMetrics = analysis.metrics,
             debugAngles = analysis.angles,
         )
+
+        persistFrameData(smoothed, analysis.score.overall, analysis.score.limitingFactor, analysis.metrics, analysis.angles, analysis.fault, cue?.severity ?: 1)
+    }
+
+    private fun persistFrameData(
+        smoothed: SmoothedPoseFrame,
+        overallScore: Int,
+        limitingFactor: String,
+        metrics: List<com.inversioncoach.app.model.AlignmentMetric>,
+        angles: List<com.inversioncoach.app.model.AngleDebugMetric>,
+        fault: String?,
+        cueSeverity: Int,
+    ) {
+        val now = smoothed.timestampMs
+        if (now - lastFramePersistAt < FRAME_PERSIST_INTERVAL_MS) return
+        lastFramePersistAt = now
 
         viewModelScope.launch {
             repository.saveFrameMetric(
@@ -76,20 +109,20 @@ class LiveCoachingViewModel(
                     sessionId = sessionId,
                     timestampMs = smoothed.timestampMs,
                     confidence = smoothed.confidence,
-                    overallScore = analysis.score.overall,
-                    limitingFactor = analysis.score.limitingFactor,
-                    metricScoresJson = analysis.metrics.joinToString(";") { "${it.key}:${it.score}" },
-                    anglesJson = analysis.angles.joinToString(";") { "${it.key}:${"%.1f".format(it.degrees)}" },
-                    activeIssue = analysis.fault,
+                    overallScore = overallScore,
+                    limitingFactor = limitingFactor,
+                    metricScoresJson = metrics.joinToString(";") { "${it.key}:${it.score}" },
+                    anglesJson = angles.joinToString(";") { "${it.key}:${"%.1f".format(it.degrees)}" },
+                    activeIssue = fault,
                 ),
             )
-            if (analysis.fault != null) {
+            if (fault != null) {
                 repository.saveIssueEvent(
                     IssueEvent(
                         sessionId = sessionId,
                         timestampMs = smoothed.timestampMs,
-                        issue = analysis.fault,
-                        severity = cue?.severity ?: 1,
+                        issue = fault,
+                        severity = cueSeverity,
                     ),
                 )
             }
@@ -103,4 +136,8 @@ class LiveCoachingViewModel(
     fun finalScore(): DrillScore = latestScore
 
     private fun SmoothedPoseFrame.toPoseFrame(): PoseFrame = PoseFrame(timestampMs, joints, confidence)
+
+    companion object {
+        private const val FRAME_PERSIST_INTERVAL_MS = 250L
+    }
 }

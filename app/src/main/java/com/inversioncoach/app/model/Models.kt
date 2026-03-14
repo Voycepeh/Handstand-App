@@ -141,7 +141,10 @@ data class LiveSessionUiState(
     val showOverlay: Boolean = true,
     val showIdealLine: Boolean = true,
     val showDebugOverlay: Boolean = false,
+    val cameraReady: Boolean = false,
+    val cameraPermissionGranted: Boolean = false,
     val warningMessage: String? = null,
+    val errorMessage: String? = null,
     val debugAngles: List<AngleDebugMetric> = emptyList(),
     val debugMetrics: List<AlignmentMetric> = emptyList(),
 )
