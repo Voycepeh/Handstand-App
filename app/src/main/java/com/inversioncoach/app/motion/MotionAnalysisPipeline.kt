@@ -4,7 +4,7 @@ import com.inversioncoach.app.model.PoseFrame as LegacyPoseFrame
 import com.inversioncoach.app.model.DrillType
 
 class MotionAnalysisPipeline(
-    drillType: DrillType = DrillType.CHEST_TO_WALL_HANDSTAND,
+    drillType: DrillType = DrillType.FREESTANDING_HANDSTAND_FUTURE,
 ) {
     private val smoother = TemporalPoseSmoother()
     private val angleEngine = AngleEngine()
@@ -68,15 +68,6 @@ class MotionAnalysisPipeline(
     }
 
     private fun trackedAngleFor(pattern: MovementPattern): String = when (pattern) {
-        MovementPattern.SQUAT_PATTERN,
-        MovementPattern.HIP_EXTENSION,
-        MovementPattern.CORE_FLEXION_COMPRESSION,
-        -> "left_knee_flexion"
-
-        MovementPattern.HORIZONTAL_PUSH,
-        MovementPattern.VERTICAL_PUSH,
-        MovementPattern.VERTICAL_PULL,
-        MovementPattern.ANTI_EXTENSION_LINE_CONTROL,
-        -> "left_elbow_flexion"
+        MovementPattern.VERTICAL_PUSH -> "left_elbow_flexion"
     }
 }

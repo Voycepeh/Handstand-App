@@ -47,7 +47,19 @@ New reusable modules under `app/src/main/java/com/inversioncoach/app/motion`:
 - repCountingEnabled, holdModeEnabled
 - checkpoints and keyframe animation source
 
-The catalog includes **15 drills** (including beginner drills).
+The catalog is currently focused on six handstand-focused exercises (foundations + press progressions).
+
+
+### Available drills (with categories)
+
+| Drill | Category | Level |
+|---|---|---|
+| Free Standing Handstand | Handstand | Intermediate |
+| Wall Assisted Handstand | Handstand | Beginner |
+| Pike Push-Up | Handstand Push | Beginner |
+| Elevated Pike Push-Up | Handstand Push | Intermediate |
+| Free Standing Handstand Push-Up | Handstand Push | Intermediate |
+| Wall Assisted Handstand Push-Up | Handstand Push | Intermediate |
 
 ## Drill preview animation system
 
@@ -59,6 +71,7 @@ The catalog includes **15 drills** (including beginner drills).
 ## Drill selection UX
 
 Start Drill screen now includes:
+- a focused handstand exercise library list
 - looping preview animation per drill
 - level tag + movement pattern tag
 - tracked checkpoints summary

@@ -43,7 +43,8 @@ fun StartDrillScreen(
     onStart: (DrillType, LiveSessionOptions) -> Unit,
     onOpenDetail: (DrillType) -> Unit,
 ) {
-    val selected = remember { mutableStateOf(DrillType.WALL_PUSH_UP) }
+    val drills = remember { DrillConfigs.all }
+    val selected = remember { mutableStateOf(drills.first().type) }
     val voiceOn = remember { mutableStateOf(true) }
     val recordOn = remember { mutableStateOf(true) }
     val skeletonOn = remember { mutableStateOf(true) }
@@ -56,20 +57,20 @@ fun StartDrillScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "Pick a drill",
+                text = "Handstand Exercise Library",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                items(DrillConfigs.all) { drill ->
+                items(drills, key = { it.type.name }) { drill ->
                     val metadata = DrillCatalog.byType(drill.type)
                     DrillItem(
                         label = drill.label,
                         level = metadata.level.name.lowercase(),
-                        movementPattern = metadata.movementPattern.name.lowercase(),
+                        movementPattern = metadata.category,
                         checkpoints = metadata.cues.take(3),
                         animationSpec = metadata.animationSpec,
-                        mirrored = drill.type == DrillType.REVERSE_LUNGE,
+                        mirrored = false,
                         selected = selected.value == drill.type,
                         onClick = { selected.value = drill.type },
                         onOpenDetail = { onOpenDetail(drill.type) },
@@ -145,12 +146,6 @@ private fun DrillItem(
                 )
             }
             checkpoints.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
-            Text(
-                text = "View checklist",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 2.dp),
-            )
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                 Button(onClick = onOpenDetail) { Text("Details") }
             }

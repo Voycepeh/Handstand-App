@@ -10,7 +10,7 @@ class FaultDetectionEngine(
     fun detect(angleFrame: AngleFrame, movementState: MovementState): List<FaultEvent> {
         val faults = mutableListOf<FaultEvent>()
 
-        if (movementPattern == MovementPattern.HORIZONTAL_PUSH || movementPattern == MovementPattern.VERTICAL_PUSH) {
+        if (movementPattern == MovementPattern.VERTICAL_PUSH) {
             maybeFault(
                 key = "elbow_flare",
                 condition = (angleFrame.anglesDeg["left_shoulder_opening"] ?: 180f) < 55f ||
@@ -45,7 +45,7 @@ class FaultDetectionEngine(
 
         if (
             movementState.currentPhase == MovementPhase.BOTTOM &&
-            (movementPattern == MovementPattern.HORIZONTAL_PUSH || movementPattern == MovementPattern.VERTICAL_PUSH)
+            movementPattern == MovementPattern.VERTICAL_PUSH
         ) {
             maybeFault(
                 key = "incomplete_rom",
