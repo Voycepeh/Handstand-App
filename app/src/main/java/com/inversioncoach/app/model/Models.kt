@@ -24,6 +24,10 @@ data class PoseFrame(
     val timestampMs: Long,
     val joints: List<JointPoint>,
     val confidence: Float,
+    val landmarksDetected: Int = joints.size,
+    val inferenceTimeMs: Long = 0L,
+    val droppedFrames: Int = 0,
+    val rejectionReason: String = "none",
 )
 
 data class SmoothedPoseFrame(
@@ -149,6 +153,10 @@ data class LiveSessionUiState(
     val errorMessage: String? = null,
     val debugAngles: List<AngleDebugMetric> = emptyList(),
     val debugMetrics: List<AlignmentMetric> = emptyList(),
+    val debugLandmarksDetected: Int = 0,
+    val debugInferenceTimeMs: Long = 0L,
+    val debugFrameDrops: Int = 0,
+    val debugRejectionReason: String = "none",
 )
 
 data class LiveSessionOptions(

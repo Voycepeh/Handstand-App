@@ -70,12 +70,13 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     val currentSessionTitle by rememberUpdatedState(newValue = vm.sessionTitle)
 
     val cameraManager = remember { CameraSessionManager(context) }
+    val analyzerExecutor = remember { Executors.newSingleThreadExecutor() }
+    val currentSettings by rememberUpdatedState(newValue = settings)
     val analyzer = remember {
         PoseAnalyzer(
-            context = context,
-            onPoseFrame = { vm.onPoseFrame(it, settings) },
+            onPoseFrame = { vm.onPoseFrame(it, currentSettings) },
             onAnalyzerWarning = vm::onAnalyzerWarning,
-            backgroundExecutor = Executors.newSingleThreadExecutor(),
+            backgroundExecutor = analyzerExecutor,
         )
     }
 
@@ -94,6 +95,8 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             if (uiState.isRecording) {
                 sessionRecorder.stopRecording()
             }
+            analyzer.close()
+            analyzerExecutor.shutdown()
             cameraManager.release()
             voiceCoach.shutdown()
         }
@@ -159,6 +162,10 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                 uiState.debugMetrics.forEach { Text("${it.key}: ${it.score}", color = Color.White) }
                 uiState.debugAngles.forEach { Text("${it.key}: ${"%.1f".format(it.degrees)}°", color = Color.White) }
                 Text("conf: ${(uiState.confidence * 100).toInt()}%", color = Color.White)
+                Text("landmarks: ${uiState.debugLandmarksDetected}", color = Color.White)
+                Text("infer: ${uiState.debugInferenceTimeMs}ms", color = Color.White)
+                Text("drops: ${uiState.debugFrameDrops}", color = Color.White)
+                Text("reject: ${uiState.debugRejectionReason}", color = Color.White)
             }
         }
 

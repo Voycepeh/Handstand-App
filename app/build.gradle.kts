@@ -98,8 +98,8 @@ dependencies {
     implementation("androidx.camera:camera-video:1.3.4")
     implementation("androidx.camera:camera-view:1.3.4")
 
-    // MediaPipe Pose Landmarker (Tasks Vision)
-    implementation("com.google.mediapipe:tasks-vision:0.10.14")
+    // ML Kit Pose Detection
+    implementation("com.google.mlkit:pose-detection:18.0.0-beta5")
 
     // Room
     implementation("androidx.room:room-runtime:2.6.1")

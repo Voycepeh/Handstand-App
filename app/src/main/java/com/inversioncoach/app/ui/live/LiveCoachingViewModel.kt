@@ -84,19 +84,30 @@ class LiveCoachingViewModel(
     }
 
     fun onPoseFrame(frame: PoseFrame, settings: UserSettings) {
-        val config = DrillConfigs.byType(drillType)
         val smoothed = smoother.smooth(frame)
         _smoothedFrame.value = smoothed
-        if (smoothed.confidence < 0.45f) {
+        val rejectionReason = frame.rejectionReason
+        val rejectionMessage = rejectionMessageFor(rejectionReason)
+
+        _uiState.value = _uiState.value.copy(
+            confidence = smoothed.confidence,
+            warningMessage = rejectionMessage,
+            showDebugOverlay = settings.debugOverlayEnabled,
+            debugLandmarksDetected = frame.landmarksDetected,
+            debugInferenceTimeMs = frame.inferenceTimeMs,
+            debugFrameDrops = frame.droppedFrames,
+            debugRejectionReason = rejectionReason,
+        )
+
+        if (rejectionReason != "none") {
             _uiState.value = _uiState.value.copy(
-                confidence = smoothed.confidence,
-                warningMessage = "Improve side-view framing, lighting, and full-body visibility.",
                 debugMetrics = emptyList(),
                 debugAngles = emptyList(),
             )
             return
         }
 
+        val config = DrillConfigs.byType(drillType)
         val analysis = metricsEngine.analyze(config, smoothed.toPoseFrame())
         latestScore = analysis.score
         val cue = cueEngine.nextCue(
@@ -109,7 +120,7 @@ class LiveCoachingViewModel(
         _uiState.value = _uiState.value.copy(
             score = analysis.score.overall,
             confidence = smoothed.confidence,
-            currentCue = cue?.text ?: _uiState.value.currentCue,
+            currentCue = cue?.text ?: _uiState.value.currentCue.ifBlank { "Human detected. Hold steady for drill scoring." },
             currentCueId = cue?.id ?: _uiState.value.currentCueId,
             currentCueGeneratedAtMs = cue?.generatedAtMs ?: _uiState.value.currentCueGeneratedAtMs,
             warningMessage = null,
@@ -124,6 +135,14 @@ class LiveCoachingViewModel(
         }
 
         persistFrameData(smoothed, analysis.score.overall, analysis.score.limitingFactor, analysis.metrics, analysis.angles, analysis.fault, cue?.severity ?: 1)
+    }
+
+    private fun rejectionMessageFor(reason: String): String? = when (reason) {
+        "no_person_detected" -> "No person detected. Step back until your full body is visible in side view."
+        "body_not_fully_visible" -> "Body not fully visible. Keep head, hips, and feet inside frame."
+        "low_confidence" -> "Low confidence. Improve lighting and hold a stable side view."
+        "frame_processing_failure" -> "Frame processing failure. Hold steady and retry."
+        else -> null
     }
 
     private fun persistFrameData(

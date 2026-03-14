@@ -21,6 +21,7 @@ class CameraSessionManager(
 ) {
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var videoCapture: VideoCapture<Recorder>? = null
+    private var cameraProvider: ProcessCameraProvider? = null
 
     fun bind(
         lifecycleOwner: LifecycleOwner,
@@ -32,11 +33,13 @@ class CameraSessionManager(
         providerFuture.addListener({
             runCatching {
                 val provider = providerFuture.get()
+                cameraProvider = provider
                 val preview = Preview.Builder().build().apply {
                     setSurfaceProvider(previewView.surfaceProvider)
                 }
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setImageQueueDepth(2)
                     .setTargetResolution(Size(1280, 720))
                     .build().apply {
                         setAnalyzer(cameraExecutor, analyzer)
@@ -51,6 +54,7 @@ class CameraSessionManager(
                     imageAnalysis,
                     videoCapture,
                 )
+                Log.i("CameraSessionManager", "CameraX bound with KEEP_ONLY_LATEST queueDepth=2")
             }.onSuccess {
                 onReady(true, null)
             }.onFailure {
@@ -64,6 +68,7 @@ class CameraSessionManager(
     fun videoCapture(): VideoCapture<Recorder>? = videoCapture
 
     fun release() {
+        cameraProvider?.unbindAll()
         cameraExecutor.shutdown()
     }
 }

@@ -10,7 +10,7 @@ The app is currently an MVP focused on live coaching plus basic session persiste
 
 ### What the app does
 - Captures live camera frames with CameraX.
-- Runs on-device pose detection with MediaPipe Pose Landmarker.
+- Runs on-device pose detection with ML Kit Pose Detection (stream mode).
 - Computes drill-specific metrics and scores.
 - Generates rule-based coaching cues (with optional text-to-speech playback).
 - Saves session/frame/issue data locally in Room and shows basic history/results screens.
@@ -34,7 +34,7 @@ The app is currently an MVP focused on live coaching plus basic session persiste
 ### Fully implemented
 - Single-activity Compose app with navigation across Home, Start Drill, Live Coaching, Results, History, and Settings.
 - Camera permission request + live CameraX preview/analyzer binding.
-- MediaPipe LIVE_STREAM pose inference integration via `PoseAnalyzer`.
+- ML Kit STREAM_MODE pose inference integration via `PoseAnalyzer`.
 - Per-drill biomechanics analyzer selection and scoring.
 - Rule-based cue selection with timing/persistence guards.
 - Optional voice cue playback using Android TTS.
@@ -62,7 +62,7 @@ The app is currently an MVP focused on live coaching plus basic session persiste
 ### Major modules/components
 - `ui/` — Compose screens and navigation.
 - `camera/` — CameraX session binding and lifecycle integration.
-- `pose/` — MediaPipe pose inference and pose smoothing.
+- `pose/` — ML Kit pose inference and pose smoothing.
 - `biomechanics/` — drill configs, analyzers, scoring, and issue classification.
 - `coaching/` — cue selection and voice playback.
 - `recording/` — local session recording to MediaStore.
@@ -136,7 +136,7 @@ What to expect live right now:
 - Several Results and Settings buttons are present but non-functional placeholders.
 - Cleanup/retention worker currently does not delete old data.
 - Only one runtime permission is requested (Camera); permission handling for other potential future features is not implemented.
-- App behavior still depends on including the MediaPipe model asset in the built APK.
+- If release minification is enabled, keep-rules for ML Kit must remain in `app/proguard-rules.pro`.
 
 ---
 
@@ -148,3 +148,28 @@ What to expect live right now:
 - Add true retention cleanup policy and scheduling.
 - Add/testing-harden additional drill modes (including future freestanding support) only after analyzer coverage exists.
 - Expand device testing and improve runtime error/reporting around model availability.
+
+
+## 8) Camera and pose-detection troubleshooting
+
+### Permissions
+- Required at runtime: **Camera** permission.
+- If denied, Android preview can still appear in some states, but inference will not run. Re-grant in system app settings.
+
+### Recommended camera setup (for side view detection)
+- Place the phone on a stable surface/tripod at roughly hip-to-chest height.
+- Keep your full body in-frame: head, shoulders, hips, knees, ankles, and feet.
+- Prefer bright, even lighting and high contrast between body and background.
+- Use a side profile for handstand drills as intended by scoring logic.
+
+### "Pose inference dropped a frame" / no scoring checklist
+1. Verify camera is not blocked and only one user is visible.
+2. Hold steady for ~1–2 seconds to reduce frame drops while inference catches up.
+3. Step back to include full body if UI shows "body not fully visible".
+4. Increase lighting if UI shows "low confidence".
+5. If UI shows repeated "frame processing failure", restart app and verify device supports ML Kit pose detection.
+
+### Debug vs release notes
+- Debug and release both use the same pose pipeline (`InputImage.fromMediaImage(...)` + STREAM_MODE detector).
+- `app/proguard-rules.pro` includes ML Kit keep rules to avoid class stripping when minification is turned on in future release builds.
+- Debug overlay (Settings → debug overlay) now shows landmarks detected, inference time, dropped frames, confidence, and rejection reason.
