@@ -132,7 +132,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                     drillType = drillType,
                     modifier = Modifier.fillMaxSize(),
                     showIdealLine = options.showIdealLine,
-                    problematicJointName = "left_shoulder",
+                    problematicJointName = null,
                 )
             }
         }

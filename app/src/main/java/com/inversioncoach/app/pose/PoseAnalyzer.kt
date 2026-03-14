@@ -25,6 +25,7 @@ class PoseAnalyzer(
         val startedAtMs: Long,
         val imageWidth: Int,
         val imageHeight: Int,
+        val rotationDegrees: Int,
     )
 
     private companion object {
@@ -72,6 +73,7 @@ class PoseAnalyzer(
             startedAtMs = SystemClock.elapsedRealtime(),
             imageWidth = image.width,
             imageHeight = image.height,
+            rotationDegrees = image.imageInfo.rotationDegrees,
         )
         synchronized(lock) {
             frameInFlight = true
@@ -87,6 +89,7 @@ class PoseAnalyzer(
                     inferenceMs = inferenceMs,
                     imageWidth = pending.imageWidth,
                     imageHeight = pending.imageHeight,
+                    rotationDegrees = pending.rotationDegrees,
                 )
             }
             .addOnFailureListener { error ->
@@ -108,15 +111,19 @@ class PoseAnalyzer(
         inferenceMs: Long,
         imageWidth: Int,
         imageHeight: Int,
+        rotationDegrees: Int,
     ) {
+        val normalizedWidth = if (rotationDegrees == 90 || rotationDegrees == 270) imageHeight else imageWidth
+        val normalizedHeight = if (rotationDegrees == 90 || rotationDegrees == 270) imageWidth else imageHeight
+
         val landmarks = pose.allPoseLandmarks
         val joints = landmarks.mapNotNull { landmark ->
             val visibility = landmark.inFrameLikelihood
             if (visibility < MIN_VISIBLE_JOINT_CONFIDENCE) return@mapNotNull null
             JointPoint(
                 name = landmarkName(landmark.landmarkType),
-                x = normalizeToUnit(landmark.position.x.toFloat(), imageWidth),
-                y = normalizeToUnit(landmark.position.y.toFloat(), imageHeight),
+                x = normalizeToUnit(landmark.position.x.toFloat(), normalizedWidth),
+                y = normalizeToUnit(landmark.position.y.toFloat(), normalizedHeight),
                 z = 0f,
                 visibility = visibility,
             )
