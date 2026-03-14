@@ -64,6 +64,55 @@ Start Drill screen now includes:
 - tracked checkpoints summary
 - details button that opens a drill detail screen with posture checklist
 
+## App page map (navigation flow)
+
+Current app navigation pages and routes:
+- `Home` (`home`)
+- `Start Drill` (`start`)
+- `Drill Detail` (`drillDetail/{drill}`)
+- `Live Coaching` (`live/{drill}/{voice}/{record}/{skeleton}/{idealLine}/{zoomOutCamera}`)
+- `Results` (`results/{sessionId}`)
+- `History` (`history`)
+- `Progress` (`progress`)
+- `Settings` (`settings`)
+- `Developer Tuning` (`settings/dev-tuning`)
+
+```mermaid
+flowchart TD
+    H[Home]
+    S[Start Drill]
+    D[Drill Detail]
+    L[Live Coaching]
+    R[Results]
+    HI[History]
+    P[Progress]
+    SE[Settings]
+    DEV[Developer Tuning]
+
+    H -->|Choose Drill| S
+    H -->|Review Sessions| HI
+    H -->|Progress| P
+    H -->|Settings| SE
+
+    S -->|Back| H
+    S -->|Details| D
+    S -->|Start| L
+
+    D -->|Back| S
+
+    L -->|Stop session| R
+    R -->|Done| H
+
+    HI -->|Select session| R
+    HI -->|Back| H
+
+    P -->|Back| H
+
+    SE -->|Developer Threshold Tuning| DEV
+    SE -->|Back| H
+    DEV -->|Back| SE
+```
+
 ## Debug / tuning tools
 
 - Live debug overlay now includes current phase, active fault, and rep count.

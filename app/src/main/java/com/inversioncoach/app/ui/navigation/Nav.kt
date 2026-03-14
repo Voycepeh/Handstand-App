@@ -13,6 +13,7 @@ import com.inversioncoach.app.ui.drilldetail.DrillDetailScreen
 import com.inversioncoach.app.ui.history.HistoryScreen
 import com.inversioncoach.app.ui.home.HomeScreen
 import com.inversioncoach.app.ui.live.LiveCoachingScreen
+import com.inversioncoach.app.ui.progress.ProgressScreen
 import com.inversioncoach.app.ui.results.ResultsScreen
 import com.inversioncoach.app.ui.settings.DeveloperTuningScreen
 import com.inversioncoach.app.ui.settings.SettingsScreen
@@ -32,6 +33,7 @@ sealed class Route(val value: String) {
         fun create(sessionId: Long) = "results/$sessionId"
     }
     data object History : Route("history")
+    data object Progress : Route("progress")
     data object Settings : Route("settings")
     data object DevTuning : Route("settings/dev-tuning")
 }
@@ -44,6 +46,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             HomeScreen(
                 onStart = { navController.navigate(Route.Start.value) },
                 onHistory = { navController.navigate(Route.History.value) },
+                onProgress = { navController.navigate(Route.Progress.value) },
                 onSettings = { navController.navigate(Route.Settings.value) },
             )
         }
@@ -91,7 +94,13 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onDone = { navController.popBackStack(Route.Home.value, false) },
             )
         }
-        composable(Route.History.value) { HistoryScreen(onBack = { navController.popBackStack() }) }
+        composable(Route.History.value) {
+            HistoryScreen(
+                onBack = { navController.popBackStack() },
+                onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
+            )
+        }
+        composable(Route.Progress.value) { ProgressScreen(onBack = { navController.popBackStack() }) }
         composable(Route.Settings.value) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
