@@ -17,6 +17,23 @@ class IssueClassifier {
             return issues
         }
         when (drill) {
+            DrillType.STANDING_POSTURE_HOLD -> {
+                maybeAddBanana(metrics, profile, persistedFrames, nowMs, issues)
+                maybeAddPassiveShoulder(metrics, profile, persistedFrames, nowMs, issues)
+                maybeAddSoftKnee(metrics, profile, persistedFrames, nowMs, issues)
+            }
+            DrillType.PUSH_UP -> {
+                maybeAddDepth(metrics, persistedFrames, nowMs, issues)
+                maybeAddElbowFlare(metrics, persistedFrames, nowMs, issues)
+                maybeAddLockout(metrics, profile, persistedFrames, nowMs, issues)
+                maybeAddRushed(metrics, profile, persistedFrames, nowMs, issues)
+                maybeAddLineLoss(metrics, profile, persistedFrames, nowMs, issues)
+            }
+            DrillType.SIT_UP -> {
+                maybeAddRushed(metrics, profile, persistedFrames, nowMs, issues)
+                maybeAddHipsDrifting(metrics, profile, persistedFrames, nowMs, issues)
+                maybeAddInconsistent(metrics, persistedFrames, nowMs, issues)
+            }
             DrillType.CHEST_TO_WALL_HANDSTAND -> {
                 maybeAddBanana(metrics, profile, persistedFrames, nowMs, issues)
                 maybeAddShoulderOpen(metrics, profile, persistedFrames, nowMs, issues)

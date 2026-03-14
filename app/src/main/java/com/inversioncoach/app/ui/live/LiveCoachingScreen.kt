@@ -143,6 +143,9 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             Text("Score: ${uiState.score}", color = Color.White)
             Text("Cue: ${uiState.currentCue.ifBlank { "Awaiting stable frame..." }}", color = Color.White)
             Text("Confidence: ${(uiState.confidence * 100).toInt()}%", color = Color.White)
+            Text("Phase: ${uiState.currentPhase}", color = Color.White)
+            Text("Reps: ${uiState.repCount}", color = Color.White)
+            if (uiState.activeFault.isNotBlank()) Text("Active fault: ${uiState.activeFault}", color = Color.Yellow)
             if (!uiState.cameraPermissionGranted) {
                 Text("Camera permission required for live coaching.", color = Color.Yellow)
             }
@@ -166,6 +169,9 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                 Text("infer: ${uiState.debugInferenceTimeMs}ms", color = Color.White)
                 Text("drops: ${uiState.debugFrameDrops}", color = Color.White)
                 Text("reject: ${uiState.debugRejectionReason}", color = Color.White)
+                Text("phase(debug): ${uiState.currentPhase}", color = Color.White)
+                Text("fault(debug): ${uiState.activeFault.ifBlank { "none" }}", color = Color.White)
+                Text("reps(debug): ${uiState.repCount}", color = Color.White)
             }
         }
 

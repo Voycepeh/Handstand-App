@@ -16,6 +16,7 @@ import com.inversioncoach.app.model.PoseFrame
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.model.UserSettings
+import com.inversioncoach.app.motion.MotionAnalysisPipeline
 import com.inversioncoach.app.pose.PoseSmoother
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.summary.SummaryGenerator
@@ -33,6 +34,7 @@ class LiveCoachingViewModel(
     private val options: LiveSessionOptions,
     private val summaryGenerator: SummaryGenerator = SummaryGenerator(com.inversioncoach.app.summary.RecommendationEngine()),
     private val smoother: PoseSmoother = PoseSmoother(),
+    private val motionPipeline: MotionAnalysisPipeline = MotionAnalysisPipeline(),
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -98,6 +100,7 @@ class LiveCoachingViewModel(
 
     fun onPoseFrame(frame: PoseFrame, settings: UserSettings) {
         val smoothed = smoother.smooth(frame)
+        val motion = motionPipeline.analyze(frame)
         _smoothedFrame.value = smoothed
         val rejectionReason = frame.rejectionReason
         val rejectionMessage = rejectionMessageFor(rejectionReason)
@@ -133,7 +136,7 @@ class LiveCoachingViewModel(
         _uiState.value = _uiState.value.copy(
             score = analysis.score.overall,
             confidence = smoothed.confidence,
-            currentCue = cue?.text ?: _uiState.value.currentCue.ifBlank { "Human detected. Hold steady for drill scoring." },
+            currentCue = cue?.text ?: motion.cue?.text ?: _uiState.value.currentCue.ifBlank { "Human detected. Hold steady for drill scoring." },
             currentCueId = cue?.id ?: _uiState.value.currentCueId,
             currentCueGeneratedAtMs = cue?.generatedAtMs ?: _uiState.value.currentCueGeneratedAtMs,
             warningMessage = null,
@@ -141,6 +144,9 @@ class LiveCoachingViewModel(
             showDebugOverlay = settings.debugOverlayEnabled,
             debugMetrics = analysis.metrics,
             debugAngles = analysis.angles,
+            repCount = motion.movement.completedRepCount,
+            currentPhase = motion.movement.currentPhase.name.lowercase(),
+            activeFault = motion.faults.firstOrNull()?.code ?: "",
         )
 
         if (cue != null) {

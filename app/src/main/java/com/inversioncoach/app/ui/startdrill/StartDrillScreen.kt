@@ -8,12 +8,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -29,17 +28,22 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.biomechanics.DrillConfigs
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.LiveSessionOptions
+import com.inversioncoach.app.motion.DrillCatalog
+import com.inversioncoach.app.ui.components.DrillPreviewAnimation
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 
 @Composable
-fun StartDrillScreen(onBack: () -> Unit, onStart: (DrillType, LiveSessionOptions) -> Unit) {
-    val selected = remember { mutableStateOf(DrillType.CHEST_TO_WALL_HANDSTAND) }
+fun StartDrillScreen(
+    onBack: () -> Unit,
+    onStart: (DrillType, LiveSessionOptions) -> Unit,
+    onOpenDetail: (DrillType) -> Unit,
+) {
+    val selected = remember { mutableStateOf(DrillType.STANDING_POSTURE_HOLD) }
     val voiceOn = remember { mutableStateOf(true) }
     val recordOn = remember { mutableStateOf(true) }
     val skeletonOn = remember { mutableStateOf(true) }
@@ -57,10 +61,16 @@ fun StartDrillScreen(onBack: () -> Unit, onStart: (DrillType, LiveSessionOptions
             )
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
                 items(DrillConfigs.all) { drill ->
+                    val metadata = DrillCatalog.byType(drill.type)
                     DrillItem(
                         label = drill.label,
+                        level = metadata.level,
+                        movementPattern = metadata.movementPattern,
+                        checkpoints = metadata.checkpoints.take(3),
+                        keyframes = metadata.keyframes,
                         selected = selected.value == drill.type,
                         onClick = { selected.value = drill.type },
+                        onOpenDetail = { onOpenDetail(drill.type) },
                     )
                 }
             }
@@ -97,7 +107,16 @@ fun StartDrillScreen(onBack: () -> Unit, onStart: (DrillType, LiveSessionOptions
 }
 
 @Composable
-private fun DrillItem(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun DrillItem(
+    label: String,
+    level: String,
+    movementPattern: String,
+    checkpoints: List<String>,
+    keyframes: List<com.inversioncoach.app.motion.DrillPreviewKeyframe>,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onOpenDetail: () -> Unit,
+) {
     val containerColor =
         if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
     val contentColor =
@@ -108,29 +127,29 @@ private fun DrillItem(label: String, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = containerColor, contentColor = contentColor),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            DrillIcon(selected = selected)
-            Text(text = label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-            Icon(
-                imageVector = if (selected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
-                contentDescription = null,
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                DrillPreviewAnimation(keyframes = keyframes)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Text("$level • $movementPattern", style = MaterialTheme.typography.bodySmall)
+                }
+                Icon(
+                    imageVector = if (selected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                    contentDescription = null,
+                )
+            }
+            checkpoints.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+            Text(
+                text = "View checklist",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 2.dp),
             )
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                Button(onClick = onOpenDetail) { Text("Details") }
+            }
         }
-    }
-}
-
-@Composable
-private fun DrillIcon(selected: Boolean) {
-    val icon: ImageVector = if (selected) Icons.Default.FitnessCenter else Icons.Default.PlayArrow
-    Box(
-        modifier = Modifier,
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(imageVector = icon, contentDescription = null)
     }
 }
 

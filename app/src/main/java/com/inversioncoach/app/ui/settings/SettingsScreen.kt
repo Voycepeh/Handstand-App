@@ -27,7 +27,7 @@ import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
 
@@ -73,6 +73,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save settings") }
             Button(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("Enable local-only privacy mode") }
+            Button(onClick = onDeveloperTuning, modifier = Modifier.fillMaxWidth()) { Text("Developer threshold tuning") }
             Button(
                 onClick = {
                     scope.launch { repository.clearAllSessions() }

@@ -4,39 +4,133 @@ import com.inversioncoach.app.model.DrillType
 import kotlin.math.abs
 
 object DrillProfiles {
+    private val baseline = DrillThresholdProfile(
+        drillType = DrillType.CHEST_TO_WALL_HANDSTAND,
+        holdStartStableMs = 700,
+        visualPersistFrames = 5,
+        spokenPersistFrames = 12,
+        sameCueCooldownMs = 2000,
+        sameIssueFamilyCooldownMs = 1500,
+        encouragementCooldownMs = 4000,
+        stackExcellentNorm = 0.07f,
+        stackAcceptableNorm = 0.13f,
+        stackPoorNorm = 0.20f,
+        bodyLineGoodNorm = 0.08f,
+        bodyLineWarnNorm = 0.15f,
+        bodyLinePoorNorm = 0.20f,
+        kneeGoodDeg = 170f,
+        kneeWarnDeg = 160f,
+        lockoutDeg = 170f,
+        descentGoodSec = 1.2f,
+        descentAcceptableSec = 0.8f,
+        descentPoorSec = 0.55f,
+        hipAboveShoulderNormMin = 0.16f,
+        headForwardNormMax = 0.14f,
+        archHipNormThreshold = 0.16f,
+        archMarginNorm = 0.02f,
+        wallNearNorm = 0.08f,
+        shoulderEarNearNorm = 0.09f,
+    )
+
     val defaults: Map<DrillType, DrillThresholdProfile> = DrillType.values().associateWith { drill ->
-        DrillThresholdProfile(
-            drillType = drill,
-            holdStartStableMs = 500,
-            visualPersistFrames = 5,
-            spokenPersistFrames = 12,
-            sameCueCooldownMs = 2000,
-            sameIssueFamilyCooldownMs = 1500,
-            encouragementCooldownMs = 4000,
-            stackExcellentNorm = 0.08f,
-            stackAcceptableNorm = 0.15f,
-            stackPoorNorm = 0.22f,
-            bodyLineGoodNorm = 0.10f,
-            bodyLineWarnNorm = 0.18f,
-            bodyLinePoorNorm = 0.22f,
-            kneeGoodDeg = 168f,
-            kneeWarnDeg = 155f,
-            lockoutDeg = 165f,
-            descentGoodSec = 1.5f,
-            descentAcceptableSec = 1.0f,
-            descentPoorSec = 0.75f,
-            hipAboveShoulderNormMin = 0.15f,
-            headForwardNormMax = 0.16f,
-            archHipNormThreshold = 0.18f,
-            archMarginNorm = 0.03f,
-            wallNearNorm = 0.08f,
-            shoulderEarNearNorm = 0.10f,
-        )
+        when (drill) {
+            DrillType.WALL_PUSH_UP,
+            DrillType.INCLINE_OR_KNEE_PUSH_UP,
+            DrillType.STANDARD_PUSH_UP,
+            DrillType.PUSH_UP -> baseline.copy(
+                drillType = drill,
+                holdStartStableMs = 350,
+                visualPersistFrames = 4,
+                spokenPersistFrames = 9,
+                lockoutDeg = 168f,
+                descentGoodSec = 1.1f,
+                descentAcceptableSec = 0.75f,
+                descentPoorSec = 0.5f,
+                bodyLineGoodNorm = 0.10f,
+                bodyLineWarnNorm = 0.16f,
+                bodyLinePoorNorm = 0.22f,
+            )
+
+            DrillType.BODYWEIGHT_SQUAT,
+            DrillType.REVERSE_LUNGE,
+            DrillType.BURPEE -> baseline.copy(
+                drillType = drill,
+                holdStartStableMs = 300,
+                visualPersistFrames = 4,
+                stackAcceptableNorm = 0.16f,
+                stackPoorNorm = 0.24f,
+                descentGoodSec = 1.0f,
+                descentAcceptableSec = 0.7f,
+            )
+
+            DrillType.FOREARM_PLANK,
+            DrillType.HOLLOW_BODY_HOLD,
+            DrillType.L_SIT_HOLD,
+            DrillType.WALL_FACING_HANDSTAND_HOLD,
+            DrillType.STANDING_POSTURE_HOLD -> baseline.copy(
+                drillType = drill,
+                holdStartStableMs = 1200,
+                visualPersistFrames = 6,
+                stackExcellentNorm = 0.05f,
+                stackAcceptableNorm = 0.10f,
+                stackPoorNorm = 0.16f,
+                bodyLineGoodNorm = 0.06f,
+                bodyLineWarnNorm = 0.12f,
+                bodyLinePoorNorm = 0.18f,
+                kneeWarnDeg = 165f,
+            )
+
+            DrillType.SIT_UP,
+            DrillType.GLUTE_BRIDGE,
+            DrillType.HANGING_KNEE_RAISE -> baseline.copy(
+                drillType = drill,
+                holdStartStableMs = 300,
+                visualPersistFrames = 4,
+                spokenPersistFrames = 9,
+                descentGoodSec = 1.4f,
+                descentAcceptableSec = 0.9f,
+                descentPoorSec = 0.6f,
+                stackAcceptableNorm = 0.15f,
+                stackPoorNorm = 0.22f,
+            )
+
+            DrillType.PULL_UP_OR_ASSISTED_PULL_UP,
+            DrillType.PARALLEL_BAR_DIP,
+            DrillType.CHEST_TO_WALL_HANDSTAND,
+            DrillType.BACK_TO_WALL_HANDSTAND,
+            DrillType.FREESTANDING_HANDSTAND_FUTURE -> baseline.copy(drillType = drill)
+
+            DrillType.PIKE_PUSH_UP -> baseline.copy(drillType = drill, hipAboveShoulderNormMin = 0.18f)
+            DrillType.ELEVATED_PIKE_PUSH_UP -> baseline.copy(drillType = drill, hipAboveShoulderNormMin = 0.20f)
+            DrillType.NEGATIVE_WALL_HANDSTAND_PUSH_UP -> baseline.copy(
+                drillType = drill,
+                descentGoodSec = 1.6f,
+                descentAcceptableSec = 1.1f,
+                descentPoorSec = 0.75f,
+            )
+        }
     }
 }
 
 class DrillMetricsCalculator {
     fun computeSubscores(drill: DrillType, metrics: DerivedMetrics, profile: DrillThresholdProfile): Map<String, Int> = when (drill) {
+        DrillType.STANDING_POSTURE_HOLD,
+        DrillType.FOREARM_PLANK,
+        DrillType.HOLLOW_BODY_HOLD,
+        DrillType.WALL_FACING_HANDSTAND_HOLD,
+        DrillType.L_SIT_HOLD -> standing(metrics, profile)
+        DrillType.PUSH_UP,
+        DrillType.WALL_PUSH_UP,
+        DrillType.INCLINE_OR_KNEE_PUSH_UP,
+        DrillType.STANDARD_PUSH_UP,
+        DrillType.PARALLEL_BAR_DIP -> pushUp(metrics, profile)
+        DrillType.SIT_UP,
+        DrillType.GLUTE_BRIDGE,
+        DrillType.HANGING_KNEE_RAISE -> sitUp(metrics, profile)
+        DrillType.BODYWEIGHT_SQUAT,
+        DrillType.REVERSE_LUNGE,
+        DrillType.BURPEE -> back(metrics, profile)
+        DrillType.PULL_UP_OR_ASSISTED_PULL_UP -> elevatedPike(metrics, profile)
         DrillType.CHEST_TO_WALL_HANDSTAND -> chest(metrics, profile)
         DrillType.BACK_TO_WALL_HANDSTAND -> back(metrics, profile)
         DrillType.PIKE_PUSH_UP -> pike(metrics, profile)
@@ -44,6 +138,14 @@ class DrillMetricsCalculator {
         DrillType.NEGATIVE_WALL_HANDSTAND_PUSH_UP -> negative(metrics, profile)
         else -> chest(metrics, profile)
     }
+
+    private fun standing(m: DerivedMetrics, p: DrillThresholdProfile): Map<String, Int> = mapOf(
+        "line_quality" to scoreFromDeviation(m.bodyLineDeviationNorm, p.bodyLineGoodNorm, p.bodyLinePoorNorm),
+        "shoulder_stack" to scoreFromDeviation(abs(m.stackOffsetsNorm["shoulder_stack_offset"] ?: 0f), p.stackExcellentNorm, p.stackPoorNorm),
+        "rib_pelvis_control" to (100 - m.bananaProxyScore).coerceIn(0, 100),
+        "knee_lockout" to m.kneeExtensionScore,
+        "stillness" to ((1f - (m.pathMetrics["path_variance"] ?: 0.15f)) * 100f).toInt().coerceIn(0, 100),
+    )
 
     private fun chest(m: DerivedMetrics, p: DrillThresholdProfile): Map<String, Int> = mapOf(
         "line_quality" to scoreFromDeviation(m.bodyLineDeviationNorm, p.bodyLineGoodNorm, p.bodyLinePoorNorm),
@@ -59,6 +161,22 @@ class DrillMetricsCalculator {
         "hip_stack" to scoreFromDeviation(abs(m.stackOffsetsNorm["hip_stack_offset"] ?: 0f), p.stackExcellentNorm, p.stackPoorNorm),
         "wall_reliance" to wallReliance(m, p),
         "leg_tension" to m.kneeExtensionScore,
+    )
+
+    private fun pushUp(m: DerivedMetrics, p: DrillThresholdProfile): Map<String, Int> = mapOf(
+        "torso_line" to scoreFromDeviation(m.bodyLineDeviationNorm, p.bodyLineGoodNorm, p.bodyLinePoorNorm),
+        "depth" to ((m.pathMetrics["depth_norm"] ?: 0.5f) * 100f).toInt().coerceIn(0, 100),
+        "lockout" to if ((m.jointAngles["elbow_angle"] ?: 0f) >= p.lockoutDeg) 100 else 55,
+        "elbow_path" to scoreElbowPath(m),
+        "tempo_control" to scoreTempo(m, p),
+    )
+
+    private fun sitUp(m: DerivedMetrics, p: DrillThresholdProfile): Map<String, Int> = mapOf(
+        "trunk_range" to ((m.pathMetrics["depth_norm"] ?: 0.45f) * 100f).toInt().coerceIn(0, 100),
+        "controlled_descent" to scoreTempo(m, p),
+        "tempo_control" to scoreTempo(m, p),
+        "knee_stability" to m.kneeExtensionScore,
+        "symmetry" to scoreFromDeviation(abs(m.stackOffsetsNorm["hip_stack_offset"] ?: 0f), p.stackExcellentNorm, p.stackPoorNorm),
     )
 
     private fun pike(m: DerivedMetrics, p: DrillThresholdProfile): Map<String, Int> = mapOf(

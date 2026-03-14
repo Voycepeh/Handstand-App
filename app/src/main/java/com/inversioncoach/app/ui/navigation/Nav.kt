@@ -9,16 +9,21 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.LiveSessionOptions
+import com.inversioncoach.app.ui.drilldetail.DrillDetailScreen
 import com.inversioncoach.app.ui.history.HistoryScreen
 import com.inversioncoach.app.ui.home.HomeScreen
 import com.inversioncoach.app.ui.live.LiveCoachingScreen
 import com.inversioncoach.app.ui.results.ResultsScreen
+import com.inversioncoach.app.ui.settings.DeveloperTuningScreen
 import com.inversioncoach.app.ui.settings.SettingsScreen
 import com.inversioncoach.app.ui.startdrill.StartDrillScreen
 
 sealed class Route(val value: String) {
     data object Home : Route("home")
     data object Start : Route("start")
+    data object DrillDetail : Route("drillDetail/{drill}") {
+        fun create(drillType: DrillType): String = "drillDetail/${drillType.name}"
+    }
     data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}") {
         fun create(drillType: DrillType, options: LiveSessionOptions): String =
             "live/${drillType.name}/${options.voiceEnabled}/${options.recordingEnabled}/${options.showSkeletonOverlay}/${options.showIdealLine}"
@@ -28,6 +33,7 @@ sealed class Route(val value: String) {
     }
     data object History : Route("history")
     data object Settings : Route("settings")
+    data object DevTuning : Route("settings/dev-tuning")
 }
 
 @Composable
@@ -45,7 +51,12 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             StartDrillScreen(
                 onBack = { navController.popBackStack() },
                 onStart = { drillType, options -> navController.navigate(Route.Live.create(drillType, options)) },
+                onOpenDetail = { drillType -> navController.navigate(Route.DrillDetail.create(drillType)) },
             )
+        }
+        composable(Route.DrillDetail.value, arguments = listOf(navArgument("drill") { type = NavType.StringType })) { backStack ->
+            val drill = DrillType.valueOf(backStack.arguments?.getString("drill") ?: DrillType.STANDING_POSTURE_HOLD.name)
+            DrillDetailScreen(drillType = drill, onBack = { navController.popBackStack() })
         }
         composable(
             Route.Live.value,
@@ -79,6 +90,12 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             )
         }
         composable(Route.History.value) { HistoryScreen(onBack = { navController.popBackStack() }) }
-        composable(Route.Settings.value) { SettingsScreen(onBack = { navController.popBackStack() }) }
+        composable(Route.Settings.value) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onDeveloperTuning = { navController.navigate(Route.DevTuning.value) },
+            )
+        }
+        composable(Route.DevTuning.value) { DeveloperTuningScreen(onBack = { navController.popBackStack() }) }
     }
 }

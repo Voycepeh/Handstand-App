@@ -211,7 +211,13 @@ abstract class BaseDrillAnalyzer(
     }
 
     private fun holdAnalysis(): HoldAnalysis? {
-        if (drillType == com.inversioncoach.app.model.DrillType.PIKE_PUSH_UP || drillType == com.inversioncoach.app.model.DrillType.ELEVATED_PIKE_PUSH_UP || drillType == com.inversioncoach.app.model.DrillType.NEGATIVE_WALL_HANDSTAND_PUSH_UP) return null
+        if (
+            drillType == com.inversioncoach.app.model.DrillType.PIKE_PUSH_UP ||
+            drillType == com.inversioncoach.app.model.DrillType.ELEVATED_PIKE_PUSH_UP ||
+            drillType == com.inversioncoach.app.model.DrillType.NEGATIVE_WALL_HANDSTAND_PUSH_UP ||
+            drillType == com.inversioncoach.app.model.DrillType.PUSH_UP ||
+            drillType == com.inversioncoach.app.model.DrillType.SIT_UP
+        ) return null
         if (frameScores.isEmpty()) return null
         val start = frameScores.first().first
         val end = frameScores.last().first

@@ -53,6 +53,9 @@ class AlignmentMetricsEngine {
     }
 
     private fun analyzerFor(drillType: com.inversioncoach.app.model.DrillType): DrillAnalyzer = when (drillType) {
+        com.inversioncoach.app.model.DrillType.STANDING_POSTURE_HOLD -> StandingPostureAnalyzer()
+        com.inversioncoach.app.model.DrillType.PUSH_UP -> PushUpAnalyzer()
+        com.inversioncoach.app.model.DrillType.SIT_UP -> SitUpAnalyzer()
         com.inversioncoach.app.model.DrillType.CHEST_TO_WALL_HANDSTAND -> ChestToWallAnalyzer()
         com.inversioncoach.app.model.DrillType.BACK_TO_WALL_HANDSTAND -> BackToWallAnalyzer()
         com.inversioncoach.app.model.DrillType.PIKE_PUSH_UP -> PikePushUpAnalyzer()
