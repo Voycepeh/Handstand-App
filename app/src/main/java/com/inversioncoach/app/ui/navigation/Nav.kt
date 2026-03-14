@@ -21,7 +21,9 @@ sealed class Route(val value: String) {
     data object Live : Route("live/{drill}") {
         fun create(drillType: DrillType) = "live/${drillType.name}"
     }
-    data object Results : Route("results")
+    data object Results : Route("results/{sessionId}") {
+        fun create(sessionId: Long) = "results/$sessionId"
+    }
     data object History : Route("history")
     data object Settings : Route("settings")
 }
@@ -47,10 +49,16 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             val drill = DrillType.valueOf(backStack.arguments?.getString("drill") ?: DrillType.CHEST_TO_WALL_HANDSTAND.name)
             LiveCoachingScreen(
                 drillType = drill,
-                onStop = { navController.navigate(Route.Results.value) },
+                onStop = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
             )
         }
-        composable(Route.Results.value) { ResultsScreen(onDone = { navController.popBackStack(Route.Home.value, false) }) }
+        composable(Route.Results.value, arguments = listOf(navArgument("sessionId") { type = NavType.LongType })) { backStack ->
+            val sessionId = backStack.arguments?.getLong("sessionId") ?: 0L
+            ResultsScreen(
+                sessionId = sessionId,
+                onDone = { navController.popBackStack(Route.Home.value, false) },
+            )
+        }
         composable(Route.History.value) { HistoryScreen(onBack = { navController.popBackStack() }) }
         composable(Route.Settings.value) { SettingsScreen(onBack = { navController.popBackStack() }) }
     }

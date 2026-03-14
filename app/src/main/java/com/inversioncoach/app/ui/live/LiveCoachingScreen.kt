@@ -39,7 +39,7 @@ import com.inversioncoach.app.storage.ServiceLocator
 import java.util.concurrent.Executors
 
 @Composable
-fun LiveCoachingScreen(drillType: DrillType, onStop: () -> Unit) {
+fun LiveCoachingScreen(drillType: DrillType, onStop: (Long) -> Unit) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
 
@@ -141,7 +141,7 @@ fun LiveCoachingScreen(drillType: DrillType, onStop: () -> Unit) {
                 enabled = uiState.cameraPermissionGranted && uiState.cameraReady,
                 onClick = vm::toggleRecording,
             ) { Text(if (uiState.isRecording) "Stop Rec" else "Record") }
-            Button(onClick = onStop) { Text("Stop") }
+            Button(onClick = { vm.stopSession(onStop) }) { Text("Stop") }
         }
     }
 }

@@ -11,6 +11,7 @@ import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.model.LiveSessionUiState
 import com.inversioncoach.app.model.PoseFrame
+import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.pose.PoseSmoother
@@ -18,6 +19,7 @@ import com.inversioncoach.app.storage.repository.SessionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class LiveCoachingViewModel(
@@ -35,8 +37,13 @@ class LiveCoachingViewModel(
     val smoothedFrame: StateFlow<SmoothedPoseFrame?> = _smoothedFrame.asStateFlow()
 
     private var latestScore: DrillScore = DrillScore(0, emptyMap(), "-", "-")
-    private val sessionId = System.currentTimeMillis()
+    private var sessionId: Long? = null
+    private var sessionStartedAtMs: Long = 0L
     private var lastFramePersistAt = 0L
+
+    init {
+        startSession()
+    }
 
     fun onCameraPermissionChanged(granted: Boolean) {
         _uiState.value = _uiState.value.copy(cameraPermissionGranted = granted)
@@ -104,9 +111,10 @@ class LiveCoachingViewModel(
         lastFramePersistAt = now
 
         viewModelScope.launch {
+            val activeSessionId = sessionId ?: return@launch
             repository.saveFrameMetric(
                 FrameMetricRecord(
-                    sessionId = sessionId,
+                    sessionId = activeSessionId,
                     timestampMs = smoothed.timestampMs,
                     confidence = smoothed.confidence,
                     overallScore = overallScore,
@@ -119,7 +127,7 @@ class LiveCoachingViewModel(
             if (fault != null) {
                 repository.saveIssueEvent(
                     IssueEvent(
-                        sessionId = sessionId,
+                        sessionId = activeSessionId,
                         timestampMs = smoothed.timestampMs,
                         issue = fault,
                         severity = cueSeverity,
@@ -133,7 +141,74 @@ class LiveCoachingViewModel(
         _uiState.value = _uiState.value.copy(isRecording = !_uiState.value.isRecording)
     }
 
+    fun stopSession(onSessionFinalized: (Long) -> Unit) {
+        viewModelScope.launch {
+            val activeSessionId = sessionId ?: return@launch
+            val frameMetrics = repository.observeSessionFrameMetrics(activeSessionId).first()
+            val issues = repository.observeIssueTimeline(activeSessionId).first()
+            val bestFrame = frameMetrics.maxByOrNull { it.overallScore }?.timestampMs
+            val worstFrame = frameMetrics.minByOrNull { it.overallScore }?.timestampMs
+            val topIssues = issues
+                .groupingBy { it.issue }
+                .eachCount()
+                .toList()
+                .sortedByDescending { it.second }
+                .take(3)
+                .joinToString(", ") { it.first }
+                .ifBlank { "No major issues detected" }
+            val wins = "Strongest area: ${latestScore.strongestArea.replace('_', ' ')}"
+            repository.saveSession(
+                SessionRecord(
+                    id = activeSessionId,
+                    title = "${drillType.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }} session",
+                    drillType = drillType,
+                    startedAtMs = sessionStartedAtMs,
+                    completedAtMs = System.currentTimeMillis(),
+                    overallScore = latestScore.overall,
+                    strongestArea = latestScore.strongestArea,
+                    limitingFactor = latestScore.limitingFactor,
+                    issues = topIssues,
+                    wins = wins,
+                    metricsJson = latestScore.subScores.entries.joinToString(",") { "${it.key}:${it.value}" },
+                    annotatedVideoUri = null,
+                    rawVideoUri = null,
+                    bestFrameTimestampMs = bestFrame,
+                    worstFrameTimestampMs = worstFrame,
+                    topImprovementFocus = latestScore.limitingFactor.replace('_', ' '),
+                ),
+            )
+            onSessionFinalized(activeSessionId)
+        }
+    }
+
     fun finalScore(): DrillScore = latestScore
+
+    private fun startSession() {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            sessionStartedAtMs = now
+            val newSessionId = repository.saveSession(
+                SessionRecord(
+                    title = "${drillType.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }} session",
+                    drillType = drillType,
+                    startedAtMs = now,
+                    completedAtMs = now,
+                    overallScore = 0,
+                    strongestArea = "pending",
+                    limitingFactor = "pending",
+                    issues = "",
+                    wins = "",
+                    metricsJson = "",
+                    annotatedVideoUri = null,
+                    rawVideoUri = null,
+                    bestFrameTimestampMs = null,
+                    worstFrameTimestampMs = null,
+                    topImprovementFocus = "pending",
+                ),
+            )
+            sessionId = newSessionId
+        }
+    }
 
     private fun SmoothedPoseFrame.toPoseFrame(): PoseFrame = PoseFrame(timestampMs, joints, confidence)
 

@@ -11,12 +11,25 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import kotlin.math.roundToInt
 
 @Composable
-fun ResultsScreen(onDone: () -> Unit) {
+fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
+    val context = LocalContext.current
+    val repository = remember { ServiceLocator.repository(context) }
+    val session by repository.observeSession(sessionId).collectAsState(initial = null)
+    val frameMetrics by repository.observeSessionFrameMetrics(sessionId).collectAsState(initial = emptyList())
+    val issueTimeline by repository.observeIssueTimeline(sessionId).collectAsState(initial = emptyList())
+    val avgScore = frameMetrics.map { it.overallScore }.average().takeIf { !it.isNaN() }?.roundToInt() ?: 0
+
     ScaffoldedScreen(title = "Results") { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
@@ -24,24 +37,39 @@ fun ResultsScreen(onDone: () -> Unit) {
         ) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Overall score: 78")
-                    Text("Top wins: active shoulders, straighter legs, improved stack")
-                    Text("Top issues: rib flare under fatigue, hip drift, soft lockout")
-                    Text("Top improvement focus: shoulder elevation with ribs in")
+                    Text("Overall score: ${session?.overallScore ?: avgScore}")
+                    Text("Average sampled score: $avgScore")
+                    Text("Top wins: ${session?.wins ?: "No wins captured yet"}")
+                    Text("Top issues: ${session?.issues ?: "No issues captured"}")
+                    Text("Top improvement focus: ${session?.topImprovementFocus ?: "-"}")
                 }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Card(modifier = Modifier.weight(1f).height(100.dp)) { Text("Best frame\nT+00:18", Modifier.padding(8.dp)) }
-                Card(modifier = Modifier.weight(1f).height(100.dp)) { Text("Worst frame\nT+00:42", Modifier.padding(8.dp)) }
+                Card(modifier = Modifier.weight(1f).height(100.dp)) {
+                    Text(
+                        "Best frame\nT+${formatElapsed(session?.startedAtMs, session?.bestFrameTimestampMs)}",
+                        Modifier.padding(8.dp),
+                    )
+                }
+                Card(modifier = Modifier.weight(1f).height(100.dp)) {
+                    Text(
+                        "Worst frame\nT+${formatElapsed(session?.startedAtMs, session?.worstFrameTimestampMs)}",
+                        Modifier.padding(8.dp),
+                    )
+                }
             }
 
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Issue timeline")
-                    Text("00:14 passive shoulders")
-                    Text("00:25 ribs flaring")
-                    Text("00:41 hips off stack")
+                    if (issueTimeline.isEmpty()) {
+                        Text("No issue events captured for this session")
+                    } else {
+                        issueTimeline.forEach {
+                            Text("${formatElapsed(session?.startedAtMs, it.timestampMs)} ${it.issue} (sev ${it.severity})")
+                        }
+                    }
                 }
             }
 
@@ -52,4 +80,10 @@ fun ResultsScreen(onDone: () -> Unit) {
             Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Done") }
         }
     }
+}
+
+private fun formatElapsed(startedAtMs: Long?, timestampMs: Long?): String {
+    if (startedAtMs == null || timestampMs == null || timestampMs < startedAtMs) return "--:--"
+    val elapsedSeconds = ((timestampMs - startedAtMs) / 1000).toInt()
+    return "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60)
 }

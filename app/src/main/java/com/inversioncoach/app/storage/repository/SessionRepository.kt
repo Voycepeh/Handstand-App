@@ -19,6 +19,8 @@ class SessionRepository(
     fun observeSessions(drillType: DrillType? = null): Flow<List<SessionRecord>> =
         if (drillType == null) sessionDao.observeAll() else sessionDao.observeByDrill(drillType)
 
+    fun observeSession(sessionId: Long): Flow<SessionRecord?> = sessionDao.observeById(sessionId)
+
     suspend fun saveSession(record: SessionRecord): Long = sessionDao.upsert(record)
 
     suspend fun saveFrameMetric(record: FrameMetricRecord) = frameMetricDao.insertFrameMetric(record)
