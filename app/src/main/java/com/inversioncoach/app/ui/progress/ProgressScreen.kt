@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.UserSettings
-import com.inversioncoach.app.model.displayName
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
@@ -67,7 +66,7 @@ fun ProgressScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
 
     val sessionsWithIssues = filteredSessions.count { it.issues.isNotBlank() }
     val cleanSessions = filteredSessions.size - sessionsWithIssues
-    val topDrill = filteredSessions.groupingBy { it.drillType }.eachCount().maxByOrNull { it.value }?.key?.displayName() ?: "-"
+    val topDrill = filteredSessions.groupingBy { it.drillType }.eachCount().maxByOrNull { it.value }?.key?.displayName ?: "-"
     val avgDurationMs = if (filteredSessions.isEmpty()) 0L else filteredSessions.map { computeSessionDurationMs(it.startedAtMs, it.completedAtMs) }.average().toLong()
     val latestSessionStart = filteredSessions.maxByOrNull { it.startedAtMs }?.startedAtMs ?: 0L
 
@@ -75,7 +74,7 @@ fun ProgressScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     val groupedByHour = remember(filteredSessions) { groupSessionsByHour(filteredSessions) }
     val maxCount = groupedByHour.values.maxOfOrNull { it.size } ?: 0
     val expandedSessions = expandedCell?.let { groupedByHour[it] }.orEmpty().sortedByDescending { it.startedAtMs }
-    val availableDrills = remember(sessions) { sessions.map { it.drillType }.distinct().sortedBy { it.name } }
+    val availableDrills = remember(sessions) { sessions.map { it.drillType }.distinct().sortedBy { it.displayName } }
 
     ScaffoldedScreen(title = "Progress", onBack = onBack) { padding ->
         Column(
@@ -150,7 +149,7 @@ private fun FilterChips(selectedDrill: DrillType?, availableDrills: List<DrillTy
         }
         availableDrills.forEach { drillType ->
             OutlinedButton(onClick = { onSelected(drillType) }) {
-                val label = drillType.displayName()
+                val label = drillType.displayName
                 Text(if (selectedDrill == drillType) "✓ $label" else label)
             }
         }
@@ -214,7 +213,7 @@ private fun SessionSummaryRow(session: SessionRecord, onOpenSession: (Long) -> U
     ) {
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(session.title, fontWeight = FontWeight.SemiBold)
-            Text("Type: ${session.drillType.displayName()}")
+            Text("Type: ${session.drillType.displayName}")
             Text("Started: ${formatSessionDateTime(session.startedAtMs)}")
             Text("Duration: ${formatSessionDuration(durationMs)}")
             Text(formatPrimaryPerformance(session))

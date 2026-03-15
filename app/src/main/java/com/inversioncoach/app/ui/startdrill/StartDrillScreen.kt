@@ -42,7 +42,6 @@ private val defaultSessionOptions = LiveSessionOptions(
 
 private data class DrillGridItem(
     val type: DrillType,
-    val label: String,
     @DrawableRes val imageRes: Int,
 )
 
@@ -55,12 +54,12 @@ fun StartDrillScreen(
     val drillByType = remember { DrillConfigs.all.associateBy { it.type } }
     val gridItems = remember(drillByType) {
         listOf(
-            DrillGridItem(DrillType.FREESTANDING_HANDSTAND_FUTURE, "Free Handstand", R.drawable.handstand_free_preview),
-            DrillGridItem(DrillType.CHEST_TO_WALL_HANDSTAND, "Wall Handstand", R.drawable.handstand_wall_preview),
-            DrillGridItem(DrillType.PIKE_PUSH_UP, "Pike Push-Up", R.drawable.pike_pushup_preview),
-            DrillGridItem(DrillType.ELEVATED_PIKE_PUSH_UP, "Elevated Pike Push", R.drawable.pike_pushup_elevated_preview),
-            DrillGridItem(DrillType.PUSH_UP, "Handstand Push-Up", R.drawable.handstand_pushup_free_preview),
-            DrillGridItem(DrillType.NEGATIVE_WALL_HANDSTAND_PUSH_UP, "Wall Handstand PU", R.drawable.handstand_pushup_wall_preview),
+            DrillGridItem(DrillType.FREESTANDING_HANDSTAND_FUTURE, R.drawable.handstand_free_preview),
+            DrillGridItem(DrillType.CHEST_TO_WALL_HANDSTAND, R.drawable.handstand_wall_preview),
+            DrillGridItem(DrillType.PIKE_PUSH_UP, R.drawable.pike_pushup_preview),
+            DrillGridItem(DrillType.ELEVATED_PIKE_PUSH_UP, R.drawable.pike_pushup_elevated_preview),
+            DrillGridItem(DrillType.PUSH_UP, R.drawable.handstand_pushup_free_preview),
+            DrillGridItem(DrillType.NEGATIVE_WALL_HANDSTAND_PUSH_UP, R.drawable.handstand_pushup_wall_preview),
         ).filter { drillByType.containsKey(it.type) }
     }
 
@@ -87,7 +86,7 @@ fun StartDrillScreen(
             ) {
                 items(gridItems, key = { it.type.name }) { drill ->
                     DrillGridCard(
-                        label = drill.label,
+                        label = drill.type.displayName,
                         imageRes = drill.imageRes,
                         onClick = { onStart(drill.type, defaultSessionOptions) },
                     )

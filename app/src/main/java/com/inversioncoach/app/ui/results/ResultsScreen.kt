@@ -34,7 +34,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.IssueEvent
-import com.inversioncoach.app.model.displayName
 import com.inversioncoach.app.model.sessionMode
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.storage.ServiceLocator
@@ -99,7 +98,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Session ID: $sessionId")
-                    Text("Type: ${session?.drillType?.displayName() ?: "-"}")
+                    Text("Type: ${session?.drillType?.displayName ?: "-"}")
                     Text("Started: ${formatSessionDateTime(session?.startedAtMs ?: 0L)}")
                     Text("Duration: ${formatSessionDuration(computeSessionDurationMs(session?.startedAtMs ?: 0L, session?.completedAtMs ?: 0L))}")
                     session?.let { Text(formatPrimaryPerformance(it)) }

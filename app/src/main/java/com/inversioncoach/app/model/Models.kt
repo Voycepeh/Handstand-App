@@ -3,31 +3,31 @@ package com.inversioncoach.app.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-enum class DrillType {
-    FREESTYLE,
-    WALL_PUSH_UP,
-    INCLINE_OR_KNEE_PUSH_UP,
-    BODYWEIGHT_SQUAT,
-    REVERSE_LUNGE,
-    FOREARM_PLANK,
-    GLUTE_BRIDGE,
-    STANDARD_PUSH_UP,
-    PULL_UP_OR_ASSISTED_PULL_UP,
-    PARALLEL_BAR_DIP,
-    HANGING_KNEE_RAISE,
-    PIKE_PUSH_UP,
-    HOLLOW_BODY_HOLD,
-    WALL_FACING_HANDSTAND_HOLD,
-    L_SIT_HOLD,
-    BURPEE,
-    STANDING_POSTURE_HOLD,
-    PUSH_UP,
-    SIT_UP,
-    CHEST_TO_WALL_HANDSTAND,
-    BACK_TO_WALL_HANDSTAND,
-    ELEVATED_PIKE_PUSH_UP,
-    NEGATIVE_WALL_HANDSTAND_PUSH_UP,
-    FREESTANDING_HANDSTAND_FUTURE,
+enum class DrillType(val displayName: String) {
+    FREESTYLE("Freestyle Live Coaching"),
+    WALL_PUSH_UP("Wall Push Up"),
+    INCLINE_OR_KNEE_PUSH_UP("Incline Or Knee Push Up"),
+    BODYWEIGHT_SQUAT("Bodyweight Squat"),
+    REVERSE_LUNGE("Reverse Lunge"),
+    FOREARM_PLANK("Forearm Plank"),
+    GLUTE_BRIDGE("Glute Bridge"),
+    STANDARD_PUSH_UP("Standard Push Up"),
+    PULL_UP_OR_ASSISTED_PULL_UP("Pull Up Or Assisted Pull Up"),
+    PARALLEL_BAR_DIP("Parallel Bar Dip"),
+    HANGING_KNEE_RAISE("Hanging Knee Raise"),
+    PIKE_PUSH_UP("Pike Push Up"),
+    HOLLOW_BODY_HOLD("Hollow Body Hold"),
+    WALL_FACING_HANDSTAND_HOLD("Wall Facing Handstand Hold"),
+    L_SIT_HOLD("L Sit Hold"),
+    BURPEE("Burpee"),
+    STANDING_POSTURE_HOLD("Standing Posture Hold"),
+    PUSH_UP("Handstand Push Up"),
+    SIT_UP("Sit Up"),
+    CHEST_TO_WALL_HANDSTAND("Wall Handstand"),
+    BACK_TO_WALL_HANDSTAND("Back To Wall Handstand"),
+    ELEVATED_PIKE_PUSH_UP("Elevated Pike Push Up"),
+    NEGATIVE_WALL_HANDSTAND_PUSH_UP("Wall Handstand Push Up"),
+    FREESTANDING_HANDSTAND_FUTURE("Free Handstand"),
 }
 
 enum class SessionMode {
@@ -36,11 +36,6 @@ enum class SessionMode {
 }
 
 fun DrillType.sessionMode(): SessionMode = if (this == DrillType.FREESTYLE) SessionMode.FREESTYLE else SessionMode.DRILL
-
-fun DrillType.displayName(): String = when (this) {
-    DrillType.FREESTYLE -> "Freestyle Live Coaching"
-    else -> name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
-}
 
 fun DrillType.isFreestyle(): Boolean = sessionMode() == SessionMode.FREESTYLE
 

@@ -11,7 +11,6 @@ import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.model.LiveSessionOptions
-import com.inversioncoach.app.model.displayName
 import com.inversioncoach.app.model.sessionMode
 import com.inversioncoach.app.model.LiveSessionUiState
 import com.inversioncoach.app.model.SessionMode
@@ -94,7 +93,7 @@ class LiveCoachingViewModel(
     private val validFrameScores = mutableListOf<Int>()
 
     val sessionTitle: String
-        get() = if (sessionMode == SessionMode.FREESTYLE) "Freestyle Live Coaching session" else "${drillType.displayName()} session"
+        get() = if (sessionMode == SessionMode.FREESTYLE) "Freestyle Live Coaching session" else "${drillType.displayName} session"
 
     val sessionStartTimestampMs: Long
         get() = sessionStartedAtMs
