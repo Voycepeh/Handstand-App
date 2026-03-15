@@ -168,7 +168,15 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
         )
         vm.setRecording(true)
 
-        if (hostActivity == null) {
+        if (annotatedRecorder.hasProjectionAccess()) {
+            val started = annotatedRecorder.startRecording(
+                title = currentSessionTitle,
+                onError = vm::onAnalyzerWarning,
+            )
+            if (!started) {
+                vm.onAnalyzerWarning("Annotated recording could not start")
+            }
+        } else if (hostActivity == null) {
             vm.onAnalyzerWarning("Annotated recording unavailable outside an Activity context")
         } else {
             val captureIntent = projectionManager?.createScreenCaptureIntent()
