@@ -85,7 +85,7 @@ private fun Content(
             )
             ActionTile(
                 label = "Progress",
-                subtitle = "Scores & trends",
+                subtitle = "Patterns & trends",
                 icon = { Icon(Icons.Default.BarChart, contentDescription = null) },
                 onClick = onProgress,
                 modifier = Modifier.weight(1f),

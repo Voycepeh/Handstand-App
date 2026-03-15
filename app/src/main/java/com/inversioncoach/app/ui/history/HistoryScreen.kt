@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
-import kotlin.math.roundToInt
 
 @Composable
 fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
@@ -38,7 +37,6 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     val repository = remember { ServiceLocator.repository(context) }
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
     val settings by repository.observeSettings().collectAsState(initial = UserSettings())
-    val avgScore = sessions.map { it.overallScore }.average().takeIf { !it.isNaN() }?.roundToInt() ?: 0
     val topIssue = sessions
         .flatMap { it.issues.split(",").map(String::trim).filter(String::isNotBlank) }
         .groupingBy { it }
@@ -69,8 +67,8 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
         ) {
             Text("Session insights", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                MetricCard("Avg score", "$avgScore", Modifier.weight(1f))
-                MetricCard("Sessions", "${sessions.size}", Modifier.weight(1f))
+                MetricCard("Total sessions", "${sessions.size}", Modifier.weight(1f))
+                MetricCard("With logged issues", "${sessions.count { it.issues.isNotBlank() }}", Modifier.weight(1f))
             }
             MetricCard("Top issue", topIssue, modifier = Modifier.fillMaxWidth())
             MetricCard(
@@ -96,7 +94,7 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
                     ) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(session.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                            Text("${session.drillType} • Score ${session.overallScore}")
+                            Text("${session.drillType}")
                             Text("Limiter: ${session.limitingFactor}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text("Storage: $sizeMb MB", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

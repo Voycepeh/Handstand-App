@@ -22,7 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
-import kotlin.math.roundToInt
 
 @Composable
 fun ProgressScreen(onBack: () -> Unit) {
@@ -30,10 +29,9 @@ fun ProgressScreen(onBack: () -> Unit) {
     val repository = remember { ServiceLocator.repository(context) }
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
 
-    val averageScore = sessions.map { it.overallScore }.average().takeIf { !it.isNaN() }?.roundToInt() ?: 0
-    val latestScore = sessions.firstOrNull()?.overallScore ?: 0
-    val previousScore = sessions.getOrNull(1)?.overallScore ?: latestScore
-    val scoreDelta = latestScore - previousScore
+    val sessionsWithIssues = sessions.count { it.issues.isNotBlank() }
+    val cleanSessions = sessions.size - sessionsWithIssues
+    val topDrill = sessions.groupingBy { it.drillType }.eachCount().maxByOrNull { it.value }?.key?.name?.replace("_", " ") ?: "-"
 
     ScaffoldedScreen(title = "Progress", onBack = onBack) { padding ->
         Column(
@@ -45,15 +43,11 @@ fun ProgressScreen(onBack: () -> Unit) {
         ) {
             Text("Progress at a glance", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                ProgressCard("Average", "$averageScore", Modifier.weight(1f))
+                ProgressCard("Clean sessions", "$cleanSessions", Modifier.weight(1f))
                 ProgressCard("Sessions", "${sessions.size}", Modifier.weight(1f))
             }
-            ProgressCard("Latest score", "$latestScore", Modifier.fillMaxWidth())
-            ProgressCard(
-                "Delta vs previous",
-                "${if (scoreDelta >= 0) "+" else ""}$scoreDelta",
-                Modifier.fillMaxWidth(),
-            )
+            ProgressCard("Sessions with issues", "$sessionsWithIssues", Modifier.fillMaxWidth())
+            ProgressCard("Most practiced drill", topDrill, Modifier.fillMaxWidth())
         }
     }
 }

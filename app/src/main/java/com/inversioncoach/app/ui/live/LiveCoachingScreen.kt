@@ -218,7 +218,6 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text("Side-view mode • ${drillType.name}", color = Color.White)
-            Text("Score: ${uiState.score}", color = Color.White)
             Text("Cue: ${uiState.currentCue.ifBlank { "Awaiting stable frame..." }}", color = Color.White)
             Text("Confidence: ${(uiState.confidence * 100).toInt()}%", color = Color.White)
             Text("Phase: ${uiState.currentPhase}", color = Color.White)

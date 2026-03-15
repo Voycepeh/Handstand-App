@@ -9,10 +9,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -33,12 +31,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.inversioncoach.app.model.FrameMetricRecord
+import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.mediaAssetExists
 import kotlinx.coroutines.launch
 import java.io.File
-import kotlin.math.roundToInt
 
 @Composable
 fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
@@ -47,13 +46,25 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val session by repository.observeSession(sessionId).collectAsState(initial = null)
     val frameMetrics by repository.observeSessionFrameMetrics(sessionId).collectAsState(initial = emptyList())
     val issueTimeline by repository.observeIssueTimeline(sessionId).collectAsState(initial = emptyList())
-    val avgScore = frameMetrics.map { it.overallScore }.average().takeIf { !it.isNaN() }?.roundToInt() ?: 0
     val annotatedUri = session?.annotatedVideoUri?.takeIf(::mediaAssetExists)
     val rawUri = session?.rawVideoUri?.takeIf(::mediaAssetExists)
     val annotatedReady = annotatedUri != null || rawUri != null
     val rawReady = rawUri != null
     val scope = rememberCoroutineScope()
     var notes by remember { mutableStateOf("") }
+
+    val stabilityBreakdown = remember(frameMetrics) { computeStabilityBreakdown(frameMetrics) }
+    val issueSummarySentence = remember(session, stabilityBreakdown) {
+        buildSessionSummarySentence(
+            wins = session?.wins,
+            issues = session?.issues,
+            improvement = session?.topImprovementFocus,
+            stability = stabilityBreakdown,
+        )
+    }
+    val collapsedIssueTimeline = remember(issueTimeline, session?.startedAtMs) {
+        collapseIssueTimeline(issueTimeline, session?.startedAtMs)
+    }
 
     LaunchedEffect(sessionId) {
         notes = repository.readSessionNotes(sessionId).orEmpty()
@@ -77,33 +88,21 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Session ID: $sessionId")
-                    Text("Overall score: ${session?.overallScore ?: avgScore}")
-                    Text("Average sampled score: $avgScore")
-                    Text("Top wins: ${session?.wins ?: "No wins captured yet"}", maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    Text("Top issues: ${session?.issues ?: "No issues captured"}", maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    Text("Top improvement focus: ${session?.topImprovementFocus ?: "-"}", maxLines = 2, overflow = TextOverflow.Ellipsis)
-                }
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Card(
-                    modifier = Modifier.weight(1f).height(100.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
-                ) {
+                    Text(issueSummarySentence)
                     Text(
-                        "Best frame\nT+${formatElapsed(session?.startedAtMs, session?.bestFrameTimestampMs)}",
-                        Modifier.padding(8.dp),
+                        "Top wins: ${session?.wins ?: "No wins captured yet"}",
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                }
-                Card(
-                    modifier = Modifier.weight(1f).height(100.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
-                ) {
                     Text(
-                        "Worst frame\nT+${formatElapsed(session?.startedAtMs, session?.worstFrameTimestampMs)}",
-                        Modifier.padding(8.dp),
+                        "Top issues: ${session?.issues ?: "No issues captured"}",
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        "Top improvement focus: ${session?.topImprovementFocus ?: "-"}",
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -114,16 +113,12 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Issue timeline")
-                    if (issueTimeline.isEmpty()) {
+                    Text("Issue timeline summary")
+                    if (collapsedIssueTimeline.isEmpty()) {
                         Text("No issue events captured for this session")
                     } else {
-                        issueTimeline.forEach {
-                            Text(
-                                "${formatElapsed(session?.startedAtMs, it.timestampMs)} ${it.issue} (sev ${it.severity})",
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                        collapsedIssueTimeline.forEach { summary ->
+                            Text(summary)
                         }
                     }
                 }
@@ -162,7 +157,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save note") }
             Button(
-                onClick = { shareSummary(context, sessionId, session?.overallScore ?: avgScore, session?.issues.orEmpty(), notes) },
+                onClick = { shareSummary(context, sessionId, session?.issues.orEmpty(), notes, issueSummarySentence) },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Share summary") }
             Button(
@@ -177,6 +172,81 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 Text("Delete this session and videos")
             }
             Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+        }
+    }
+}
+
+private data class StabilityBreakdown(
+    val stablePercent: Int,
+    val poorPercent: Int,
+)
+
+private fun computeStabilityBreakdown(frameMetrics: List<FrameMetricRecord>): StabilityBreakdown {
+    if (frameMetrics.isEmpty()) return StabilityBreakdown(stablePercent = 0, poorPercent = 0)
+    val stableFrames = frameMetrics.count { it.activeIssue.isNullOrBlank() }
+    val totalFrames = frameMetrics.size
+    val stablePercent = ((stableFrames * 100f) / totalFrames).toInt()
+    return StabilityBreakdown(
+        stablePercent = stablePercent,
+        poorPercent = 100 - stablePercent,
+    )
+}
+
+private fun buildSessionSummarySentence(
+    wins: String?,
+    issues: String?,
+    improvement: String?,
+    stability: StabilityBreakdown,
+): String {
+    val winsText = wins?.takeIf { it.isNotBlank() } ?: "No standout wins captured"
+    val issuesText = issues?.takeIf { it.isNotBlank() } ?: "No major issues captured"
+    val improvementText = improvement?.takeIf { it.isNotBlank() } ?: "maintain current control"
+    return "Stable for ${stability.stablePercent}% of sampled time and in issue-heavy positions for ${stability.poorPercent}%. " +
+        "Win: $winsText. Main issue: $issuesText. Improvement focus: $improvementText."
+}
+
+private data class CollapsedIssueRange(
+    val issue: String,
+    val startMs: Long,
+    val endMs: Long,
+    val peakSeverity: Int,
+)
+
+private fun collapseIssueTimeline(issueEvents: List<IssueEvent>, sessionStartMs: Long?): List<String> {
+    if (issueEvents.isEmpty()) return emptyList()
+    val sorted = issueEvents.sortedBy { it.timestampMs }
+    val merged = mutableListOf<CollapsedIssueRange>()
+    val maxGapMs = 1200L
+
+    for (event in sorted) {
+        val last = merged.lastOrNull()
+        val shouldMerge = last != null &&
+            last.issue == event.issue &&
+            event.timestampMs - last.endMs <= maxGapMs
+
+        if (shouldMerge) {
+            merged[merged.lastIndex] = last!!.copy(
+                endMs = event.timestampMs,
+                peakSeverity = maxOf(last.peakSeverity, event.severity),
+            )
+        } else {
+            merged += CollapsedIssueRange(
+                issue = event.issue,
+                startMs = event.timestampMs,
+                endMs = event.timestampMs,
+                peakSeverity = event.severity,
+            )
+        }
+    }
+
+    return merged.map { range ->
+        val start = formatElapsed(sessionStartMs, range.startMs)
+        val end = formatElapsed(sessionStartMs, range.endMs)
+        val durationSec = ((range.endMs - range.startMs).coerceAtLeast(0L)) / 1000.0
+        if (start == end) {
+            "$start ${range.issue} (peak sev ${range.peakSeverity})"
+        } else {
+            "$start–$end ${range.issue} (${String.format("%.1f", durationSec)}s, peak sev ${range.peakSeverity})"
         }
     }
 }
@@ -223,11 +293,16 @@ private fun toSharableVideoUri(context: android.content.Context, sourceUri: Uri)
     )
 }
 
-
-private fun shareSummary(context: android.content.Context, sessionId: Long, score: Int, issues: String, notes: String) {
+private fun shareSummary(
+    context: android.content.Context,
+    sessionId: Long,
+    issues: String,
+    notes: String,
+    sessionSummary: String,
+) {
     val summary = buildString {
         appendLine("Inversion Coach session #$sessionId")
-        appendLine("Overall score: $score")
+        appendLine(sessionSummary)
         appendLine("Top issues: ${issues.ifBlank { "No issues captured" }}")
         if (notes.isNotBlank()) {
             appendLine("Notes: $notes")
