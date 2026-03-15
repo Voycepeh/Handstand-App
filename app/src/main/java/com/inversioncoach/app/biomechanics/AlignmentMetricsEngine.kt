@@ -3,6 +3,7 @@ package com.inversioncoach.app.biomechanics
 import com.inversioncoach.app.model.AlignmentMetric
 import com.inversioncoach.app.model.AngleDebugMetric
 import com.inversioncoach.app.model.DrillScore
+import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.PoseFrame
 
 class AlignmentMetricsEngine {
@@ -14,10 +15,10 @@ class AlignmentMetricsEngine {
         val fault: String?,
     )
 
-    private val analyzers = mutableMapOf<com.inversioncoach.app.model.DrillType, DrillAnalyzer>()
+    private val analyzers = mutableMapOf<DrillType, DrillAnalyzer>()
 
     fun analyze(config: DrillModeConfig, frame: PoseFrame): AnalysisResult {
-        val analyzer = analyzers.getOrPut(config.type) { analyzerFor(config.type) }
+        val analyzer = analyzers.getOrPut(config.type) { ConfiguredDrillAnalyzer(config) }
         val result = analyzer.analyzeFrame(frame) ?: return AnalysisResult(
             metrics = emptyList(),
             score = DrillScore(
@@ -52,15 +53,5 @@ class AlignmentMetricsEngine {
         )
     }
 
-    private fun analyzerFor(drillType: com.inversioncoach.app.model.DrillType): DrillAnalyzer = when (drillType) {
-        com.inversioncoach.app.model.DrillType.STANDING_POSTURE_HOLD -> StandingPostureAnalyzer()
-        com.inversioncoach.app.model.DrillType.PUSH_UP -> PushUpAnalyzer()
-        com.inversioncoach.app.model.DrillType.SIT_UP -> SitUpAnalyzer()
-        com.inversioncoach.app.model.DrillType.CHEST_TO_WALL_HANDSTAND -> ChestToWallAnalyzer()
-        com.inversioncoach.app.model.DrillType.BACK_TO_WALL_HANDSTAND -> BackToWallAnalyzer()
-        com.inversioncoach.app.model.DrillType.PIKE_PUSH_UP -> PikePushUpAnalyzer()
-        com.inversioncoach.app.model.DrillType.ELEVATED_PIKE_PUSH_UP -> ElevatedPikeAnalyzer()
-        com.inversioncoach.app.model.DrillType.NEGATIVE_WALL_HANDSTAND_PUSH_UP -> NegativeHspuAnalyzer()
-        else -> StandingPostureAnalyzer()
-    }
+    fun requireSupported(drillType: DrillType): DrillModeConfig = DrillConfigs.requireByType(drillType)
 }

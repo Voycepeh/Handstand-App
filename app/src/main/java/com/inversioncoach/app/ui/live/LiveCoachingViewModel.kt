@@ -68,7 +68,8 @@ class LiveCoachingViewModel(
     private var isSessionFinalizing = false
     private var activeSettings: UserSettings = UserSettings()
     private var sessionHadAnyVideo = false
-    private val frameGate = FrameValidityGate(drillType, DrillConfigs.byType(drillType))
+    private val drillConfig = DrillConfigs.byTypeOrNull(drillType)
+    private val frameGate = drillConfig?.let { FrameValidityGate(drillType, it) }
     private val issueAggregator = IssueEventAggregator()
     private val invalidReasonCounts = mutableMapOf<String, Int>()
     private var validFrameCount = 0
@@ -121,7 +122,12 @@ class LiveCoachingViewModel(
         val smoothed = smoother.smooth(frame)
         val motion = motionPipeline.analyze(frame)
         _smoothedFrame.value = smoothed
-        val frameValidity = frameGate.evaluate(frame)
+        val gate = frameGate
+        if (gate == null) {
+            _uiState.value = _uiState.value.copy(errorMessage = "Unsupported drill: $drillType")
+            return
+        }
+        val frameValidity = gate.evaluate(frame)
         val rejectionReason = if (frame.rejectionReason != "none") frame.rejectionReason else if (frameValidity.isValid) "none" else frameValidity.reason
         val rejectionMessage = rejectionMessageFor(rejectionReason)
 
@@ -146,7 +152,10 @@ class LiveCoachingViewModel(
         }
         validFrameCount += 1
 
-        val config = DrillConfigs.byType(drillType)
+        val config = drillConfig ?: run {
+            _uiState.value = _uiState.value.copy(errorMessage = "Unsupported drill: $drillType")
+            return
+        }
         val analysis = metricsEngine.analyze(config, smoothed.toPoseFrame())
         latestScore = analysis.score
         val cue = cueEngine.nextCue(

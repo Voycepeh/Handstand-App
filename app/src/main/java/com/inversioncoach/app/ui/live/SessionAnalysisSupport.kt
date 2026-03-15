@@ -28,15 +28,12 @@ class FrameValidityGate(
     private val config: DrillModeConfig,
 ) {
     private val requiredJointsByDrill = mapOf(
-        DrillType.BODYWEIGHT_SQUAT to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"),
-        DrillType.REVERSE_LUNGE to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"),
-        DrillType.FOREARM_PLANK to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle"),
         DrillType.CHEST_TO_WALL_HANDSTAND to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
-        DrillType.BACK_TO_WALL_HANDSTAND to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
         DrillType.PIKE_PUSH_UP to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
         DrillType.ELEVATED_PIKE_PUSH_UP to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
         DrillType.NEGATIVE_WALL_HANDSTAND_PUSH_UP to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
         DrillType.FREESTANDING_HANDSTAND_FUTURE to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
+        DrillType.PUSH_UP to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
     )
 
     fun evaluate(frame: PoseFrame): FrameValidityResult {

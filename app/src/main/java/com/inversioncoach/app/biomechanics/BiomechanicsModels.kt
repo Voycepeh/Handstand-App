@@ -7,10 +7,6 @@ import com.inversioncoach.app.model.PoseFrame
 
 enum class ConfidenceLevel { HIGH, MEDIUM, LOW }
 
-data class LandmarkConfidence(
-    val value: Float,
-    val stable: Boolean,
-)
 
 data class NormalizedPose(
     val timestampMs: Long,
@@ -176,12 +172,21 @@ data class DrillRecommendation(
     val cueFocus: String,
 )
 
+data class MetricDebugEvaluation(
+    val metricKey: String,
+    val rawValue: Float,
+    val thresholdBand: String,
+    val subScore: Int,
+    val triggeredIssue: IssueType? = null,
+)
+
 data class DebugFrameData(
     val timestampMs: Long,
     val rawJointMap: Map<String, Pair<Float, Float>>,
     val confidences: Map<String, Float>,
     val derivedAngles: Map<String, Float>,
     val normalizedOffsets: Map<String, Float>,
+    val metricDebug: List<MetricDebugEvaluation>,
     val classifiedIssues: List<IssueType>,
     val cueTrace: String,
     val score: Int,

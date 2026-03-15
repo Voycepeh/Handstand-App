@@ -7,8 +7,8 @@ import kotlin.math.abs
 
 abstract class BaseDrillAnalyzer(
     protected val drillType: DrillType,
-    protected val profile: DrillThresholdProfile = DrillProfiles.defaults.getValue(drillType),
-    private val smoother: PoseSmoother = PoseSmoother(),
+    protected val calibration: DrillCalibrationProfile,
+    private val smoother: PoseSmoother = PoseSmoother(alpha = calibration.smoothingAlpha),
     private val normalizer: PoseNormalization = PoseNormalization(),
     private val commonMetrics: CommonMetricsCalculator = CommonMetricsCalculator(),
     private val drillMetrics: DrillMetricsCalculator = DrillMetricsCalculator(),
@@ -47,13 +47,15 @@ abstract class BaseDrillAnalyzer(
         val derived = commonMetrics.calculate(normalized, tempo, path)
 
         cueEngine.registerObservedIssues(candidateIssues(derived))
-        val issues = issueClassifier.classify(drillType, derived, profile, cueEngine.persisted(), frame.timestampMs)
+        val issues = issueClassifier.classify(drillType, derived, calibration, cueEngine.persisted(), frame.timestampMs)
         updateIssueTimeline(frame.timestampMs, issues)
 
-        val sub = drillMetrics.computeSubscores(drillType, derived, profile)
+        val sub = drillMetrics.computeSubscores(drillType, derived, calibration)
         val score = scoreEngine.score(drillType, sub)
-        val cue = cueEngine.decide(profile, derived.confidenceLevel, issues, CueStyle.CONCISE, frame.timestampMs)
+        val cue = cueEngine.decide(calibration.thresholds, derived.confidenceLevel, issues, CueStyle.CONCISE, frame.timestampMs)
         if (cue != null) lastCueTrace = "${cue.category}:${cue.text}"
+
+        val metricDebug = drillMetrics.evaluateMetrics(drillType, derived, calibration)
 
         val debug = DebugFrameData(
             timestampMs = frame.timestampMs,
@@ -61,6 +63,7 @@ abstract class BaseDrillAnalyzer(
             confidences = normalized.joints.mapValues { it.value.visibility },
             derivedAngles = derived.jointAngles,
             normalizedOffsets = derived.stackOffsetsNorm,
+            metricDebug = metricDebug,
             classifiedIssues = issues.map { it.type },
             cueTrace = lastCueTrace,
             score = score.overall,
@@ -83,7 +86,7 @@ abstract class BaseDrillAnalyzer(
             "path_variance" to repPathVariance,
             "depth_norm" to depthNorm(),
         )
-        val sub = drillMetrics.computeSubscores(drillType, latestDerived(), profile)
+        val sub = drillMetrics.computeSubscores(drillType, latestDerived(), calibration)
         val score = scoreEngine.score(drillType, sub)
         val issues = allIssues.filter { it.sinceTimestampMs in start..end }
         val rep = RepAnalysis(
@@ -142,9 +145,9 @@ abstract class BaseDrillAnalyzer(
     protected open fun candidateIssues(metrics: DerivedMetrics): List<IssueType> = buildList {
         if (metrics.bananaProxyScore > 55) add(IssueType.BANANA_ARCH)
         if (metrics.scapularElevationProxyScore < 45) add(IssueType.PASSIVE_SHOULDERS)
-        if ((metrics.jointAngles["knee_angle"] ?: 180f) < profile.kneeWarnDeg) add(IssueType.SOFT_KNEES)
-        if ((metrics.pathMetrics["head_forward_norm"] ?: 0f) > profile.headForwardNormMax) add(IssueType.HEAD_PATH_FORWARD)
-        if ((metrics.tempoMetrics["descent_sec"] ?: 2f) < profile.descentPoorSec) add(IssueType.RUSHED_DESCENT)
+        if ((metrics.jointAngles["knee_angle"] ?: 180f) < calibration.thresholds.kneeWarnDeg) add(IssueType.SOFT_KNEES)
+        if ((metrics.pathMetrics["head_forward_norm"] ?: 0f) > calibration.thresholds.headForwardNormMax) add(IssueType.HEAD_PATH_FORWARD)
+        if ((metrics.tempoMetrics["descent_sec"] ?: 2f) < calibration.thresholds.descentPoorSec) add(IssueType.RUSHED_DESCENT)
     }
 
     private fun framePathMetrics(n: NormalizedPose): Map<String, Float> {
@@ -187,7 +190,7 @@ abstract class BaseDrillAnalyzer(
 
     private fun updateRepState(n: NormalizedPose, d: DerivedMetrics, score: Int) {
         currentRepStart = currentRepStart ?: n.timestampMs
-        if ((d.jointAngles["elbow_angle"] ?: 0f) >= profile.lockoutDeg && topTs == 0L) topTs = n.timestampMs
+        if ((d.jointAngles["elbow_angle"] ?: 0f) >= calibration.thresholds.lockoutDeg && topTs == 0L) topTs = n.timestampMs
         if (score < worstScore) {
             worstScore = score
             worstTs = n.timestampMs
@@ -254,7 +257,7 @@ abstract class BaseDrillAnalyzer(
     private fun averageSubScores(): Map<String, Int> {
         if (debugFrames.isEmpty()) return emptyMap()
         // Keep stable keys from latest derived score labels by drill, proxy through recomputation at session end.
-        return DrillMetricsCalculator().computeSubscores(drillType, latestDerived(), profile)
+        return drillMetrics.computeSubscores(drillType, latestDerived(), calibration)
     }
 
     private fun latestDerived(): DerivedMetrics {
@@ -298,7 +301,7 @@ abstract class BaseDrillAnalyzer(
         return ((idx.toFloat() / repFrames.size) * 100).toInt()
     }
 
-    protected open fun wallX(): Float = 0.95f
+    protected open fun wallX(): Float = calibration.wallReferenceX
     private fun Long?.orEmpty(fallback: Long): Long = this ?: fallback
     private fun depthNorm(): Float {
         if (headPath.isEmpty()) return 0.5f

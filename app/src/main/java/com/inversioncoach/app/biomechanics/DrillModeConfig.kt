@@ -11,6 +11,8 @@ data class DrillModeConfig(
     val metrics: List<MetricWeight>,
     val faults: Map<String, String>,
     val cuePriority: List<String>,
+    val calibration: DrillCalibrationProfile,
+    val experimental: Boolean = false,
 )
 
 object DrillConfigs {
@@ -28,7 +30,16 @@ object DrillConfigs {
         cuePriority: List<String>,
         faults: Map<String, String>,
         metrics: List<MetricWeight> = defaultMetrics,
-    ) = DrillModeConfig(type = type, label = label, metrics = metrics, faults = faults, cuePriority = cuePriority)
+        experimental: Boolean = false,
+    ) = DrillModeConfig(
+        type = type,
+        label = label,
+        metrics = metrics,
+        faults = faults,
+        cuePriority = cuePriority,
+        calibration = DrillProfiles.forDrill(type, metrics),
+        experimental = experimental,
+    )
 
     val all = listOf(
         cfg(
@@ -49,6 +60,7 @@ object DrillConfigs {
                 MetricWeight("head_path", 10),
                 MetricWeight("stillness", 10),
             ),
+            experimental = true,
         ),
         cfg(
             DrillType.CHEST_TO_WALL_HANDSTAND,
@@ -112,5 +124,10 @@ object DrillConfigs {
         ),
     )
 
-    fun byType(type: DrillType): DrillModeConfig = all.firstOrNull { it.type == type } ?: all.first()
+    val supportedTypes: Set<DrillType> = all.map { it.type }.toSet()
+
+    fun byTypeOrNull(type: DrillType): DrillModeConfig? = all.firstOrNull { it.type == type }
+
+    fun requireByType(type: DrillType): DrillModeConfig =
+        byTypeOrNull(type) ?: error("Unsupported drill for biomechanics engine: $type")
 }
