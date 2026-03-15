@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -59,6 +60,7 @@ private const val TAG = "LiveCoachingScreen"
 @Composable
 fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop: (SessionStopResult) -> Unit) {
     val context = LocalContext.current
+    val hostView = LocalView.current
     val repository = remember { ServiceLocator.repository(context) }
 
     val trackingMode = remember(drillType) { DrillCatalog.byType(drillType).repMode }
@@ -107,6 +109,15 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             onAnalyzerWarning = vm::onAnalyzerWarning,
             backgroundExecutor = analyzerExecutor,
         )
+    }
+
+    DisposableEffect(hostView) {
+        val previousKeepScreenOn = hostView.keepScreenOn
+        hostView.keepScreenOn = true
+
+        onDispose {
+            hostView.keepScreenOn = previousKeepScreenOn
+        }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
