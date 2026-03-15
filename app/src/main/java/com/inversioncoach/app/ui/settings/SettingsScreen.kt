@@ -87,6 +87,7 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Debug overlay (raw metrics/angles)")
                 Checkbox(checked = debug, onCheckedChange = { debug = it })
+            }
             Text("Preferences", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
             SettingsCard(title = "Voice cues") {
