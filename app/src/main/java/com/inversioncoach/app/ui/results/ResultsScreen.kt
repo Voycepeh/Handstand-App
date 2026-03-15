@@ -38,6 +38,7 @@ import com.inversioncoach.app.model.sessionMode
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
+import com.inversioncoach.app.ui.common.formatPrimaryPerformance
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.common.parseSessionMetrics
