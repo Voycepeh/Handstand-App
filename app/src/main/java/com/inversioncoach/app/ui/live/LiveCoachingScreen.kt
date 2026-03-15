@@ -20,13 +20,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -34,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.inversioncoach.app.camera.CameraSessionManager
@@ -84,6 +88,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     val hostActivity = context as? Activity
     val currentSessionTitle by rememberUpdatedState(newValue = vm.sessionTitle)
     val isRecordingNow by rememberUpdatedState(newValue = uiState.isRecording)
+    var showDetailedStats by rememberSaveable { mutableStateOf(false) }
 
     fun stopRecordingsAndPersist() {
         sessionRecorder.stopRecording()
@@ -233,32 +238,39 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                 .background(Color.Black.copy(alpha = 0.58f)).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text("Side-view mode • ${drillType.displayName}", color = Color.White)
-            Text("Started: ${formatSessionDateTime(vm.sessionStartTimestampMs)}", color = Color.White)
-            Text("Duration: ${formatSessionDuration(sessionDurationMs)}", color = Color.White)
-            if (uiState.sessionMode != SessionMode.FREESTYLE) {
-                Text("Cue: ${uiState.currentCue.ifBlank { "Awaiting stable frame..." }}", color = Color.White)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Side-view • ${drillType.displayName}", color = Color.White, fontSize = 18.sp)
+                TextButton(onClick = { showDetailedStats = !showDetailedStats }) {
+                    Text(if (showDetailedStats) "Less" else "More", color = Color.White, fontSize = 12.sp)
+                }
             }
-            Text("Confidence: ${(uiState.confidence * 100).toInt()}%", color = Color.White)
-            Text("Alignment: ${uiState.smoothedAlignmentScore}/100 (raw ${uiState.alignmentScore})", color = Color.White)
-            Text("Phase: ${uiState.currentPhase}", color = Color.White)
-            if (uiState.sessionMode == SessionMode.FREESTYLE || trackingMode == RepMode.HOLD_BASED) {
-                Text("Aligned hold: ${formatSessionDuration(uiState.totalAlignedDurationMs)} (${(uiState.alignmentRate * 100).toInt()}%)", color = Color.White)
-                Text("Current streak: ${formatSessionDuration(uiState.currentAlignedStreakMs)} • Best: ${formatSessionDuration(uiState.bestAlignedStreakMs)}", color = Color.White)
-                Text("Avg alignment: ${uiState.averageAlignmentScore} • Stability: ${uiState.stabilityScore}", color = Color.White)
-            } else {
-                Text("Accepted reps: ${uiState.acceptedReps} • Rejected: ${uiState.rejectedReps} • Raw: ${uiState.rawRepCount}", color = Color.White)
-                Text("Rep quality avg: ${uiState.averageRepQuality} • Best: ${uiState.bestRepScore} • Last: ${uiState.lastRepScore}", color = Color.White)
+            Text("Time ${formatSessionDuration(sessionDurationMs)}", color = Color.White, fontSize = 14.sp)
+            Text("Align ${uiState.smoothedAlignmentScore}% • ${uiState.currentPhase.uppercase()}", color = Color.White, fontSize = 14.sp)
+
+            if (showDetailedStats) {
+                Text("Started: ${formatSessionDateTime(vm.sessionStartTimestampMs)}", color = Color.White, fontSize = 13.sp)
+                if (uiState.sessionMode != SessionMode.FREESTYLE) {
+                    Text("Cue: ${uiState.currentCue.ifBlank { "Awaiting stable frame..." }}", color = Color.White, fontSize = 13.sp)
+                }
+                Text("Confidence: ${(uiState.confidence * 100).toInt()}% • Raw ${uiState.alignmentScore}", color = Color.White, fontSize = 13.sp)
+                if (uiState.sessionMode == SessionMode.FREESTYLE || trackingMode == RepMode.HOLD_BASED) {
+                    Text("Hold ${formatSessionDuration(uiState.totalAlignedDurationMs)} (${(uiState.alignmentRate * 100).toInt()}%)", color = Color.White, fontSize = 13.sp)
+                    Text("Streak ${formatSessionDuration(uiState.currentAlignedStreakMs)} • Best ${formatSessionDuration(uiState.bestAlignedStreakMs)}", color = Color.White, fontSize = 13.sp)
+                    Text("Avg align ${uiState.averageAlignmentScore} • Stability ${uiState.stabilityScore}", color = Color.White, fontSize = 13.sp)
+                } else {
+                    Text("Reps ✅${uiState.acceptedReps} ❌${uiState.rejectedReps} • Raw ${uiState.rawRepCount}", color = Color.White, fontSize = 13.sp)
+                    Text("Rep quality avg ${uiState.averageRepQuality} • Best ${uiState.bestRepScore} • Last ${uiState.lastRepScore}", color = Color.White, fontSize = 13.sp)
+                }
+                if (uiState.sessionMode != SessionMode.FREESTYLE && uiState.activeFault.isNotBlank()) Text("Active fault: ${uiState.activeFault}", color = Color.Yellow, fontSize = 13.sp)
             }
-            if (uiState.sessionMode != SessionMode.FREESTYLE && uiState.activeFault.isNotBlank()) Text("Active fault: ${uiState.activeFault}", color = Color.Yellow)
             if (!uiState.cameraPermissionGranted) {
-                Text("Camera permission required for live coaching.", color = Color.Yellow)
+                Text("Camera permission required for live coaching.", color = Color.Yellow, fontSize = 13.sp)
             }
             if (uiState.cameraPermissionGranted && !uiState.cameraReady) {
-                Text("Starting camera...", color = Color.Yellow)
+                Text("Starting camera...", color = Color.Yellow, fontSize = 13.sp)
             }
-            uiState.warningMessage?.let { Text(it, color = Color.Yellow) }
-            uiState.errorMessage?.let { Text(it, color = Color.Red) }
+            uiState.warningMessage?.let { Text(it, color = Color.Yellow, fontSize = 13.sp) }
+            uiState.errorMessage?.let { Text(it, color = Color.Red, fontSize = 13.sp) }
         }
 
 
