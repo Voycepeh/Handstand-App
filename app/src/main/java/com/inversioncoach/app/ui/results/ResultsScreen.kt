@@ -45,8 +45,10 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val frameMetrics by repository.observeSessionFrameMetrics(sessionId).collectAsState(initial = emptyList())
     val issueTimeline by repository.observeIssueTimeline(sessionId).collectAsState(initial = emptyList())
     val avgScore = frameMetrics.map { it.overallScore }.average().takeIf { !it.isNaN() }?.roundToInt() ?: 0
-    val annotatedReady = mediaAssetExists(session?.annotatedVideoUri)
-    val rawReady = mediaAssetExists(session?.rawVideoUri)
+    val annotatedUri = session?.annotatedVideoUri?.takeIf(::mediaAssetExists)
+    val rawUri = session?.rawVideoUri?.takeIf(::mediaAssetExists)
+    val annotatedReady = annotatedUri != null || rawUri != null
+    val rawReady = rawUri != null
     val scope = rememberCoroutineScope()
     var notes by remember { mutableStateOf("") }
 
@@ -114,14 +116,17 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             )
 
             Button(
-                onClick = { openVideo(context, session?.annotatedVideoUri) },
+                onClick = { openVideo(context, annotatedUri ?: rawUri) },
                 enabled = annotatedReady,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Replay annotated video")
+                Text(if (annotatedUri != null) "Replay annotated video" else "Replay analyzed video (raw fallback)")
+            }
+            if (annotatedUri == null && rawUri != null) {
+                Text("Overlay/ideal-line export is not yet available for playback. Showing raw recording.")
             }
             Button(
-                onClick = { openVideo(context, session?.rawVideoUri) },
+                onClick = { openVideo(context, rawUri) },
                 enabled = rawReady,
                 modifier = Modifier.fillMaxWidth(),
             ) {

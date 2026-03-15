@@ -48,17 +48,7 @@ class SessionBlobStorage(
                 inStream.copyTo(outStream)
             }
         }
-        deleteIfCacheFileUri(uri)
         return targetFile.toURI().toString()
-    }
-
-    private fun deleteIfCacheFileUri(uri: Uri) {
-        if (uri.scheme != "file") return
-        val path = uri.path ?: return
-        val file = File(path)
-        if (file.exists() && file.parentFile?.canonicalPath?.startsWith(context.cacheDir.canonicalPath) == true) {
-            file.delete()
-        }
     }
 
     private fun directorySizeBytes(dir: File): Long {
