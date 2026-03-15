@@ -9,6 +9,8 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.Recorder
 import androidx.camera.video.VideoCapture
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
@@ -45,7 +47,15 @@ class CameraSessionManager(
                     .build().apply {
                         setAnalyzer(cameraExecutor, analyzer)
                     }
-                videoCapture = VideoCapture.withOutput(Recorder.Builder().build())
+                val qualitySelector = QualitySelector.fromOrderedList(
+                    listOf(Quality.SD, Quality.HD, Quality.FHD),
+                    QualitySelector.FallbackStrategy.lowerQualityOrHigherThan(Quality.SD),
+                )
+                videoCapture = VideoCapture.withOutput(
+                    Recorder.Builder()
+                        .setQualitySelector(qualitySelector)
+                        .build(),
+                )
 
                 val cameraSelector = when {
                     provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA) -> CameraSelector.DEFAULT_BACK_CAMERA

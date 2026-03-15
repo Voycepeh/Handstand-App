@@ -15,6 +15,9 @@ import android.view.WindowManager
 import java.io.File
 
 private const val TAG = "AnnotatedSessionRecorder"
+private const val TARGET_FRAME_RATE = 24
+private const val MAX_VIDEO_EDGE_PX = 1280
+private const val MIN_VIDEO_EDGE_PX = 480
 
 /**
  * Captures the annotated replay as a screen recording of the live coaching UI.
@@ -62,9 +65,10 @@ class AnnotatedSessionRecorder(
             setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             setOutputFile(outputFile.absolutePath)
             setVideoEncoder(MediaRecorder.VideoEncoder.H264)
-            setVideoEncodingBitRate(8_000_000)
-            setVideoFrameRate(30)
-            setVideoSize(width, height)
+            setVideoEncodingBitRate(targetBitrate(width, height))
+            setVideoFrameRate(TARGET_FRAME_RATE)
+            val (videoWidth, videoHeight) = targetVideoSize(width, height)
+            setVideoSize(videoWidth, videoHeight)
             prepare()
         }
 
@@ -120,6 +124,24 @@ class AnnotatedSessionRecorder(
         @Suppress("DEPRECATION")
         wm.defaultDisplay.getRealMetrics(metrics)
         return Triple(metrics.widthPixels, metrics.heightPixels, metrics.densityDpi)
+    }
+
+    private fun targetVideoSize(width: Int, height: Int): Pair<Int, Int> {
+        val longEdge = maxOf(width, height)
+        if (longEdge <= MAX_VIDEO_EDGE_PX) return width to height
+
+        val scale = MAX_VIDEO_EDGE_PX.toFloat() / longEdge.toFloat()
+        return (width * scale).toInt().coerceAtLeast(MIN_VIDEO_EDGE_PX) to
+            (height * scale).toInt().coerceAtLeast(MIN_VIDEO_EDGE_PX)
+    }
+
+    private fun targetBitrate(width: Int, height: Int): Int {
+        val pixels = width * height
+        return when {
+            pixels >= 1920 * 1080 -> 3_000_000
+            pixels >= 1280 * 720 -> 2_000_000
+            else -> 1_200_000
+        }
     }
 
     private fun createOutputFile(title: String): File {
