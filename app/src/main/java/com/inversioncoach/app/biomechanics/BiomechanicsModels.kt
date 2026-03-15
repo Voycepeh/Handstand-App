@@ -76,6 +76,12 @@ data class CueDecision(
     val issue: IssueType?,
 )
 
+enum class ThresholdStrictness {
+    BEGINNER,
+    STANDARD,
+    ADVANCED,
+}
+
 data class DrillThresholdProfile(
     val drillType: DrillType,
     val holdStartStableMs: Long,
@@ -90,9 +96,26 @@ data class DrillThresholdProfile(
     val bodyLineGoodNorm: Float,
     val bodyLineWarnNorm: Float,
     val bodyLinePoorNorm: Float,
+    val elbowExcellentDeg: Float,
+    val elbowAcceptableDeg: Float,
+    val elbowSoftDeg: Float,
+    val kneeExcellentDeg: Float,
+    val kneeAcceptableDeg: Float,
+    val kneeSoftDeg: Float,
+    val shoulderExcellentMinDeg: Float,
+    val shoulderExcellentMaxDeg: Float,
+    val shoulderAcceptableMinDeg: Float,
+    val shoulderLimitedMinDeg: Float,
+    val hipLineExcellentMinDeg: Float,
+    val hipLineExcellentMaxDeg: Float,
+    val hipLineAcceptableMinDeg: Float,
     val kneeGoodDeg: Float,
     val kneeWarnDeg: Float,
     val lockoutDeg: Float,
+    val lockoutWarnDeg: Float,
+    val elbowBottomFullDepthMinDeg: Float,
+    val elbowBottomFullDepthMaxDeg: Float,
+    val elbowBottomCollapseDeg: Float,
     val descentGoodSec: Float,
     val descentAcceptableSec: Float,
     val descentPoorSec: Float,

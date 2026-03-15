@@ -40,14 +40,11 @@ class CommonMetricsCalculator {
         )
 
         val bodyLineDeviation = offsets.values.map { abs(it) }.average().toFloat()
-        val kneeAngle = jointAngles["knee_angle"] ?: 180f
-        val kneeScore = ((kneeAngle - 140f) / 40f * 100f).toInt().coerceIn(0, 100)
-        val bananaProxy = bananaProxy(offsets)
-        val pelvicProxy = (100 - abs((offsets["hip_stack_offset"] ?: 0f - offsets["shoulder_stack_offset"]!!)).times(220f).toInt())
-            .coerceIn(0, 100)
-        val shoulderOpen = jointAngles["shoulder_angle_proxy"] ?: 0f
-        val shoulderOpenScore = (100 - abs(170f - shoulderOpen) * 1.2f).toInt().coerceIn(0, 100)
-        val scapProxy = scapularProxy(ear, shoulder, pose.torsoLength)
+        val kneeScore = scoreKneeExtension(jointAngles["knee_angle"] ?: 180f)
+        val bananaScore = scoreBananaCurve(offsets)
+        val pelvicScore = scorePelvicControl(offsets)
+        val shoulderOpenScore = scoreShoulderOpenness(jointAngles["shoulder_angle_proxy"] ?: 0f)
+        val scapScore = scoreScapularElevation(ear, shoulder, pose.torsoLength)
 
         return DerivedMetrics(
             timestampMs = pose.timestampMs,
@@ -56,10 +53,10 @@ class CommonMetricsCalculator {
             stackOffsetsNorm = offsets,
             bodyLineDeviationNorm = bodyLineDeviation,
             kneeExtensionScore = kneeScore,
-            bananaProxyScore = bananaProxy,
-            pelvicControlProxyScore = pelvicProxy,
+            bananaProxyScore = bananaScore,
+            pelvicControlProxyScore = pelvicScore,
             shoulderOpennessScore = shoulderOpenScore,
-            scapularElevationProxyScore = scapProxy,
+            scapularElevationProxyScore = scapScore,
             tempoMetrics = phaseTempo,
             pathMetrics = pathMetrics,
             confidenceLevel = pose.confidenceLevel,
@@ -72,17 +69,53 @@ class CommonMetricsCalculator {
         return LandmarkMath.normalizeByTorsoLength(LandmarkMath.signedHorizontalOffset(referenceX, point.x), torsoLength)
     }
 
-    private fun bananaProxy(offsets: Map<String, Float>): Int {
+    private fun scoreKneeExtension(kneeAngle: Float): Int = when {
+        kneeAngle >= 175f -> 100
+        kneeAngle >= 165f -> 80
+        kneeAngle >= 155f -> 55
+        else -> 25
+    }
+
+    private fun scoreBananaCurve(offsets: Map<String, Float>): Int {
         val shoulder = abs(offsets["shoulder_stack_offset"] ?: 0f)
         val hip = abs(offsets["hip_stack_offset"] ?: 0f)
         val ankle = abs(offsets["ankle_stack_offset"] ?: 0f)
-        val curve = (hip - ((shoulder + ankle) / 2f)).coerceAtLeast(0f)
-        return (curve * 360f).toInt().coerceIn(0, 100)
+        val curveDelta = (hip - ((shoulder + ankle) / 2f)).coerceAtLeast(0f)
+        return when {
+            curveDelta <= 0.03f -> 25
+            curveDelta <= 0.07f -> 55
+            curveDelta <= 0.12f -> 80
+            else -> 100
+        }
     }
 
-    private fun scapularProxy(ear: JointPoint?, shoulder: JointPoint?, torso: Float): Int {
-        if (ear == null || shoulder == null) return 50
-        val d = LandmarkMath.normalizeByTorsoLength(LandmarkMath.verticalDistance(ear, shoulder), torso)
-        return (100 - d * 260f).toInt().coerceIn(0, 100)
+    private fun scorePelvicControl(offsets: Map<String, Float>): Int {
+        val shoulder = offsets["shoulder_stack_offset"] ?: 0f
+        val hip = offsets["hip_stack_offset"] ?: 0f
+        val pelvicOffsetDelta = abs(hip - shoulder)
+        return when {
+            pelvicOffsetDelta <= 0.03f -> 100
+            pelvicOffsetDelta <= 0.07f -> 80
+            pelvicOffsetDelta <= 0.12f -> 55
+            else -> 25
+        }
+    }
+
+    private fun scoreShoulderOpenness(shoulderAngle: Float): Int = when {
+        shoulderAngle in 175f..185f -> 100
+        shoulderAngle >= 165f -> 80
+        shoulderAngle >= 155f -> 55
+        else -> 25
+    }
+
+    private fun scoreScapularElevation(ear: JointPoint?, shoulder: JointPoint?, torso: Float): Int {
+        if (ear == null || shoulder == null) return 55
+        val earShoulderDistanceNorm = LandmarkMath.normalizeByTorsoLength(LandmarkMath.verticalDistance(ear, shoulder), torso)
+        return when {
+            earShoulderDistanceNorm <= 0.12f -> 100
+            earShoulderDistanceNorm <= 0.20f -> 80
+            earShoulderDistanceNorm <= 0.30f -> 55
+            else -> 25
+        }
     }
 }

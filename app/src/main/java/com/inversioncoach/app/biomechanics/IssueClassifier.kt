@@ -78,7 +78,7 @@ class IssueClassifier {
     }
 
     private fun maybeAddShoulderOpen(m: DerivedMetrics, p: DrillThresholdProfile, calibration: DrillCalibrationProfile, pf: Map<IssueType, Int>, now: Long, list: MutableList<IssueInstance>) {
-        if ((m.jointAngles["shoulder_angle_proxy"] ?: 170f) < 155f && active(calibration, pf, IssueType.SHOULDERS_NOT_OPEN, p.visualPersistFrames)) {
+        if ((m.jointAngles["shoulder_angle_proxy"] ?: 170f) < p.shoulderLimitedMinDeg && active(calibration, pf, IssueType.SHOULDERS_NOT_OPEN, p.visualPersistFrames)) {
             list += IssueInstance(IssueType.SHOULDERS_NOT_OPEN, IssueSeverity.MODERATE, now, "Shoulder angle below overhead target")
         }
     }
@@ -134,7 +134,10 @@ class IssueClassifier {
     }
 
     private fun maybeAddDepth(m: DerivedMetrics, calibration: DrillCalibrationProfile, pf: Map<IssueType, Int>, now: Long, list: MutableList<IssueInstance>) {
-        if ((m.pathMetrics["depth_norm"] ?: 0f) < 0.45f && active(calibration, pf, IssueType.INSUFFICIENT_DEPTH, 5)) {
+        val elbow = m.jointAngles["elbow_angle"] ?: 180f
+        val depthNorm = m.pathMetrics["depth_norm"] ?: 0f
+        val shallow = elbow > calibration.thresholds.elbowBottomFullDepthMaxDeg || depthNorm < 0.45f
+        if (shallow && active(calibration, pf, IssueType.INSUFFICIENT_DEPTH, 5)) {
             list += IssueInstance(IssueType.INSUFFICIENT_DEPTH, IssueSeverity.MODERATE, now, "Shallow depth")
         }
     }
