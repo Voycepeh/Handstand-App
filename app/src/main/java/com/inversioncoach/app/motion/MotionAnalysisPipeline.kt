@@ -10,6 +10,7 @@ class MotionAnalysisPipeline(
     private val smoother = TemporalPoseSmoother()
     private val angleEngine = AngleEngine()
     private val drillDefinition = DrillCatalog.byType(drillType)
+    private val profile = DrillQualityProfiles.byType(drillType)
     private val phaseDetector = MovementPhaseDetector(
         thresholds = PhaseThresholds(
             downStartDeg = 165f,
@@ -19,12 +20,17 @@ class MotionAnalysisPipeline(
         ),
         trackedAngle = trackedAngleFor(drillDefinition.movementPattern),
     )
-    private val holdTracker = HoldAlignmentTracker()
+    private var alignmentEngine = AlignmentScoringEngine(profile, UserCalibrationSettings(AlignmentStrictness.BEGINNER))
+    private var holdQualityTracker = HoldQualityTracker(UserCalibrationSettings(AlignmentStrictness.BEGINNER).resolvedThresholds())
+    private var repQualityEvaluator = RepQualityEvaluator(profile, UserCalibrationSettings(AlignmentStrictness.BEGINNER).resolvedThresholds())
+    private val holdTrackerCompat = HoldAlignmentTracker()
     private val faultEngine = FaultDetectionEngine(
         movementPattern = drillDefinition.movementPattern,
         allowedFaultCodes = drillDefinition.commonFaults,
     )
     private val feedbackEngine = FeedbackEngine()
+    private val stabilityEngine = StabilityAnalysisEngine()
+    private var configuredStrictness: AlignmentStrictness = AlignmentStrictness.BEGINNER
 
     data class Output(
         val smoothed: SmoothedPoseFrame,
@@ -35,9 +41,16 @@ class MotionAnalysisPipeline(
         val isAligned: Boolean,
         val faults: List<FaultEvent>,
         val cue: LiveCue?,
+        val alignment: AlignmentScoreSnapshot,
+        val stability: StabilitySnapshot,
+        val holdQuality: HoldQualitySnapshot?,
+        val repQuality: RepQualitySnapshot?,
     )
 
-    fun analyze(frame: LegacyPoseFrame, strictness: AlignmentStrictness = AlignmentStrictness.EASY): Output {
+    fun analyze(frame: LegacyPoseFrame, strictness: AlignmentStrictness = AlignmentStrictness.BEGINNER, calibration: UserCalibrationSettings? = null): Output {
+        val effectiveCalibration = calibration ?: UserCalibrationSettings(strictness)
+        configureStrictnessIfNeeded(effectiveCalibration)
+
         val motionFrame = PoseFrame(
             timestampMs = frame.timestampMs,
             landmarks = frame.joints.mapNotNull { raw ->
@@ -48,32 +61,64 @@ class MotionAnalysisPipeline(
 
         val smoothed = smoother.smooth(motionFrame)
         val angles = angleEngine.compute(smoothed)
-        val isAligned = angles.lineDeviationNorm <= AlignmentPolicy.forStrictness(strictness).lineDeviationNormMax
+        val movementProbe = MovementState(MovementPhase.HOLD, 0f, 0f, frame.timestampMs, 0)
+        val preliminaryFaults = faultEngine.detect(angles, movementProbe)
+        val alignment = alignmentEngine.score(angles, preliminaryFaults)
+        val thresholds = effectiveCalibration.resolvedThresholds()
+        val isAligned = alignment.smoothedScore >= thresholds.minimumGoodFormScore
         val movement = if (drillDefinition.repMode == RepMode.REP_BASED) {
             phaseDetector.update(angles, isAligned)
         } else {
-            holdTracker.update(frame.timestampMs, isAligned)
-            MovementState(
-                currentPhase = MovementPhase.HOLD,
-                repProgress = if (isAligned) 1f else 0f,
-                confidence = 0.8f,
-                startedAt = frame.timestampMs,
-                completedRepCount = 0,
-            )
+            MovementState(MovementPhase.HOLD, if (isAligned) 1f else 0f, 0.8f, frame.timestampMs, 0)
         }
         val faults = faultEngine.detect(angles, movement)
         val cue = feedbackEngine.selectCue(faults, frame.timestampMs)
+        val stability = stabilityEngine.analyze(smoothed)
+
+        val repTracking = if (drillDefinition.repMode == RepMode.REP_BASED) phaseDetector.snapshot() else null
+        val holdTracking = if (drillDefinition.repMode == RepMode.HOLD_BASED) holdTrackerCompat.update(frame.timestampMs, isAligned) else null
+
+        val holdQuality = if (drillDefinition.repMode == RepMode.HOLD_BASED) {
+            holdQualityTracker.update(frame.timestampMs, alignment.smoothedScore)
+        } else {
+            null
+        }
+
+        val repQuality = if (drillDefinition.repMode == RepMode.REP_BASED) {
+            repQualityEvaluator.update(
+                timestampMs = frame.timestampMs,
+                movement = movement,
+                repTracking = repTracking,
+                alignmentScore = alignment.smoothedScore,
+                dominantFault = alignment.dominantFault,
+                angles = angles,
+            )
+        } else {
+            null
+        }
 
         return Output(
             smoothed = smoothed,
             angles = angles,
             movement = movement,
-            repTracking = if (drillDefinition.repMode == RepMode.REP_BASED) phaseDetector.snapshot() else null,
-            holdTracking = if (drillDefinition.repMode == RepMode.HOLD_BASED) holdTracker.snapshot() else null,
+            repTracking = repTracking,
+            holdTracking = holdTracking,
             isAligned = isAligned,
             faults = faults,
             cue = cue,
+            alignment = alignment,
+            stability = stability,
+            holdQuality = holdQuality,
+            repQuality = repQuality,
         )
+    }
+
+    private fun configureStrictnessIfNeeded(calibration: UserCalibrationSettings) {
+        if (calibration.strictness == configuredStrictness && calibration.strictness != AlignmentStrictness.CUSTOM) return
+        configuredStrictness = calibration.strictness
+        alignmentEngine = AlignmentScoringEngine(profile, calibration)
+        holdQualityTracker = HoldQualityTracker(calibration.resolvedThresholds())
+        repQualityEvaluator = RepQualityEvaluator(profile, calibration.resolvedThresholds())
     }
 
     private fun mapJoint(name: String): JointId? = when (name) {

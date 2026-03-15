@@ -19,7 +19,11 @@ class Converters {
     fun cueStyleToString(value: CueStyle): String = value.name
 
     @TypeConverter
-    fun alignmentStrictnessFromString(raw: String): AlignmentStrictness = AlignmentStrictness.valueOf(raw)
+    fun alignmentStrictnessFromString(raw: String): AlignmentStrictness = when (raw) {
+        "EASY" -> AlignmentStrictness.BEGINNER
+        "STRICT" -> AlignmentStrictness.ADVANCED
+        else -> runCatching { AlignmentStrictness.valueOf(raw) }.getOrDefault(AlignmentStrictness.STANDARD)
+    }
 
     @TypeConverter
     fun alignmentStrictnessToString(value: AlignmentStrictness): String = value.name

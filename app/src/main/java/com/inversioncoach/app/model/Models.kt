@@ -89,7 +89,7 @@ data class DrillScore(
 
 enum class CueStyle { CONCISE, TECHNICAL, ENCOURAGING }
 
-enum class AlignmentStrictness { EASY, STANDARD, STRICT }
+enum class AlignmentStrictness { BEGINNER, STANDARD, ADVANCED, CUSTOM }
 
 data class CoachingCue(
     val id: String,
@@ -171,13 +171,20 @@ data class UserSettings(
     val debugOverlayEnabled: Boolean = false,
     val maxStorageMb: Int = 1024,
     val minSessionDurationSeconds: Int = 3,
-    val alignmentStrictness: AlignmentStrictness = AlignmentStrictness.EASY,
+    val alignmentStrictness: AlignmentStrictness = AlignmentStrictness.BEGINNER,
+    val customLineDeviation: Float = 0.14f,
+    val customMinimumGoodFormScore: Int = 72,
+    val customRepAcceptanceThreshold: Int = 70,
+    val customHoldAlignedThreshold: Int = 72,
 )
 
 data class LiveSessionUiState(
     val drillType: DrillType,
     val sessionMode: SessionMode = drillType.sessionMode(),
     val score: Int = 0,
+    val alignmentScore: Int = 0,
+    val smoothedAlignmentScore: Int = 0,
+    val stabilityScore: Int = 0,
     val currentCue: String = "",
     val currentCueId: String = "",
     val currentCueGeneratedAtMs: Long = 0L,
@@ -191,6 +198,16 @@ data class LiveSessionUiState(
     val totalSessionTrackedMs: Long = 0L,
     val currentPhase: String = "setup",
     val activeFault: String = "",
+    val alignmentRate: Float = 0f,
+    val averageAlignmentScore: Int = 0,
+    val lastRepScore: Int = 0,
+    val acceptedReps: Int = 0,
+    val rejectedReps: Int = 0,
+    val averageRepQuality: Int = 0,
+    val bestRepScore: Int = 0,
+    val mostCommonFailureReason: String = "",
+    val averageStabilityScore: Int = 0,
+    val peakDrift: Float = 0f,
     val isRecording: Boolean = false,
     val showOverlay: Boolean = true,
     val showIdealLine: Boolean = true,

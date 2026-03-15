@@ -256,12 +256,15 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                 Text("Cue: ${uiState.currentCue.ifBlank { "Awaiting stable frame..." }}", color = Color.White)
             }
             Text("Confidence: ${(uiState.confidence * 100).toInt()}%", color = Color.White)
+            Text("Alignment: ${uiState.smoothedAlignmentScore}/100 (raw ${uiState.alignmentScore})", color = Color.White)
             Text("Phase: ${uiState.currentPhase}", color = Color.White)
             if (uiState.sessionMode == SessionMode.FREESTYLE || trackingMode == RepMode.HOLD_BASED) {
-                Text("Aligned hold: ${formatSessionDuration(uiState.totalAlignedDurationMs)}", color = Color.White)
+                Text("Aligned hold: ${formatSessionDuration(uiState.totalAlignedDurationMs)} (${(uiState.alignmentRate * 100).toInt()}%)", color = Color.White)
                 Text("Current streak: ${formatSessionDuration(uiState.currentAlignedStreakMs)} • Best: ${formatSessionDuration(uiState.bestAlignedStreakMs)}", color = Color.White)
+                Text("Avg alignment: ${uiState.averageAlignmentScore} • Stability: ${uiState.stabilityScore}", color = Color.White)
             } else {
-                Text("Valid reps: ${uiState.repCount} (raw attempts: ${uiState.rawRepCount})", color = Color.White)
+                Text("Accepted reps: ${uiState.acceptedReps} • Rejected: ${uiState.rejectedReps} • Raw: ${uiState.rawRepCount}", color = Color.White)
+                Text("Rep quality avg: ${uiState.averageRepQuality} • Best: ${uiState.bestRepScore} • Last: ${uiState.lastRepScore}", color = Color.White)
             }
             if (uiState.sessionMode != SessionMode.FREESTYLE && uiState.activeFault.isNotBlank()) Text("Active fault: ${uiState.activeFault}", color = Color.Yellow)
             if (!uiState.cameraPermissionGranted) {
