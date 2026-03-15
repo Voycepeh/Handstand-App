@@ -101,9 +101,6 @@ class LiveCoachingViewModel(
         val activeSessionId = sessionId ?: return
         rawVideoPersistJob = viewModelScope.launch {
             rawVideoUri = repository.saveRawVideoBlob(activeSessionId, finalizedUri)
-            if (annotatedVideoUri.isNullOrBlank()) {
-                annotatedVideoUri = repository.saveAnnotatedVideoBlob(activeSessionId, finalizedUri)
-            }
         }
     }
 

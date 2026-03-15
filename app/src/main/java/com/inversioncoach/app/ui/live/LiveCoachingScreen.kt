@@ -1,10 +1,13 @@
 package com.inversioncoach.app.ui.live
 
 import android.Manifest
+import android.app.Activity
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.camera.view.PreviewView.ScaleType
@@ -41,6 +44,7 @@ import com.inversioncoach.app.model.LiveSessionOptions
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.overlay.OverlayRenderer
 import com.inversioncoach.app.pose.PoseAnalyzer
+import com.inversioncoach.app.recording.AnnotatedSessionRecorder
 import com.inversioncoach.app.recording.SessionRecorder
 import com.inversioncoach.app.storage.ServiceLocator
 import java.util.concurrent.Executors
@@ -68,7 +72,11 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val voiceCoach = remember(context) { VoiceCoach(context) }
     val sessionRecorder = remember(context) { SessionRecorder(context) }
+    val annotatedRecorder = remember(context) { AnnotatedSessionRecorder(context) }
+    val projectionManager = remember(context) { context.getSystemService(MediaProjectionManager::class.java) }
+    val hostActivity = context as? Activity
     val currentSessionTitle by rememberUpdatedState(newValue = vm.sessionTitle)
+    val isRecordingNow by rememberUpdatedState(newValue = uiState.isRecording)
     var pendingStopAfterRecordingFinalize by remember { mutableStateOf(false) }
 
     val cameraManager = remember { CameraSessionManager(context) }
@@ -85,6 +93,22 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         vm.onCameraPermissionChanged(granted)
     }
+    val screenCaptureLauncher = rememberLauncherForActivityResult(StartActivityForResult()) { result ->
+        if (result.resultCode != Activity.RESULT_OK || result.data == null) {
+            vm.onAnalyzerWarning("Screen capture permission denied; annotated recording disabled")
+            return@rememberLauncherForActivityResult
+        }
+        if (!isRecordingNow) return@rememberLauncherForActivityResult
+        val started = annotatedRecorder.startRecording(
+            resultCode = result.resultCode,
+            resultData = result.data!!,
+            title = currentSessionTitle,
+            onError = vm::onAnalyzerWarning,
+        )
+        if (!started) {
+            vm.onAnalyzerWarning("Annotated recording could not start")
+        }
+    }
 
     LaunchedEffect(Unit) {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -96,6 +120,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
         onDispose {
             if (uiState.isRecording) {
                 sessionRecorder.stopRecording()
+                annotatedRecorder.stopRecording()?.let(vm::onAnnotatedRecordingFinalized)
             }
             vm.finalizeSessionSilentlyIfActive()
             analyzer.close()
@@ -142,6 +167,17 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             },
         )
         vm.setRecording(true)
+
+        if (hostActivity == null) {
+            vm.onAnalyzerWarning("Annotated recording unavailable outside an Activity context")
+        } else {
+            val captureIntent = projectionManager?.createScreenCaptureIntent()
+            if (captureIntent != null) {
+                screenCaptureLauncher.launch(captureIntent)
+            } else {
+                vm.onAnalyzerWarning("Screen capture service unavailable on this device")
+            }
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -208,6 +244,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                 if (uiState.isRecording) {
                     pendingStopAfterRecordingFinalize = true
                     sessionRecorder.stopRecording()
+                    annotatedRecorder.stopRecording()?.let(vm::onAnnotatedRecordingFinalized)
                     vm.setRecording(false)
                 } else {
                     vm.stopSession(onStop)
