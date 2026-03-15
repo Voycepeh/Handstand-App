@@ -25,6 +25,7 @@ class SessionRecorder(
         withAudio: Boolean = false,
         onEvent: (VideoRecordEvent) -> Unit,
     ) {
+        stopRecording()
         val outputFile = createOutputFile(title)
         activeOutputFile = outputFile
         val outputOptions = FileOutputOptions.Builder(outputFile).build()

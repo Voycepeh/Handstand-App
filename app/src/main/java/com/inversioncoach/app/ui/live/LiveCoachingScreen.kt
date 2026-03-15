@@ -97,6 +97,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             if (uiState.isRecording) {
                 sessionRecorder.stopRecording()
             }
+            vm.finalizeSessionSilentlyIfActive()
             analyzer.close()
             analyzerExecutor.shutdown()
             cameraManager.release()

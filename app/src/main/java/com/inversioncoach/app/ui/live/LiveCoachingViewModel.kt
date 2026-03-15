@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 class LiveCoachingViewModel(
     private val drillType: DrillType,
@@ -65,6 +66,7 @@ class LiveCoachingViewModel(
     private var rawVideoPersistJob: Job? = null
     private var annotatedVideoPersistJob: Job? = null
     private var pendingStopCallback: ((Long) -> Unit)? = null
+    private var isSessionFinalizing = false
     private val frameGate = FrameValidityGate(drillType, DrillConfigs.byType(drillType))
     private val issueAggregator = IssueEventAggregator()
     private val invalidReasonCounts = mutableMapOf<String, Int>()
@@ -247,6 +249,7 @@ class LiveCoachingViewModel(
 
     fun stopSession(onSessionFinalized: (Long) -> Unit) {
         viewModelScope.launch {
+            if (isSessionFinalizing) return@launch
             val activeSessionId = sessionId
             if (activeSessionId == null) {
                 pendingStopCallback = onSessionFinalized
@@ -255,65 +258,81 @@ class LiveCoachingViewModel(
                 )
                 return@launch
             }
-            listOfNotNull(rawVideoPersistJob, annotatedVideoPersistJob).joinAll()
-            val frameMetrics = repository.observeSessionFrameMetrics(activeSessionId).first()
-            val aggregatedIssues = issueAggregator.flushAll(System.currentTimeMillis())
-            val validFrameMetrics = frameMetrics.filter { it.confidence >= 0.45f }
-            val bestFrame = validFrameMetrics.maxByOrNull { it.overallScore }?.timestampMs
-            val worstFrame = validFrameMetrics.minByOrNull { it.overallScore }?.timestampMs
-            val sessionComputation = SessionSummaryComputer.compute(validFrameScores, latestScore, aggregatedIssues)
-            val topIssues = aggregatedIssues
-                .sortedByDescending { it.durationMs }
-                .take(3)
-                .joinToString(", ") { "${it.issue} (${it.durationMs / 1000.0}s)" }
-                .ifBlank { if (sessionComputation.status == "invalid") "insufficient_data" else "No major issues detected" }
-            val wins = sessionComputation.summaryWins
-            val summary = summaryGenerator.generate(
-                drillType = drillType,
-                score = sessionComputation.score,
-                issues = aggregatedIssues.map { it.issue },
-                wins = listOf(wins),
-            )
-            val invalidReasonSummary = invalidReasonCounts.entries.sortedByDescending { it.value }.joinToString(";") { "${it.key}:${it.value}" }
-            SessionDiagnostics.log(
-                "session_finalize drill=$drillType validFrames=$validFrameCount invalidFrames=$invalidFrameCount invalidReasons={$invalidReasonSummary} " +
-                    "aggregatedIssues=${aggregatedIssues.size} savedRaw=$rawVideoUri savedAnnotated=$annotatedVideoUri",
-            )
-            repository.saveSession(
-                SessionRecord(
-                    id = activeSessionId,
-                    title = sessionTitle,
+            isSessionFinalizing = true
+            try {
+                listOfNotNull(rawVideoPersistJob, annotatedVideoPersistJob).joinAll()
+                val frameMetrics = repository.observeSessionFrameMetrics(activeSessionId).first()
+                val aggregatedIssues = issueAggregator.flushAll(System.currentTimeMillis())
+                val validFrameMetrics = frameMetrics.filter { it.confidence >= 0.45f }
+                val bestFrame = validFrameMetrics.maxByOrNull { it.overallScore }?.timestampMs
+                val worstFrame = validFrameMetrics.minByOrNull { it.overallScore }?.timestampMs
+                val sessionComputation = SessionSummaryComputer.compute(validFrameScores, latestScore, aggregatedIssues)
+                val topIssues = aggregatedIssues
+                    .sortedByDescending { it.durationMs }
+                    .take(3)
+                    .joinToString(", ") { "${it.issue} (${it.durationMs / 1000.0}s)" }
+                    .ifBlank { if (sessionComputation.status == "invalid") "insufficient_data" else "No major issues detected" }
+                val wins = sessionComputation.summaryWins
+                val summary = summaryGenerator.generate(
                     drillType = drillType,
-                    startedAtMs = sessionStartedAtMs,
-                    completedAtMs = System.currentTimeMillis(),
-                    overallScore = sessionComputation.score.overall,
-                    strongestArea = sessionComputation.strongestArea,
-                    limitingFactor = sessionComputation.score.limitingFactor,
-                    issues = topIssues,
-                    wins = summary.whatWentWell.joinToString(" "),
-                    metricsJson = buildString {
-                        append(sessionComputation.score.subScores.entries.joinToString(",") { "${it.key}:${it.value}" })
-                        append("|status:")
-                        append(sessionComputation.status)
-                        append("|validFrames:")
-                        append(validFrameCount)
-                        append("|invalidFrames:")
-                        append(invalidFrameCount)
-                        if (invalidReasonSummary.isNotBlank()) {
-                            append("|invalidReasons:")
-                            append(invalidReasonSummary)
-                        }
-                    },
-                    annotatedVideoUri = annotatedVideoUri,
-                    rawVideoUri = rawVideoUri,
-                    notesUri = null,
-                    bestFrameTimestampMs = bestFrame,
-                    worstFrameTimestampMs = worstFrame,
-                    topImprovementFocus = if (sessionComputation.status == "invalid") sessionComputation.topImprovementFocus else summary.nextFocus,
-                ),
-            )
-            onSessionFinalized(activeSessionId)
+                    score = sessionComputation.score,
+                    issues = aggregatedIssues.map { it.issue },
+                    wins = listOf(wins),
+                )
+                val invalidReasonSummary = invalidReasonCounts.entries.sortedByDescending { it.value }.joinToString(";") { "${it.key}:${it.value}" }
+                SessionDiagnostics.log(
+                    "session_finalize drill=$drillType validFrames=$validFrameCount invalidFrames=$invalidFrameCount invalidReasons={$invalidReasonSummary} " +
+                        "aggregatedIssues=${aggregatedIssues.size} savedRaw=$rawVideoUri savedAnnotated=$annotatedVideoUri",
+                )
+                repository.saveSession(
+                    SessionRecord(
+                        id = activeSessionId,
+                        title = sessionTitle,
+                        drillType = drillType,
+                        startedAtMs = sessionStartedAtMs,
+                        completedAtMs = System.currentTimeMillis(),
+                        overallScore = sessionComputation.score.overall,
+                        strongestArea = sessionComputation.strongestArea,
+                        limitingFactor = sessionComputation.score.limitingFactor,
+                        issues = topIssues,
+                        wins = summary.whatWentWell.joinToString(" "),
+                        metricsJson = buildString {
+                            append(sessionComputation.score.subScores.entries.joinToString(",") { "${it.key}:${it.value}" })
+                            append("|status:")
+                            append(sessionComputation.status)
+                            append("|validFrames:")
+                            append(validFrameCount)
+                            append("|invalidFrames:")
+                            append(invalidFrameCount)
+                            if (invalidReasonSummary.isNotBlank()) {
+                                append("|invalidReasons:")
+                                append(invalidReasonSummary)
+                            }
+                        },
+                        annotatedVideoUri = annotatedVideoUri,
+                        rawVideoUri = rawVideoUri,
+                        notesUri = null,
+                        bestFrameTimestampMs = bestFrame,
+                        worstFrameTimestampMs = worstFrame,
+                        topImprovementFocus = if (sessionComputation.status == "invalid") sessionComputation.topImprovementFocus else summary.nextFocus,
+                    ),
+                )
+                sessionId = null
+                onSessionFinalized(activeSessionId)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Throwable) {
+                SessionDiagnostics.log("session_finalize_failed drill=$drillType sessionId=$activeSessionId error=${error.message}")
+                _uiState.value = _uiState.value.copy(errorMessage = "Unable to finalize session cleanly. Saved partial session data.")
+                onSessionFinalized(activeSessionId)
+            } finally {
+                isSessionFinalizing = false
+            }
         }
+    }
+
+    fun finalizeSessionSilentlyIfActive() {
+        stopSession { }
     }
 
     fun finalScore(): DrillScore = latestScore
@@ -355,4 +374,5 @@ class LiveCoachingViewModel(
     companion object {
         private const val FRAME_PERSIST_INTERVAL_MS = 250L
     }
+
 }
