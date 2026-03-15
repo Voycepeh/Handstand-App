@@ -22,16 +22,11 @@ private const val TAG = "AnnotatedSessionRecorder"
 class AnnotatedSessionRecorder(
     private val context: Context,
 ) {
+    private var mediaProjection: MediaProjection? = null
     private var mediaRecorder: MediaRecorder? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var activeOutputFile: File? = null
     private var isRecording: Boolean = false
-
-    companion object {
-        private var sharedMediaProjection: MediaProjection? = null
-    }
-
-    fun hasProjectionAccess(): Boolean = sharedMediaProjection != null
 
     fun startRecording(
         resultCode: Int,
@@ -40,19 +35,11 @@ class AnnotatedSessionRecorder(
         onError: (String) -> Unit,
     ): Boolean {
         if (isRecording) return true
-        val projection = sharedMediaProjection ?: context
+        val projection = context
             .getSystemService(MediaProjectionManager::class.java)
             .getMediaProjection(resultCode, resultData)
 
         return startRecording(projection = projection, title = title, onError = onError)
-    }
-
-    fun startRecording(
-        title: String,
-        onError: (String) -> Unit,
-    ): Boolean {
-        if (isRecording) return true
-        return startRecording(projection = sharedMediaProjection, title = title, onError = onError)
     }
 
     private fun startRecording(
@@ -93,7 +80,7 @@ class AnnotatedSessionRecorder(
         )
 
         recorder.start()
-        sharedMediaProjection = activeProjection
+        mediaProjection = activeProjection
         mediaRecorder = recorder
         virtualDisplay = display
         activeOutputFile = outputFile
@@ -102,7 +89,6 @@ class AnnotatedSessionRecorder(
     }.onFailure { throwable ->
         Log.e(TAG, "Unable to start annotated replay screen recording", throwable)
         releaseResources()
-        clearProjectionAccess()
         onError("Unable to start annotated replay screen recording")
     }.getOrElse { false }
 
@@ -119,16 +105,13 @@ class AnnotatedSessionRecorder(
 
     private fun releaseResources() {
         runCatching { virtualDisplay?.release() }
+        runCatching { mediaProjection?.stop() }
         runCatching { mediaRecorder?.reset() }
         runCatching { mediaRecorder?.release() }
         virtualDisplay = null
+        mediaProjection = null
         mediaRecorder = null
         isRecording = false
-    }
-
-    fun clearProjectionAccess() {
-        runCatching { sharedMediaProjection?.stop() }
-        sharedMediaProjection = null
     }
 
     private fun screenMetrics(): Triple<Int, Int, Int> {

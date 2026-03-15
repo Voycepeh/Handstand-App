@@ -141,7 +141,6 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                 stopRecordingsAndPersist()
                 vm.setRecording(false)
             }
-            annotatedRecorder.clearProjectionAccess()
             vm.finalizeSessionSilentlyIfActive()
             analyzer.close()
             analyzerExecutor.shutdown()
@@ -185,15 +184,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
         )
         vm.setRecording(true)
 
-        if (annotatedRecorder.hasProjectionAccess()) {
-            val started = annotatedRecorder.startRecording(
-                title = currentSessionTitle,
-                onError = vm::onAnalyzerWarning,
-            )
-            if (!started) {
-                vm.onAnalyzerWarning("Annotated replay screen recording could not start")
-            }
-        } else if (hostActivity == null) {
+        if (hostActivity == null) {
             vm.onAnalyzerWarning("Annotated replay unavailable outside an Activity context")
         } else {
             val captureIntent = projectionManager?.createScreenCaptureIntent()
