@@ -118,3 +118,24 @@ The coaching stack now adds a dedicated quality layer on top of camera → pose 
   - stability score (0–100)
 
 All quality metrics are surfaced live in session UI and persisted into session summaries/history for post-session review.
+
+## Biomechanics threshold model
+
+The biomechanics scoring layer now uses **banded, drill-aware thresholds** instead of single-point targets and opaque proxy multipliers.
+
+- **Torso-normalized where relevant**: stack and line metrics remain normalized by torso length.
+- **Drill-specific bands**: handstand and rep-drill families use dedicated threshold profiles.
+- **Phase-aware rep scoring**: rep drills score descent quality, bottom depth quality, ascent quality, top lockout quality, and flare/stability quality.
+- **Strictness presets**: Beginner / Standard / Advanced shift threshold bands (approximately ±5° for angle bands and ±0.02 for stack tolerances).
+- **Biomechanics-informed ranges**: thresholds are based on practical coaching ranges and are not presented as lab-grade measurement claims.
+
+### Current key bands
+
+- Handstand (chest-to-wall + freestanding):
+  - Elbow and knee: excellent ≥175, acceptable 165–174, soft 155–164, poor <155.
+  - Shoulder openness: excellent 175–185, acceptable 165–174, limited 155–164, poor <155.
+  - Hip line: excellent 170–180, acceptable 160–169, poor <160.
+  - Stack deviation (torso-normalized): excellent ≤0.06, acceptable ≤0.12, poor >0.12.
+- Push-up family:
+  - Top lockout: valid ≥170, warning 160–169, incomplete <160.
+  - Bottom depth: elbow full-depth 80–100, shallow warning >100, collapse warning <75.
