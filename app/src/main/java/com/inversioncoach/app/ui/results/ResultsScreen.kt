@@ -206,7 +206,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = annotatedReady || rawReady,
+                enabled = !replaySelection.uri.isNullOrBlank() || !rawUri.isNullOrBlank(),
             ) {
                 Text("Delete videos only (keep session)")
             }
