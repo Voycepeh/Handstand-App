@@ -2,6 +2,7 @@ package com.inversioncoach.app.ui.results
 
 import android.content.Intent
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
@@ -157,7 +158,17 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save note") }
             Button(
-                onClick = { shareSummary(context, sessionId, session?.issues.orEmpty(), notes, issueSummarySentence) },
+                onClick = {
+                    shareSummary(
+                        context = context,
+                        sessionId = sessionId,
+                        issues = session?.issues.orEmpty(),
+                        notes = notes,
+                        sessionSummary = issueSummarySentence,
+                        rawVideoUri = rawUri,
+                        annotatedVideoUri = replaySelection.uri,
+                    )
+                },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Share summary") }
             Button(
@@ -299,6 +310,8 @@ private fun shareSummary(
     issues: String,
     notes: String,
     sessionSummary: String,
+    rawVideoUri: String?,
+    annotatedVideoUri: String?,
 ) {
     val summary = buildString {
         appendLine("Inversion Coach session #$sessionId")
@@ -309,9 +322,26 @@ private fun shareSummary(
         }
     }.trim()
 
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, summary)
+    val shareableVideoUris = listOfNotNull(rawVideoUri, annotatedVideoUri)
+        .distinct()
+        .mapNotNull { uri -> toSharableVideoUri(context, Uri.parse(uri)) }
+
+    val intent = if (shareableVideoUris.isEmpty()) {
+        Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, summary)
+        }
+    } else {
+        Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "video/mp4"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(shareableVideoUris))
+            putExtra(Intent.EXTRA_TEXT, summary)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            clipData = ClipData.newUri(context.contentResolver, "session-video", shareableVideoUris.first())
+            shareableVideoUris.drop(1).forEach { uri ->
+                clipData?.addItem(ClipData.Item(uri))
+            }
+        }
     }
     context.startActivity(Intent.createChooser(intent, "Share session summary"))
 }
