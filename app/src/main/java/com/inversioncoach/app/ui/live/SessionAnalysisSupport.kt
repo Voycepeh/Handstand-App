@@ -6,6 +6,7 @@ import com.inversioncoach.app.biomechanics.DrillModeConfig
 import com.inversioncoach.app.model.DrillScore
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.PoseFrame
+import com.inversioncoach.app.model.SessionRecord
 import java.io.File
 import kotlin.math.abs
 
@@ -156,6 +157,11 @@ data class SessionComputation(
     val status: String,
 )
 
+data class ReplayAssetSelection(
+    val uri: String?,
+    val label: String,
+)
+
 object SessionSummaryComputer {
     fun compute(
         validFrameScores: List<Int>,
@@ -199,6 +205,18 @@ fun mediaAssetExists(uri: String?): Boolean {
     if (uri.isNullOrBlank()) return false
     val path = runCatching { Uri.parse(uri).path }.getOrNull() ?: return false
     return File(path).exists()
+}
+
+fun selectReplayAsset(session: SessionRecord?): ReplayAssetSelection {
+    val annotatedUri = session?.annotatedVideoUri?.takeIf(::mediaAssetExists)
+    if (annotatedUri != null) {
+        return ReplayAssetSelection(uri = annotatedUri, label = "Annotated replay")
+    }
+    val rawUri = session?.rawVideoUri?.takeIf(::mediaAssetExists)
+    if (rawUri != null) {
+        return ReplayAssetSelection(uri = rawUri, label = "Raw replay")
+    }
+    return ReplayAssetSelection(uri = null, label = "Replay unavailable")
 }
 
 object SessionDiagnostics {

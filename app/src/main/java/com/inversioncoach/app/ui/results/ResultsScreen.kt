@@ -36,6 +36,7 @@ import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.mediaAssetExists
+import com.inversioncoach.app.ui.live.selectReplayAsset
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -46,10 +47,9 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val session by repository.observeSession(sessionId).collectAsState(initial = null)
     val frameMetrics by repository.observeSessionFrameMetrics(sessionId).collectAsState(initial = emptyList())
     val issueTimeline by repository.observeIssueTimeline(sessionId).collectAsState(initial = emptyList())
-    val annotatedUri = session?.annotatedVideoUri?.takeIf(::mediaAssetExists)
+    val replaySelection = remember(session) { selectReplayAsset(session) }
     val rawUri = session?.rawVideoUri?.takeIf(::mediaAssetExists)
-    val annotatedReady = annotatedUri != null || rawUri != null
-    val rawReady = rawUri != null
+    val hasReplay = replaySelection.uri != null
     val scope = rememberCoroutineScope()
     var notes by remember { mutableStateOf("") }
 
@@ -132,21 +132,21 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             )
 
             Button(
-                onClick = { openVideo(context, annotatedUri ?: rawUri) },
-                enabled = annotatedReady,
+                onClick = { openVideo(context, replaySelection.uri) },
+                enabled = hasReplay,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (annotatedUri != null) "Replay annotated video" else "Replay analyzed video (raw fallback)")
+                Text("Replay ${replaySelection.label}")
             }
-            if (annotatedUri == null && rawUri != null) {
-                Text("Overlay/ideal-line export is not yet available for playback. Showing raw recording.")
+            if (!hasReplay) {
+                Text("No replay asset is available for this session.")
             }
             Button(
                 onClick = { openVideo(context, rawUri) },
-                enabled = rawReady,
+                enabled = !rawUri.isNullOrBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Replay raw video")
+                Text("Replay Raw replay")
             }
             Button(
                 onClick = {

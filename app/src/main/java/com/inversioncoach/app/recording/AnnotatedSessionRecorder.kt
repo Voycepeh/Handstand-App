@@ -10,9 +10,15 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.util.DisplayMetrics
+import android.util.Log
 import android.view.WindowManager
 import java.io.File
 
+private const val TAG = "AnnotatedSessionRecorder"
+
+/**
+ * Captures the annotated replay as a screen recording of the live coaching UI.
+ */
 class AnnotatedSessionRecorder(
     private val context: Context,
 ) {
@@ -93,15 +99,17 @@ class AnnotatedSessionRecorder(
         activeOutputFile = outputFile
         isRecording = true
         true
-    }.onFailure {
+    }.onFailure { throwable ->
+        Log.e(TAG, "Unable to start annotated replay screen recording", throwable)
         releaseResources()
         clearProjectionAccess()
-        onError("Unable to start annotated screen recording")
+        onError("Unable to start annotated replay screen recording")
     }.getOrElse { false }
 
     fun stopRecording(): String? {
         if (!isRecording) return null
         runCatching { mediaRecorder?.stop() }
+            .onFailure { Log.w(TAG, "Annotated replay stop failed", it) }
         val outputUri = activeOutputFile
             ?.takeIf { it.exists() }
             ?.let { Uri.fromFile(it).toString() }

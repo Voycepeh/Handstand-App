@@ -79,6 +79,11 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     val isRecordingNow by rememberUpdatedState(newValue = uiState.isRecording)
     var pendingStopAfterRecordingFinalize by remember { mutableStateOf(false) }
 
+    fun stopRecordingsAndPersist() {
+        sessionRecorder.stopRecording()
+        annotatedRecorder.stopRecording()?.let(vm::onAnnotatedRecordingFinalized)
+    }
+
     val cameraManager = remember { CameraSessionManager(context) }
     val analyzerExecutor = remember { Executors.newSingleThreadExecutor() }
     val currentSettings by rememberUpdatedState(newValue = settings)
@@ -95,7 +100,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     }
     val screenCaptureLauncher = rememberLauncherForActivityResult(StartActivityForResult()) { result ->
         if (result.resultCode != Activity.RESULT_OK || result.data == null) {
-            vm.onAnalyzerWarning("Screen capture permission denied; annotated recording disabled")
+            vm.onAnalyzerWarning("Screen recording permission denied; annotated replay disabled")
             return@rememberLauncherForActivityResult
         }
         if (!isRecordingNow) return@rememberLauncherForActivityResult
@@ -106,7 +111,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             onError = vm::onAnalyzerWarning,
         )
         if (!started) {
-            vm.onAnalyzerWarning("Annotated recording could not start")
+            vm.onAnalyzerWarning("Annotated replay screen recording could not start")
         }
     }
 
@@ -118,10 +123,11 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
 
     DisposableEffect(Unit) {
         onDispose {
-            if (uiState.isRecording) {
-                sessionRecorder.stopRecording()
-                annotatedRecorder.stopRecording()?.let(vm::onAnnotatedRecordingFinalized)
+            if (isRecordingNow) {
+                stopRecordingsAndPersist()
+                vm.setRecording(false)
             }
+            annotatedRecorder.clearProjectionAccess()
             vm.finalizeSessionSilentlyIfActive()
             analyzer.close()
             analyzerExecutor.shutdown()
@@ -156,6 +162,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                     if (event.hasError()) {
                         Log.e(TAG, "Recording finalize error code=${event.error}")
                         vm.onAnalyzerWarning("Recording failed to finalize (code ${event.error})")
+                        vm.onRecordingFinalized(sessionRecorder.fallbackOutputUri())
                     } else {
                         vm.onRecordingFinalized(event.outputResults.outputUri.toString())
                     }
@@ -174,10 +181,10 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                 onError = vm::onAnalyzerWarning,
             )
             if (!started) {
-                vm.onAnalyzerWarning("Annotated recording could not start")
+                vm.onAnalyzerWarning("Annotated replay screen recording could not start")
             }
         } else if (hostActivity == null) {
-            vm.onAnalyzerWarning("Annotated recording unavailable outside an Activity context")
+            vm.onAnalyzerWarning("Annotated replay unavailable outside an Activity context")
         } else {
             val captureIntent = projectionManager?.createScreenCaptureIntent()
             if (captureIntent != null) {
@@ -250,8 +257,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             FilledTonalButton(onClick = {
                 if (uiState.isRecording) {
                     pendingStopAfterRecordingFinalize = true
-                    sessionRecorder.stopRecording()
-                    annotatedRecorder.stopRecording()?.let(vm::onAnnotatedRecordingFinalized)
+                    stopRecordingsAndPersist()
                     vm.setRecording(false)
                 } else {
                     vm.stopSession(onStop)

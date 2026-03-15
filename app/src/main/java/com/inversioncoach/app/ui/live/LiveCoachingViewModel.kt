@@ -105,6 +105,9 @@ class LiveCoachingViewModel(
         sessionHadAnyVideo = true
         rawVideoPersistJob = viewModelScope.launch {
             rawVideoUri = repository.saveRawVideoBlob(activeSessionId, finalizedUri)
+            if (rawVideoUri.isNullOrBlank()) {
+                onAnalyzerWarning("Raw replay could not be saved")
+            }
         }
     }
 
@@ -114,6 +117,9 @@ class LiveCoachingViewModel(
         sessionHadAnyVideo = true
         annotatedVideoPersistJob = viewModelScope.launch {
             annotatedVideoUri = repository.saveAnnotatedVideoBlob(activeSessionId, finalizedUri)
+            if (annotatedVideoUri.isNullOrBlank()) {
+                onAnalyzerWarning("Annotated replay screen recording could not be saved")
+            }
         }
     }
 
