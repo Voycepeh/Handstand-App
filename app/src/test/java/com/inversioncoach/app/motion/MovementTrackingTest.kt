@@ -68,8 +68,8 @@ class MovementTrackingTest {
     @Test
     fun strictnessAffectsAlignmentClassification() {
         val deviation = 0.14f
-        val easy = deviation <= AlignmentPolicy.forStrictness(AlignmentStrictness.EASY).lineDeviationNormMax
-        val strict = deviation <= AlignmentPolicy.forStrictness(AlignmentStrictness.STRICT).lineDeviationNormMax
+        val easy = deviation <= AlignmentPolicy.forStrictness(AlignmentStrictness.BEGINNER).lineDeviationNormMax
+        val strict = deviation <= AlignmentPolicy.forStrictness(AlignmentStrictness.ADVANCED).lineDeviationNormMax
 
         assertTrue(easy)
         assertFalse(strict)

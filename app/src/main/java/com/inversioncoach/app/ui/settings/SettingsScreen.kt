@@ -48,7 +48,11 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
     var localOnlyPrivacyMode by remember { mutableStateOf(true) }
     var maxStorageMb by remember { mutableIntStateOf(1024) }
     var minSessionDurationSeconds by remember { mutableIntStateOf(3) }
-    var alignmentStrictness by remember { mutableStateOf(AlignmentStrictness.EASY) }
+    var alignmentStrictness by remember { mutableStateOf(AlignmentStrictness.BEGINNER) }
+    var customLineDeviation by remember { mutableFloatStateOf(0.14f) }
+    var customGoodForm by remember { mutableIntStateOf(72) }
+    var customRepThreshold by remember { mutableIntStateOf(70) }
+    var customHoldThreshold by remember { mutableIntStateOf(72) }
 
     LaunchedEffect(Unit) {
         repository.observeSettings().collect { s ->
@@ -59,6 +63,10 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
             maxStorageMb = s.maxStorageMb
             minSessionDurationSeconds = s.minSessionDurationSeconds
             alignmentStrictness = s.alignmentStrictness
+            customLineDeviation = s.customLineDeviation
+            customGoodForm = s.customMinimumGoodFormScore
+            customRepThreshold = s.customRepAcceptanceThreshold
+            customHoldThreshold = s.customHoldAlignedThreshold
         }
     }
 
@@ -122,7 +130,17 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
                         }
                     }
                 }
-                Text("Easy is forgiving and recommended for beginners.")
+                Text("Beginner is forgiving. Advanced is strict. Custom uses your thresholds from saved settings.")
+                if (alignmentStrictness == AlignmentStrictness.CUSTOM) {
+                    Text("Line deviation: ${"%.2f".format(customLineDeviation)}")
+                    Slider(value = customLineDeviation, onValueChange = { customLineDeviation = it }, valueRange = 0.06f..0.24f)
+                    Text("Minimum good form score: $customGoodForm")
+                    Slider(value = customGoodForm.toFloat(), onValueChange = { customGoodForm = it.toInt().coerceIn(40, 95) }, valueRange = 40f..95f)
+                    Text("Rep acceptance threshold: $customRepThreshold")
+                    Slider(value = customRepThreshold.toFloat(), onValueChange = { customRepThreshold = it.toInt().coerceIn(40, 95) }, valueRange = 40f..95f)
+                    Text("Hold aligned threshold: $customHoldThreshold")
+                    Slider(value = customHoldThreshold.toFloat(), onValueChange = { customHoldThreshold = it.toInt().coerceIn(40, 95) }, valueRange = 40f..95f)
+                }
             }
 
             SettingsCard(title = "Storage & privacy") {
@@ -150,6 +168,10 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
                                 maxStorageMb = maxStorageMb,
                                 minSessionDurationSeconds = minSessionDurationSeconds,
                                 alignmentStrictness = alignmentStrictness,
+                                customLineDeviation = customLineDeviation,
+                                customMinimumGoodFormScore = customGoodForm,
+                                customRepAcceptanceThreshold = customRepThreshold,
+                                customHoldAlignedThreshold = customHoldThreshold,
                             ),
                         )
                     }

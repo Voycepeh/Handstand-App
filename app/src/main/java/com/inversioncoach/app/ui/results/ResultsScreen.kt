@@ -41,6 +41,7 @@ import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
+import com.inversioncoach.app.ui.common.parseSessionMetrics
 import com.inversioncoach.app.ui.common.buildSessionSummaryDisplay
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.mediaAssetExists
@@ -102,6 +103,17 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     Text("Started: ${formatSessionDateTime(session?.startedAtMs ?: 0L)}")
                     Text("Duration: ${formatSessionDuration(computeSessionDurationMs(session?.startedAtMs ?: 0L, session?.completedAtMs ?: 0L))}")
                     session?.let { Text(formatPrimaryPerformance(it)) }
+                    session?.let {
+                        val metrics = parseSessionMetrics(it.metricsJson)
+                        if (metrics.trackingMode == "HOLD_BASED") {
+                            Text("Alignment %: ${((metrics.alignmentRate ?: 0f) * 100f).toInt()} • Avg alignment: ${metrics.avgAlignment ?: 0}")
+                            Text("Avg stability: ${metrics.avgStability ?: 0}")
+                        } else {
+                            Text("Accepted reps: ${metrics.acceptedReps ?: metrics.validReps ?: 0} • Rejected: ${metrics.rejectedReps ?: 0}")
+                            Text("Avg rep score: ${metrics.avgRepScore ?: 0} • Best rep: ${metrics.bestRepScore ?: 0}")
+                            if (!metrics.repFailureReason.isNullOrBlank()) Text("Top failure reason: ${metrics.repFailureReason}")
+                        }
+                    }
                     Text(issueSummarySentence)
                     Text(
                         "Top wins: ${sessionSummaryDisplay.wins}",

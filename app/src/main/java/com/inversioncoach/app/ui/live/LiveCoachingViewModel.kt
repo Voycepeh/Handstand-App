@@ -21,7 +21,8 @@ import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.motion.DrillCatalog
 import com.inversioncoach.app.motion.MotionAnalysisPipeline
-import com.inversioncoach.app.motion.RepMode
+import com.inversioncoach.app.motion.QualityThresholds
+import com.inversioncoach.app.motion.UserCalibrationSettings
 import com.inversioncoach.app.pose.PoseSmoother
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.summary.SummaryGenerator
@@ -146,7 +147,22 @@ class LiveCoachingViewModel(
     fun onPoseFrame(frame: PoseFrame, settings: UserSettings) {
         activeSettings = settings
         val smoothed = smoother.smooth(frame)
-        val motion = if (sessionMode == SessionMode.FREESTYLE) null else motionPipeline.analyze(frame, settings.alignmentStrictness)
+        val calibration = if (settings.alignmentStrictness.name == "CUSTOM") {
+            UserCalibrationSettings(
+                strictness = settings.alignmentStrictness,
+                customThresholds = QualityThresholds(
+                    acceptableLineDeviation = settings.customLineDeviation,
+                    minimumGoodFormScore = settings.customMinimumGoodFormScore,
+                    repAcceptanceThreshold = settings.customRepAcceptanceThreshold,
+                    holdAlignedThreshold = settings.customHoldAlignedThreshold,
+                    alignmentPersistenceMs = 300L,
+                    allowedRepAlignmentDropMs = 300L,
+                ),
+            )
+        } else {
+            UserCalibrationSettings(settings.alignmentStrictness)
+        }
+        val motion = if (sessionMode == SessionMode.FREESTYLE) null else motionPipeline.analyze(frame, settings.alignmentStrictness, calibration)
         _smoothedFrame.value = smoothed
         val gate = frameGate
         if (gate == null) {
@@ -181,6 +197,9 @@ class LiveCoachingViewModel(
         if (sessionMode == SessionMode.FREESTYLE) {
             _uiState.value = _uiState.value.copy(
                 score = 0,
+                alignmentScore = 0,
+                smoothedAlignmentScore = 0,
+                stabilityScore = 0,
                 confidence = smoothed.confidence,
                 currentCue = "",
                 currentCueId = "",
@@ -198,6 +217,16 @@ class LiveCoachingViewModel(
                 totalSessionTrackedMs = 0L,
                 currentPhase = "tracking",
                 activeFault = "",
+                alignmentRate = 0f,
+                averageAlignmentScore = 0,
+                lastRepScore = 0,
+                acceptedReps = 0,
+                rejectedReps = 0,
+                averageRepQuality = 0,
+                bestRepScore = 0,
+                mostCommonFailureReason = "",
+                averageStabilityScore = 0,
+                peakDrift = 0f,
             )
             persistFrameData(
                 smoothed = smoothed,
@@ -228,6 +257,9 @@ class LiveCoachingViewModel(
         val holdTracking = motion?.holdTracking
         _uiState.value = _uiState.value.copy(
             score = analysis.score.overall,
+            alignmentScore = motion?.alignment?.rawScore ?: 0,
+            smoothedAlignmentScore = motion?.alignment?.smoothedScore ?: 0,
+            stabilityScore = motion?.stability?.stabilityScore ?: 0,
             confidence = smoothed.confidence,
             currentCue = cue?.text ?: motion?.cue?.text ?: _uiState.value.currentCue.ifBlank { "Human detected. Hold steady for drill scoring." },
             currentCueId = cue?.id ?: _uiState.value.currentCueId,
@@ -239,12 +271,22 @@ class LiveCoachingViewModel(
             debugAngles = analysis.angles,
             repCount = repTracking?.validRepCount ?: 0,
             rawRepCount = repTracking?.rawRepAttempts ?: 0,
-            totalAlignedDurationMs = holdTracking?.totalAlignedDurationMs ?: _uiState.value.totalAlignedDurationMs,
+            totalAlignedDurationMs = motion?.holdQuality?.alignedHoldDurationMs ?: holdTracking?.totalAlignedDurationMs ?: _uiState.value.totalAlignedDurationMs,
             currentAlignedStreakMs = holdTracking?.currentAlignedStreakMs ?: _uiState.value.currentAlignedStreakMs,
-            bestAlignedStreakMs = holdTracking?.bestAlignedStreakMs ?: _uiState.value.bestAlignedStreakMs,
-            totalSessionTrackedMs = holdTracking?.totalSessionDurationMs ?: _uiState.value.totalSessionTrackedMs,
+            bestAlignedStreakMs = motion?.holdQuality?.bestAlignedStreakMs ?: holdTracking?.bestAlignedStreakMs ?: _uiState.value.bestAlignedStreakMs,
+            totalSessionTrackedMs = motion?.holdQuality?.totalHoldDurationMs ?: holdTracking?.totalSessionDurationMs ?: _uiState.value.totalSessionTrackedMs,
             currentPhase = motion?.movement?.currentPhase?.name?.lowercase() ?: "setup",
-            activeFault = motion?.faults?.firstOrNull()?.code ?: "",
+            activeFault = motion?.alignment?.dominantFault ?: motion?.faults?.firstOrNull()?.code.orEmpty(),
+            alignmentRate = motion?.holdQuality?.alignmentRate ?: _uiState.value.alignmentRate,
+            averageAlignmentScore = motion?.holdQuality?.averageAlignmentScore ?: _uiState.value.averageAlignmentScore,
+            lastRepScore = motion?.repQuality?.latestRep?.repScore ?: _uiState.value.lastRepScore,
+            acceptedReps = motion?.repQuality?.acceptedReps ?: _uiState.value.acceptedReps,
+            rejectedReps = motion?.repQuality?.rejectedReps ?: _uiState.value.rejectedReps,
+            averageRepQuality = motion?.repQuality?.averageRepQuality ?: _uiState.value.averageRepQuality,
+            bestRepScore = motion?.repQuality?.bestRepScore ?: _uiState.value.bestRepScore,
+            mostCommonFailureReason = motion?.repQuality?.mostCommonFailureReason ?: _uiState.value.mostCommonFailureReason,
+            averageStabilityScore = (((_uiState.value.averageStabilityScore + (motion?.stability?.stabilityScore ?: 0)) / 2f).toInt()),
+            peakDrift = maxOf(_uiState.value.peakDrift, motion?.stability?.centerlineDeviation ?: 0f),
         )
         val motionFaults = motion?.faults.orEmpty()
         if (motionFaults.isNotEmpty()) {
@@ -413,6 +455,28 @@ class LiveCoachingViewModel(
                             append(_uiState.value.bestAlignedStreakMs)
                             append("|sessionTrackedMs:")
                             append(_uiState.value.totalSessionTrackedMs)
+                            append("|alignmentRaw:")
+                            append(_uiState.value.alignmentScore)
+                            append("|alignmentSmoothed:")
+                            append(_uiState.value.smoothedAlignmentScore)
+                            append("|alignmentRate:")
+                            append("%.3f".format(_uiState.value.alignmentRate))
+                            append("|avgAlignment:")
+                            append(_uiState.value.averageAlignmentScore)
+                            append("|avgStability:")
+                            append(_uiState.value.averageStabilityScore)
+                            append("|peakDrift:")
+                            append("%.4f".format(_uiState.value.peakDrift))
+                            append("|acceptedReps:")
+                            append(_uiState.value.acceptedReps)
+                            append("|rejectedReps:")
+                            append(_uiState.value.rejectedReps)
+                            append("|avgRepScore:")
+                            append(_uiState.value.averageRepQuality)
+                            append("|bestRepScore:")
+                            append(_uiState.value.bestRepScore)
+                            append("|repFailureReason:")
+                            append(_uiState.value.mostCommonFailureReason)
                             if (invalidReasonSummary.isNotBlank()) {
                                 append("|invalidReasons:")
                                 append(invalidReasonSummary)

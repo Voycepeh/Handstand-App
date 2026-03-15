@@ -93,3 +93,28 @@ If you prefer to build yourself instead of installing from Releases:
 - Gradle 8.14+
 
 Open the project in Android Studio, sync, then run the `app` configuration on a physical Android device.
+
+## Quality-based coaching layer (new)
+
+The coaching stack now adds a dedicated quality layer on top of camera → pose → biomechanics → cues:
+
+- **Alignment score (0–100)** with drill-specific weighting, raw + smoothed score, and dominant limiting fault.
+- **Strictness profiles**: Beginner, Standard, Advanced, and Custom calibration for line deviation + quality thresholds.
+- **Hold quality timer** for handstand holds:
+  - total hold duration
+  - aligned hold duration
+  - alignment rate
+  - best aligned streak
+  - average alignment score
+- **Rep quality scoring** for push-up variants:
+  - per-rep quality score
+  - acceptance/rejection gate
+  - rep fault tags
+  - failure reason summary
+- **Balance stability metric** for inversion drills:
+  - centerline deviation
+  - sway amplitude
+  - sway frequency
+  - stability score (0–100)
+
+All quality metrics are surfaced live in session UI and persisted into session summaries/history for post-session review.

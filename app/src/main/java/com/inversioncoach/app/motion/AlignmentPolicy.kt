@@ -8,8 +8,9 @@ data class AlignmentTolerancePolicy(
 
 object AlignmentPolicy {
     fun forStrictness(strictness: AlignmentStrictness): AlignmentTolerancePolicy = when (strictness) {
-        AlignmentStrictness.EASY -> AlignmentTolerancePolicy(lineDeviationNormMax = 0.17f)
-        AlignmentStrictness.STANDARD -> AlignmentTolerancePolicy(lineDeviationNormMax = 0.13f)
-        AlignmentStrictness.STRICT -> AlignmentTolerancePolicy(lineDeviationNormMax = 0.10f)
+        AlignmentStrictness.BEGINNER -> AlignmentTolerancePolicy(lineDeviationNormMax = 0.20f)
+        AlignmentStrictness.STANDARD -> AlignmentTolerancePolicy(lineDeviationNormMax = 0.14f)
+        AlignmentStrictness.ADVANCED -> AlignmentTolerancePolicy(lineDeviationNormMax = 0.10f)
+        AlignmentStrictness.CUSTOM -> AlignmentTolerancePolicy(lineDeviationNormMax = 0.14f)
     }
 }

@@ -21,6 +21,14 @@ data class SessionMetrics(
     val alignedDurationMs: Long? = null,
     val bestAlignedStreakMs: Long? = null,
     val sessionTrackedMs: Long? = null,
+    val alignmentRate: Float? = null,
+    val avgAlignment: Int? = null,
+    val avgStability: Int? = null,
+    val acceptedReps: Int? = null,
+    val rejectedReps: Int? = null,
+    val avgRepScore: Int? = null,
+    val bestRepScore: Int? = null,
+    val repFailureReason: String? = null,
 )
 
 fun formatSessionDateTime(timestampMs: Long): String {
@@ -59,6 +67,14 @@ fun parseSessionMetrics(metricsJson: String): SessionMetrics {
         alignedDurationMs = pairs["alignedDurationMs"]?.toLongOrNull(),
         bestAlignedStreakMs = pairs["bestAlignedStreakMs"]?.toLongOrNull(),
         sessionTrackedMs = pairs["sessionTrackedMs"]?.toLongOrNull(),
+        alignmentRate = pairs["alignmentRate"]?.toFloatOrNull(),
+        avgAlignment = pairs["avgAlignment"]?.toIntOrNull(),
+        avgStability = pairs["avgStability"]?.toIntOrNull(),
+        acceptedReps = pairs["acceptedReps"]?.toIntOrNull(),
+        rejectedReps = pairs["rejectedReps"]?.toIntOrNull(),
+        avgRepScore = pairs["avgRepScore"]?.toIntOrNull(),
+        bestRepScore = pairs["bestRepScore"]?.toIntOrNull(),
+        repFailureReason = pairs["repFailureReason"],
     )
 }
 
@@ -68,11 +84,12 @@ fun formatPrimaryPerformance(session: SessionRecord): String {
         val aligned = formatSessionDuration(metrics.alignedDurationMs ?: 0L)
         val best = formatSessionDuration(metrics.bestAlignedStreakMs ?: 0L)
         val total = formatSessionDuration(metrics.sessionTrackedMs ?: computeSessionDurationMs(session.startedAtMs, session.completedAtMs))
-        "Hold: $aligned aligned • Best streak: $best • Session: $total"
+        "Hold: $aligned aligned • Best streak: $best • Session: $total • Align ${(((metrics.alignmentRate ?: 0f) * 100f).toInt())}% • Stability ${metrics.avgStability ?: 0}"
     } else {
-        val valid = metrics.validReps ?: 0
-        val raw = metrics.rawRepAttempts ?: valid
-        "Reps: $valid valid${if (raw >= valid) " / $raw attempts" else ""}"
+        val accepted = metrics.acceptedReps ?: metrics.validReps ?: 0
+        val rejected = metrics.rejectedReps ?: 0
+        val raw = metrics.rawRepAttempts ?: (accepted + rejected)
+        "Reps: $accepted accepted / $raw attempts • Rejected: $rejected • Avg rep ${metrics.avgRepScore ?: 0}"
     }
 }
 
