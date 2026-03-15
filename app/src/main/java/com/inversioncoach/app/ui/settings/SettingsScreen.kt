@@ -40,6 +40,7 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
     var debug by remember { mutableStateOf(false) }
     var localOnlyPrivacyMode by remember { mutableStateOf(true) }
     var maxStorageMb by remember { mutableIntStateOf(1024) }
+    var minSessionDurationSeconds by remember { mutableIntStateOf(3) }
 
     LaunchedEffect(Unit) {
         repository.observeSettings().collect { s ->
@@ -48,6 +49,7 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
             debug = s.debugOverlayEnabled
             localOnlyPrivacyMode = s.localOnlyPrivacyMode
             maxStorageMb = s.maxStorageMb
+            minSessionDurationSeconds = s.minSessionDurationSeconds
         }
     }
 
@@ -71,6 +73,12 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
                 onValueChange = { maxStorageMb = it.toInt().coerceIn(256, 4096) },
                 valueRange = 256f..4096f,
             )
+            Text("Minimum session length to keep (without video): ${minSessionDurationSeconds}s")
+            Slider(
+                value = minSessionDurationSeconds.toFloat(),
+                onValueChange = { minSessionDurationSeconds = it.toInt().coerceIn(0, 30) },
+                valueRange = 0f..30f,
+            )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Debug overlay (raw metrics/angles)")
                 Checkbox(checked = debug, onCheckedChange = { debug = it })
@@ -89,6 +97,7 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
                                 debugOverlayEnabled = debug,
                                 localOnlyPrivacyMode = localOnlyPrivacyMode,
                                 maxStorageMb = maxStorageMb,
+                                minSessionDurationSeconds = minSessionDurationSeconds,
                             ),
                         )
                     }

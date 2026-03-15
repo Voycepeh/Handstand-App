@@ -151,6 +151,7 @@ data class UserSettings(
     val retainDays: Int = 60,
     val debugOverlayEnabled: Boolean = false,
     val maxStorageMb: Int = 1024,
+    val minSessionDurationSeconds: Int = 3,
 )
 
 data class LiveSessionUiState(

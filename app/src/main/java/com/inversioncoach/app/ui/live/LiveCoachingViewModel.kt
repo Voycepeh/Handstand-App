@@ -66,6 +66,8 @@ class LiveCoachingViewModel(
     private var annotatedVideoPersistJob: Job? = null
     private var pendingStopCallback: ((Long) -> Unit)? = null
     private var isSessionFinalizing = false
+    private var activeSettings: UserSettings = UserSettings()
+    private var sessionHadAnyVideo = false
     private val frameGate = FrameValidityGate(drillType, DrillConfigs.byType(drillType))
     private val issueAggregator = IssueEventAggregator()
     private val invalidReasonCounts = mutableMapOf<String, Int>()
@@ -99,6 +101,7 @@ class LiveCoachingViewModel(
     fun onRecordingFinalized(uri: String?) {
         val finalizedUri = uri?.takeIf { it.isNotBlank() } ?: return
         val activeSessionId = sessionId ?: return
+        sessionHadAnyVideo = true
         rawVideoPersistJob = viewModelScope.launch {
             rawVideoUri = repository.saveRawVideoBlob(activeSessionId, finalizedUri)
         }
@@ -107,12 +110,14 @@ class LiveCoachingViewModel(
     fun onAnnotatedRecordingFinalized(uri: String?) {
         val finalizedUri = uri?.takeIf { it.isNotBlank() } ?: return
         val activeSessionId = sessionId ?: return
+        sessionHadAnyVideo = true
         annotatedVideoPersistJob = viewModelScope.launch {
             annotatedVideoUri = repository.saveAnnotatedVideoBlob(activeSessionId, finalizedUri)
         }
     }
 
     fun onPoseFrame(frame: PoseFrame, settings: UserSettings) {
+        activeSettings = settings
         val smoothed = smoother.smooth(frame)
         val motion = motionPipeline.analyze(frame)
         _smoothedFrame.value = smoothed
@@ -276,17 +281,28 @@ class LiveCoachingViewModel(
                     wins = listOf(wins),
                 )
                 val invalidReasonSummary = invalidReasonCounts.entries.sortedByDescending { it.value }.joinToString(";") { "${it.key}:${it.value}" }
+                val completedAtMs = System.currentTimeMillis()
+                val elapsedSessionSeconds = ((completedAtMs - sessionStartedAtMs).coerceAtLeast(0L)) / 1000.0
+                val hasPersistedVideo = !rawVideoUri.isNullOrBlank() || !annotatedVideoUri.isNullOrBlank()
+                val shouldDeleteSession = !hasPersistedVideo && !sessionHadAnyVideo &&
+                    elapsedSessionSeconds < activeSettings.minSessionDurationSeconds
                 SessionDiagnostics.log(
                     "session_finalize drill=$drillType validFrames=$validFrameCount invalidFrames=$invalidFrameCount invalidReasons={$invalidReasonSummary} " +
-                        "aggregatedIssues=${aggregatedIssues.size} savedRaw=$rawVideoUri savedAnnotated=$annotatedVideoUri",
+                        "aggregatedIssues=${aggregatedIssues.size} savedRaw=$rawVideoUri savedAnnotated=$annotatedVideoUri elapsed=${"%.2f".format(elapsedSessionSeconds)}s " +
+                        "minKeepWithoutVideo=${activeSettings.minSessionDurationSeconds}s shouldDelete=$shouldDeleteSession",
                 )
+                if (shouldDeleteSession) {
+                    repository.deleteSession(activeSessionId)
+                    onSessionFinalized(activeSessionId)
+                    return@launch
+                }
                 repository.saveSession(
                     SessionRecord(
                         id = activeSessionId,
                         title = sessionTitle,
                         drillType = drillType,
                         startedAtMs = sessionStartedAtMs,
-                        completedAtMs = System.currentTimeMillis(),
+                        completedAtMs = completedAtMs,
                         overallScore = sessionComputation.score.overall,
                         strongestArea = sessionComputation.strongestArea,
                         limitingFactor = sessionComputation.score.limitingFactor,
