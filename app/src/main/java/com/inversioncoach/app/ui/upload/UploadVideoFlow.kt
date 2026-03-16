@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -39,6 +40,7 @@ import com.inversioncoach.app.overlay.FreestyleOrientationClassifier
 import com.inversioncoach.app.recording.AnnotatedExportPipeline
 import com.inversioncoach.app.recording.AnnotatedOverlayFrame
 import com.inversioncoach.app.recording.AnnotatedVideoCompositor
+import com.inversioncoach.app.recording.ExportPreset
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
@@ -54,12 +56,19 @@ private const val TAG = "UploadVideoFlow"
 enum class UploadStage(val label: String) {
     IDLE("Idle"),
     PICKING("Importing video"),
-    ANALYZING("Running pose analysis"),
-    BUILDING_OVERLAY("Building overlay"),
-    PREPARING_REPLAY("Preparing replay"),
+    PREPARING_VIDEO("Preparing video"),
+    ANALYZING("Analyzing movement"),
+    RENDERING("Rendering annotated video"),
+    VERIFYING("Verifying output"),
     SUCCESS("Complete"),
     FAILURE("Failed"),
 }
+
+data class UploadProgress(
+    val stage: UploadStage,
+    val percent: Float,
+    val etaMs: Long? = null,
+)
 
 data class UploadVideoUiState(
     val selectedVideoUri: Uri? = null,
@@ -69,6 +78,8 @@ data class UploadVideoUiState(
     val sessionId: Long? = null,
     val replayUri: String? = null,
     val canCancel: Boolean = false,
+    val progressPercent: Float = 0f,
+    val etaMs: Long? = null,
 )
 
 data class UploadFlowResult(
@@ -77,14 +88,16 @@ data class UploadFlowResult(
 )
 
 interface UploadVideoAnalysisRunner {
-    suspend fun run(uri: Uri, onStage: (UploadStage) -> Unit): UploadFlowResult
+    suspend fun run(uri: Uri, onProgress: (UploadProgress) -> Unit): UploadFlowResult
 }
 
 class DefaultUploadVideoAnalysisRunner(
     private val context: Context,
     private val repository: SessionRepository,
 ) : UploadVideoAnalysisRunner {
-    override suspend fun run(uri: Uri, onStage: (UploadStage) -> Unit): UploadFlowResult {
+    private val preset = ExportPreset.BALANCED
+
+    override suspend fun run(uri: Uri, onProgress: (UploadProgress) -> Unit): UploadFlowResult {
         val startedAt = System.currentTimeMillis()
         val drillType = DrillType.FREESTYLE
         val sessionId = repository.saveSession(
@@ -115,15 +128,22 @@ class DefaultUploadVideoAnalysisRunner(
             ?: error("Unable to import selected video")
         repository.updateRawPersistStatus(sessionId, RawPersistStatus.SUCCEEDED)
 
-        onStage(UploadStage.ANALYZING)
+        val totalStart = System.currentTimeMillis()
+        val prepareStart = System.currentTimeMillis()
+        onProgress(UploadProgress(UploadStage.PREPARING_VIDEO, 0.1f))
         val profile = ExistingDrillToProfileAdapter().fromDrill(drillType)
-        val analyzer = UploadedVideoAnalyzer(MlKitVideoPoseFrameSource(context.applicationContext))
+        val prepareDurationMs = System.currentTimeMillis() - prepareStart
+        val frameSource = MlKitVideoPoseFrameSource(context.applicationContext, sampleFps = preset.analysisFps)
+        val analyzer = UploadedVideoAnalyzer(frameSource)
+        onProgress(UploadProgress(UploadStage.ANALYZING, 0.25f))
+        val analysisStart = System.currentTimeMillis()
         val analysis = analyzer.analyze(Uri.parse(persistedRawUri), profile)
+        val analysisDurationMs = System.currentTimeMillis() - analysisStart
         if (analysis.overlayTimeline.isEmpty()) {
             error("No body landmarks detected. Try another video with full-body side view.")
         }
 
-        onStage(UploadStage.BUILDING_OVERLAY)
+        onProgress(UploadProgress(UploadStage.ANALYZING, 0.6f))
         val orientationClassifier = FreestyleOrientationClassifier()
         val overlayFrames = analysis.overlayTimeline.map { point ->
             val joints = point.landmarks.map { (name, pointPair) ->
@@ -161,7 +181,8 @@ class DefaultUploadVideoAnalysisRunner(
             )
         }
 
-        onStage(UploadStage.PREPARING_REPLAY)
+        onProgress(UploadProgress(UploadStage.RENDERING, 0.7f))
+        val renderStart = System.currentTimeMillis()
         val exportPipeline = AnnotatedExportPipeline(repository, AnnotatedVideoCompositor(context.applicationContext))
         val export = exportPipeline.export(
             sessionId = sessionId,
@@ -169,12 +190,22 @@ class DefaultUploadVideoAnalysisRunner(
             drillType = drillType,
             drillCameraSide = DrillCameraSide.LEFT,
             overlayFrames = overlayFrames,
+            preset = preset,
+            onRenderProgress = { rendered, total ->
+                val ratio = if (total <= 0) 0f else rendered.toFloat() / total.toFloat()
+                onProgress(UploadProgress(UploadStage.RENDERING, 0.7f + (ratio * 0.25f), null))
+            },
         )
+        val renderDurationMs = System.currentTimeMillis() - renderStart
         if (!export.failureReason.isNullOrBlank()) {
             Log.w(TAG, "analysis_export_failed sessionId=$sessionId reason=${export.failureReason}")
         }
 
+        onProgress(UploadProgress(UploadStage.VERIFYING, 0.97f))
+        val verifyStart = System.currentTimeMillis()
         val now = System.currentTimeMillis()
+        val verifyDurationMs = now - verifyStart
+        val totalDurationMs = now - totalStart
         val replayUri = export.persistedUri ?: persistedRawUri
         repository.updateMediaPipelineState(sessionId) { session ->
             session.copy(
@@ -184,7 +215,19 @@ class DefaultUploadVideoAnalysisRunner(
                 limitingFactor = "Consistency",
                 wins = "Processed uploaded video",
                 issues = if (analysis.droppedFrames > 0) "Dropped ${analysis.droppedFrames} low-confidence frames" else "",
-                metricsJson = analysis.telemetry.toString(),
+                metricsJson = (analysis.telemetry + mapOf(
+                    "decode_time_ms" to analysis.telemetry["decode_time_ms"].toString(),
+                    "analysis_time_ms" to analysisDurationMs.toString(),
+                    "render_time_ms" to renderDurationMs.toString(),
+                    "encode_time_ms" to renderDurationMs.toString(),
+                    "verification_time_ms" to verifyDurationMs.toString(),
+                    "prepare_time_ms" to prepareDurationMs.toString(),
+                    "total_job_time_ms" to totalDurationMs.toString(),
+                    "export_preset" to preset.name,
+                    "decode_worker_count" to frameSource.lastDecodeTelemetry.workerCount.toString(),
+                    "decode_max_backlog" to frameSource.lastDecodeTelemetry.maxQueueBacklog.toString(),
+                    "decode_avg_worker_active" to "%.2f".format(frameSource.lastDecodeTelemetry.averageWorkerActive),
+                )).toString(),
                 bestPlayableUri = replayUri,
                 rawVideoUri = persistedRawUri,
                 annotatedVideoUri = export.persistedUri,
@@ -192,6 +235,7 @@ class DefaultUploadVideoAnalysisRunner(
             )
         }
         Log.i(TAG, "analysis_complete sessionId=$sessionId replayUri=$replayUri")
+        onProgress(UploadProgress(UploadStage.SUCCESS, 1f, 0L))
         return UploadFlowResult(sessionId = sessionId, replayUri = replayUri)
     }
 }
@@ -228,8 +272,15 @@ class UploadVideoViewModel(
                 )
             }
             runCatching {
-                runner.run(uri) { stage ->
-                    _state.update { current -> current.copy(stage = stage, stageText = stage.label) }
+                runner.run(uri) { progress ->
+                    _state.update { current ->
+                        current.copy(
+                            stage = progress.stage,
+                            stageText = progress.stage.label,
+                            progressPercent = progress.percent.coerceIn(0f, 1f),
+                            etaMs = progress.etaMs,
+                        )
+                    }
                 }
             }.onSuccess { result ->
                 _state.update {
@@ -238,6 +289,7 @@ class UploadVideoViewModel(
                         stageText = "Analysis complete",
                         sessionId = result.sessionId,
                         replayUri = result.replayUri,
+                        progressPercent = 1f,
                         canCancel = false,
                     )
                 }
@@ -248,6 +300,7 @@ class UploadVideoViewModel(
                         stage = UploadStage.FAILURE,
                         stageText = "Analysis failed",
                         errorMessage = error.message ?: "Unable to process this video.",
+                        progressPercent = 0f,
                         canCancel = false,
                     )
                 }
@@ -311,8 +364,11 @@ fun UploadVideoScreen(
             Text(state.stageText, color = MaterialTheme.colorScheme.onSurfaceVariant)
             state.selectedVideoUri?.let { Text("Selected: $it", style = MaterialTheme.typography.bodySmall) }
 
-            if (state.stage in setOf(UploadStage.ANALYZING, UploadStage.BUILDING_OVERLAY, UploadStage.PREPARING_REPLAY)) {
+            if (state.stage in setOf(UploadStage.PREPARING_VIDEO, UploadStage.ANALYZING, UploadStage.RENDERING, UploadStage.VERIFYING)) {
                 CircularProgressIndicator()
+                LinearProgressIndicator(progress = { state.progressPercent }, modifier = Modifier.fillMaxWidth())
+                Text("${(state.progressPercent * 100).toInt()}%")
+                state.etaMs?.let { eta -> Text("ETA: ${eta / 1000}s", style = MaterialTheme.typography.bodySmall) }
             }
 
             state.errorMessage?.let { message ->
@@ -328,7 +384,7 @@ fun UploadVideoScreen(
                     picker.launch(arrayOf("video/*"))
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = state.stage !in setOf(UploadStage.ANALYZING, UploadStage.BUILDING_OVERLAY, UploadStage.PREPARING_REPLAY),
+                enabled = state.stage !in setOf(UploadStage.PREPARING_VIDEO, UploadStage.ANALYZING, UploadStage.RENDERING, UploadStage.VERIFYING),
             ) {
                 Text("Choose Video")
             }

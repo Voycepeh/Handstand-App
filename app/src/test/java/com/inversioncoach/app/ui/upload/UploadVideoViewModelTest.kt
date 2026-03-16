@@ -19,10 +19,10 @@ class UploadVideoViewModelTest {
     fun successPathTransitionsToSuccessAndStoresResult() = runTest(dispatcher) {
         kotlinx.coroutines.Dispatchers.setMain(dispatcher)
         val runner = object : UploadVideoAnalysisRunner {
-            override suspend fun run(uri: Uri, onStage: (UploadStage) -> Unit): UploadFlowResult {
-                onStage(UploadStage.ANALYZING)
-                onStage(UploadStage.BUILDING_OVERLAY)
-                onStage(UploadStage.PREPARING_REPLAY)
+            override suspend fun run(uri: Uri, onProgress: (UploadProgress) -> Unit): UploadFlowResult {
+                onProgress(UploadProgress(UploadStage.PREPARING_VIDEO, 0.1f))
+                onProgress(UploadProgress(UploadStage.ANALYZING, 0.4f))
+                onProgress(UploadProgress(UploadStage.RENDERING, 0.8f))
                 return UploadFlowResult(sessionId = 42L, replayUri = "file:///annotated.mp4")
             }
         }
@@ -42,7 +42,7 @@ class UploadVideoViewModelTest {
     fun invalidUriShowsFailureMessage() = runTest(dispatcher) {
         kotlinx.coroutines.Dispatchers.setMain(dispatcher)
         val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
-            override suspend fun run(uri: Uri, onStage: (UploadStage) -> Unit): UploadFlowResult =
+            override suspend fun run(uri: Uri, onProgress: (UploadProgress) -> Unit): UploadFlowResult =
                 throw IllegalStateException("Unreadable media")
         })
 
@@ -58,7 +58,7 @@ class UploadVideoViewModelTest {
     @Test
     fun pickerInvalidSelectionMovesToFailure() {
         val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
-            override suspend fun run(uri: Uri, onStage: (UploadStage) -> Unit): UploadFlowResult =
+            override suspend fun run(uri: Uri, onProgress: (UploadProgress) -> Unit): UploadFlowResult =
                 UploadFlowResult(1L, null)
         })
 

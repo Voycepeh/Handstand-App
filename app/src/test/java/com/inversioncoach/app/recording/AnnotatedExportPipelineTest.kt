@@ -22,7 +22,7 @@ class AnnotatedExportPipelineTest {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> "file:///annotated.mp4" },
             updateExportStatus = { _, status -> statuses += status },
-            renderAnnotatedVideo = { _, _, _, _, _, _ -> "file:///rendered.mp4" },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> "file:///rendered.mp4" },
         )
 
         val exported = runBlocking {
@@ -46,7 +46,7 @@ class AnnotatedExportPipelineTest {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
             updateExportStatus = { _, status -> statuses += status },
-            renderAnnotatedVideo = { _, _, _, _, _, _ -> "file:///rendered_annotated.mp4" },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> "file:///rendered_annotated.mp4" },
         )
 
         val exported = runBlocking {
@@ -71,7 +71,7 @@ class AnnotatedExportPipelineTest {
             persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
             updateExportStatus = { _, _ -> },
             exportTimeoutMs = 25L,
-            renderAnnotatedVideo = { _, _, _, _, _, _ ->
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ ->
                 delay(100L)
                 "file:///rendered_annotated.mp4"
             },
@@ -95,7 +95,7 @@ class AnnotatedExportPipelineTest {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
             updateExportStatus = { _, _ -> },
-            renderAnnotatedVideo = { _, _, _, _, _, _ -> throw IllegalStateException("boom") },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> throw IllegalStateException("boom") },
         )
 
         val exported = runBlocking {
@@ -116,7 +116,7 @@ class AnnotatedExportPipelineTest {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
             updateExportStatus = { _, _ -> },
-            renderAnnotatedVideo = { _, _, _, _, _, _ -> throw CancellationException("cancel") },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> throw CancellationException("cancel") },
         )
 
         val exported = runBlocking {
@@ -137,7 +137,7 @@ class AnnotatedExportPipelineTest {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> null },
             updateExportStatus = { _, _ -> },
-            renderAnnotatedVideo = { _, _, _, _, _, _ -> "file:///rendered_annotated.mp4" },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> "file:///rendered_annotated.mp4" },
         )
 
         val exported = runBlocking {
@@ -160,7 +160,7 @@ class AnnotatedExportPipelineTest {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> zeroByte.toURI().toString() },
             updateExportStatus = { _, _ -> },
-            renderAnnotatedVideo = { _, _, _, _, _, _ -> "file:///rendered_annotated.mp4" },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> "file:///rendered_annotated.mp4" },
         )
 
         val exported = runBlocking {

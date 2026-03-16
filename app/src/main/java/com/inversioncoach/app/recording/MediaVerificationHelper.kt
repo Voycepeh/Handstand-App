@@ -26,7 +26,10 @@ object MediaVerificationHelper {
             retriever.setDataSource(file.absolutePath)
             val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
                 ?: return MediaVerificationResult(false, AnnotatedExportFailureReason.METADATA_UNREADABLE)
-            if (duration < minDurationMs) {
+            val firstFrame = retriever.getFrameAtTime(250_000L, MediaMetadataRetriever.OPTION_CLOSEST)
+            val playable = firstFrame != null
+            firstFrame?.recycle()
+            if (duration < minDurationMs || !playable) {
                 MediaVerificationResult(false, AnnotatedExportFailureReason.METADATA_UNREADABLE, file.length(), duration)
             } else {
                 MediaVerificationResult(true, null, file.length(), duration)

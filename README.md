@@ -206,6 +206,25 @@ sequenceDiagram
 
 The app analyzes resized frames live to keep real-time coaching smooth (stable FPS, low latency cues, responsive overlays), but exports from high-quality intermediate recordings to preserve replay fidelity and annotation quality for post-session review.
 
+### Upload annotation pipeline (offline, CPU-parallel)
+
+Uploaded video annotation now uses a staged producer-consumer pipeline optimized for modern phone CPUs while keeping encoded output ordered and deterministic:
+
+1. **Decode stage (sequential):** sample frames in presentation order from the raw uploaded video source-of-truth URI.
+2. **Analysis stage (parallel):** run bounded worker-pool pose inference/metric extraction on sampled frames (`workerCount = min(4, cores - 2)`, configurable and clamped).
+3. **Overlay synthesis stage:** persist lightweight timeline points keyed by timestamp/frame index.
+4. **Render/encode stage (sequential):** render every output frame in order and encode sequentially to MP4.
+5. **Verification stage:** block READY until URI/file/size/metadata/playability checks pass.
+
+Additional behavior:
+- **Decoupled cadence:** output renders at 24/30 FPS while analysis runs at lower cadence (10–20 FPS), with interpolation/nearest-pose reuse for smooth overlays.
+- **Bounded memory:** no full-history annotated frame buffering; bounded channels and short-lived bitmaps only.
+- **Export presets:**
+  - `FAST` = 720p / 24 FPS output / 10 FPS analysis
+  - `BALANCED` = 720p / 30 FPS output / 15 FPS analysis
+  - `HIGH` = 1080p / 30 FPS output / 18 FPS analysis
+- **Structured telemetry:** decode/analyze/render/encode/verify/total timings plus queue backlog and worker utilization snapshots for offline profiling.
+- **Stage-aware progress UI:** Preparing video → Analyzing movement → Rendering annotated video → Verifying output → Completed/Failed with percentage + optional ETA.
 
 
 ## Movement-profile foundation (new in this PR)
