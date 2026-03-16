@@ -99,6 +99,12 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Session breakdown", style = MaterialTheme.typography.headlineSmall)
+            if (session == null) {
+                Text(
+                    "Session details are loading or unavailable. Some actions may be disabled.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -184,11 +190,10 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            val currentSession = session
             if (replayDisplayState == ReplayDisplayState.RAW_ONLY && !rawUri.isNullOrBlank()) {
                 Text("Annotated replay unavailable. Raw replay is available.")
                 if (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
-                    Text("Reason: ${currentSession.annotatedExportFailureReason.orEmpty()}")
+                    Text("Reason: ${session?.annotatedExportFailureReason ?: "Unavailable"}")
                 }
             }
             if (replayDisplayState == ReplayDisplayState.INCONSISTENT_STATE) {
