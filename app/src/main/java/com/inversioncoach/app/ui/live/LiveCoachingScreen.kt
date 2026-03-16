@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.inversioncoach.app.BuildConfig
 import com.inversioncoach.app.camera.CameraSessionManager
 import com.inversioncoach.app.coaching.VoiceCoach
 import com.inversioncoach.app.model.DrillType
@@ -48,6 +49,8 @@ import com.inversioncoach.app.motion.DrillCatalog
 import com.inversioncoach.app.motion.RepMode
 import com.inversioncoach.app.overlay.OverlayRenderer
 import com.inversioncoach.app.pose.PoseAnalyzer
+import com.inversioncoach.app.recording.AnnotatedExportPipeline
+import com.inversioncoach.app.recording.AnnotatedVideoCompositor
 import com.inversioncoach.app.recording.SessionRecorder
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
@@ -72,6 +75,11 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             cueEngine = ServiceLocator.cueEngine(),
             repository = repository,
             options = options,
+            annotatedExportPipeline = AnnotatedExportPipeline(
+                repository = repository,
+                compositor = AnnotatedVideoCompositor(context),
+                debugValidationEnabled = BuildConfig.DEBUG,
+            ),
         )
     }
     val uiState by vm.uiState.collectAsState()

@@ -1,5 +1,6 @@
 package com.inversioncoach.app.recording
 
+import android.util.Log
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.JointPoint
@@ -9,6 +10,7 @@ import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.storage.repository.SessionRepository
 import kotlin.math.abs
 
+private const val TAG = "AnnotatedExportPipeline"
 
 data class AnnotatedOverlayFrame(
     val timestampMs: Long,
@@ -72,6 +74,8 @@ class OverlayStabilizer {
 
 class AnnotatedExportPipeline(
     private val repository: SessionRepository,
+    private val compositor: AnnotatedVideoCompositor,
+    private val debugValidationEnabled: Boolean = false,
 ) {
     suspend fun export(
         sessionId: Long,
@@ -85,14 +89,25 @@ class AnnotatedExportPipeline(
             return null
         }
         repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.PROCESSING)
-        // Native export scaffolding. We intentionally keep source media pipeline deterministic
-        // by deriving all overlay frames before encode and persist one annotated asset.
-        // Current implementation persists the rendered export target from raw source URI.
-        val persisted = repository.saveAnnotatedVideoBlob(sessionId, rawVideoUri)
+        Log.d(TAG, "export_start sessionId=$sessionId overlayFrames=${overlayFrames.size}")
+        val renderedUri = compositor.export(
+            rawVideoUri = rawVideoUri,
+            drillType = drillType,
+            drillCameraSide = drillCameraSide,
+            overlayFrames = overlayFrames,
+            debugValidation = debugValidationEnabled,
+        )
+        if (renderedUri.isNullOrBlank()) {
+            repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.FAILED)
+            Log.w(TAG, "export_failure sessionId=$sessionId reason=rendered_uri_empty")
+            return null
+        }
+        val persisted = repository.saveAnnotatedVideoBlob(sessionId, renderedUri)
         repository.updateAnnotatedExportStatus(
             sessionId,
             if (persisted.isNullOrBlank()) AnnotatedExportStatus.FAILED else AnnotatedExportStatus.READY,
         )
+        Log.d(TAG, "export_complete sessionId=$sessionId persistedUri=$persisted")
         return persisted
     }
 }
