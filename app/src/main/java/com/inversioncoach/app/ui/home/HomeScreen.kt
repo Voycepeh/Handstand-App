@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -47,6 +48,7 @@ fun HomeScreen(
     onHistory: () -> Unit,
     onProgress: () -> Unit,
     onSettings: () -> Unit,
+    onUploadVideo: () -> Unit,
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
@@ -61,6 +63,7 @@ fun HomeScreen(
             onHistory = onHistory,
             onProgress = onProgress,
             onSettings = onSettings,
+            onUploadVideo = onUploadVideo,
             latestSessionStartMs = latestSession?.startedAtMs ?: 0L,
             latestSessionDurationMs = computeSessionDurationMs(latestSession?.startedAtMs ?: 0L, latestSession?.completedAtMs ?: 0L),
         )
@@ -75,6 +78,7 @@ private fun Content(
     onHistory: () -> Unit,
     onProgress: () -> Unit,
     onSettings: () -> Unit,
+    onUploadVideo: () -> Unit,
     latestSessionStartMs: Long,
     latestSessionDurationMs: Long,
 ) {
@@ -107,6 +111,14 @@ private fun Content(
             subtitle = "Guided drill-specific coaching",
             icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
             onClick = onStart,
+        )
+
+
+        ActionTile(
+            label = "Upload Video",
+            subtitle = "Analyze a recorded video with pose overlay",
+            icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
+            onClick = onUploadVideo,
         )
 
         ActionTile(
