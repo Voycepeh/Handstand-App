@@ -10,16 +10,28 @@ class FreestyleOrientationClassifier {
         val hipSeparation = horizontalGap(lookup, "left_hip", "right_hip")
         val bilateralSpread = maxOf(shoulderSeparation, hipSeparation)
 
-        if (bilateralSpread >= 0.16f) {
-            return FreestyleViewMode.BILATERAL_VIEW
+        if (bilateralSpread >= BILATERAL_SPREAD_THRESHOLD) {
+            return classifyBilateralFacing(lookup)
         }
 
         val leftVisibility = sideVisibilityScore(lookup, "left")
         val rightVisibility = sideVisibilityScore(lookup, "right")
         return if (leftVisibility >= rightVisibility) {
-            FreestyleViewMode.LEFT_SIDE_VIEW
+            FreestyleViewMode.LEFT_PROFILE
         } else {
-            FreestyleViewMode.RIGHT_SIDE_VIEW
+            FreestyleViewMode.RIGHT_PROFILE
+        }
+    }
+
+    private fun classifyBilateralFacing(lookup: Map<String, JointPoint>): FreestyleViewMode {
+        val faceVisibility = FACE_LANDMARKS
+            .sumOf { (lookup[it]?.visibility ?: 0f).toDouble() }
+            .toFloat()
+
+        return if (faceVisibility >= FRONT_FACE_VISIBILITY_THRESHOLD) {
+            FreestyleViewMode.FRONT
+        } else {
+            FreestyleViewMode.BACK
         }
     }
 
@@ -34,4 +46,18 @@ class FreestyleOrientationClassifier {
         listOf("shoulder", "elbow", "wrist", "hip", "knee", "ankle")
             .sumOf { (lookup["${prefix}_$it"]?.visibility ?: 0f).toDouble() }
             .toFloat()
+
+    companion object {
+        private const val BILATERAL_SPREAD_THRESHOLD = 0.16f
+        private const val FRONT_FACE_VISIBILITY_THRESHOLD = 1.25f
+        private val FACE_LANDMARKS = listOf(
+            "nose",
+            "left_eye",
+            "right_eye",
+            "left_ear",
+            "right_ear",
+            "mouth_left",
+            "mouth_right",
+        )
+    }
 }

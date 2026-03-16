@@ -98,17 +98,18 @@ private class FreestyleOverlayStrategy {
         val keptNames = buildSet {
             add("nose")
             when (viewMode) {
-                FreestyleViewMode.BILATERAL_VIEW -> {
+                FreestyleViewMode.FRONT,
+                FreestyleViewMode.BACK -> {
                     SELECTED_JOINTS.filter { it != "nose" }.forEach { base ->
                         add("left_$base")
                         add("right_$base")
                     }
                 }
 
-                FreestyleViewMode.LEFT_SIDE_VIEW -> SELECTED_JOINTS.filter { it != "nose" }
+                FreestyleViewMode.LEFT_PROFILE -> SELECTED_JOINTS.filter { it != "nose" }
                     .forEach { base -> add("left_$base") }
 
-                FreestyleViewMode.RIGHT_SIDE_VIEW -> SELECTED_JOINTS.filter { it != "nose" }
+                FreestyleViewMode.RIGHT_PROFILE -> SELECTED_JOINTS.filter { it != "nose" }
                     .forEach { base -> add("right_$base") }
             }
         }
@@ -116,14 +117,15 @@ private class FreestyleOverlayStrategy {
         val filtered = keptNames.mapNotNull { visible[it] }
         val connections = buildList {
             when (viewMode) {
-                FreestyleViewMode.BILATERAL_VIEW -> {
+                FreestyleViewMode.FRONT,
+                FreestyleViewMode.BACK -> {
                     addAll(sideConnections("left"))
                     addAll(sideConnections("right"))
                     addAll(BILATERAL_CONNECTORS)
                 }
 
-                FreestyleViewMode.LEFT_SIDE_VIEW -> addAll(sideConnections("left"))
-                FreestyleViewMode.RIGHT_SIDE_VIEW -> addAll(sideConnections("right"))
+                FreestyleViewMode.LEFT_PROFILE -> addAll(sideConnections("left"))
+                FreestyleViewMode.RIGHT_PROFILE -> addAll(sideConnections("right"))
             }
         }.filter { (from, to) -> visible[from] != null && visible[to] != null }
 

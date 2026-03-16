@@ -1,9 +1,10 @@
 package com.inversioncoach.app.overlay
 
 enum class FreestyleViewMode {
-    BILATERAL_VIEW,
-    LEFT_SIDE_VIEW,
-    RIGHT_SIDE_VIEW,
+    FRONT,
+    BACK,
+    LEFT_PROFILE,
+    RIGHT_PROFILE,
 }
 
 enum class DrillCameraSide {

@@ -47,6 +47,8 @@ import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.motion.DrillCatalog
 import com.inversioncoach.app.motion.RepMode
+import com.inversioncoach.app.overlay.FreestyleOrientationClassifier
+import com.inversioncoach.app.overlay.FreestyleViewMode
 import com.inversioncoach.app.overlay.OverlayRenderer
 import com.inversioncoach.app.pose.PoseAnalyzer
 import com.inversioncoach.app.recording.AnnotatedExportPipeline
@@ -94,6 +96,25 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     val sessionRecorder = remember(context) { SessionRecorder(context) }
     val currentSessionTitle by rememberUpdatedState(newValue = vm.sessionTitle)
     val showDetailedStats = rememberSaveable { mutableStateOf(false) }
+
+    val freestyleOrientationClassifier = remember { FreestyleOrientationClassifier() }
+    val freestyleViewLabel = remember(smoothed, uiState.sessionMode) {
+        if (uiState.sessionMode != SessionMode.FREESTYLE) {
+            null
+        } else {
+            val joints = smoothed?.joints.orEmpty()
+            if (joints.isEmpty()) {
+                "Detecting View"
+            } else {
+                when (freestyleOrientationClassifier.classify(joints)) {
+                    FreestyleViewMode.FRONT -> "Front View"
+                    FreestyleViewMode.BACK -> "Back View"
+                    FreestyleViewMode.LEFT_PROFILE -> "Left Profile"
+                    FreestyleViewMode.RIGHT_PROFILE -> "Right Profile"
+                }
+            }
+        }
+    }
 
     fun stopRecordingsAndPersist() {
         sessionRecorder.stopRecording()
@@ -225,7 +246,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Side-view • ${drillType.displayName}", color = Color.White, fontSize = 18.sp)
+                Text("${freestyleViewLabel ?: "Side View"} • ${drillType.displayName}", color = Color.White, fontSize = 18.sp)
                 TextButton(onClick = { showDetailedStats.value = !showDetailedStats.value }) {
                     Text(if (showDetailedStats.value) "Less" else "More", color = Color.White, fontSize = 12.sp)
                 }
