@@ -14,6 +14,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,7 +37,7 @@ import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigateHome: () -> Unit) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
 
@@ -52,6 +53,8 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
     var customGoodForm by remember { mutableIntStateOf(72) }
     var customRepThreshold by remember { mutableIntStateOf(70) }
     var customHoldThreshold by remember { mutableIntStateOf(72) }
+    var showSaveConfirmation by remember { mutableStateOf(false) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         repository.observeSettings().collect { s ->
@@ -155,33 +158,67 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit) {
                 }
             }
 
-            Button(
-                onClick = {
-                    scope.launch {
-                        repository.saveSettings(
-                            UserSettings(
-                                cueFrequencySeconds = cueFrequency,
-                                overlayIntensity = overlay,
-                                debugOverlayEnabled = debug,
-                                localOnlyPrivacyMode = localOnlyPrivacyMode,
-                                maxStorageMb = maxStorageMb,
-                                minSessionDurationSeconds = minSessionDurationSeconds,
-                                alignmentStrictness = alignmentStrictness,
-                                customLineDeviation = customLineDeviation,
-                                customMinimumGoodFormScore = customGoodForm,
-                                customRepAcceptanceThreshold = customRepThreshold,
-                                customHoldAlignedThreshold = customHoldThreshold,
-                            ),
-                        )
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Save settings") }
+            Button(onClick = { showSaveConfirmation = true }, modifier = Modifier.fillMaxWidth()) { Text("Save settings") }
             Button(onClick = onDeveloperTuning, modifier = Modifier.fillMaxWidth()) { Text("Developer threshold tuning") }
-            Button(
-                onClick = { scope.launch { repository.clearAllSessions() } },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Delete all sessions") }
+            Button(onClick = { showDeleteConfirmation = true }, modifier = Modifier.fillMaxWidth()) { Text("Delete all sessions") }
+        }
+
+        if (showSaveConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showSaveConfirmation = false },
+                title = { Text("Save settings?") },
+                text = { Text("This will apply your updated preferences and return you to the home page.") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showSaveConfirmation = false
+                            scope.launch {
+                                repository.saveSettings(
+                                    UserSettings(
+                                        cueFrequencySeconds = cueFrequency,
+                                        overlayIntensity = overlay,
+                                        debugOverlayEnabled = debug,
+                                        localOnlyPrivacyMode = localOnlyPrivacyMode,
+                                        maxStorageMb = maxStorageMb,
+                                        minSessionDurationSeconds = minSessionDurationSeconds,
+                                        alignmentStrictness = alignmentStrictness,
+                                        customLineDeviation = customLineDeviation,
+                                        customMinimumGoodFormScore = customGoodForm,
+                                        customRepAcceptanceThreshold = customRepThreshold,
+                                        customHoldAlignedThreshold = customHoldThreshold,
+                                    ),
+                                )
+                                onNavigateHome()
+                            }
+                        },
+                    ) { Text("Save") }
+                },
+                dismissButton = {
+                    Button(onClick = { showSaveConfirmation = false }) { Text("Cancel") }
+                },
+            )
+        }
+
+        if (showDeleteConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirmation = false },
+                title = { Text("Delete all sessions?") },
+                text = { Text("This action cannot be undone. All saved sessions will be removed and you will return to the home page.") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showDeleteConfirmation = false
+                            scope.launch {
+                                repository.clearAllSessions()
+                                onNavigateHome()
+                            }
+                        },
+                    ) { Text("Delete") }
+                },
+                dismissButton = {
+                    Button(onClick = { showDeleteConfirmation = false }) { Text("Cancel") }
+                },
+            )
         }
     }
 }

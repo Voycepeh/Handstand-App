@@ -152,6 +152,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
                 onDeveloperTuning = { navController.navigate(Route.DevTuning.value) },
+                onNavigateHome = { navController.popBackStack(Route.Home.value, false) },
             )
         }
         composable(Route.DevTuning.value) { DeveloperTuningScreen(onBack = { navController.popBackStack() }) }
