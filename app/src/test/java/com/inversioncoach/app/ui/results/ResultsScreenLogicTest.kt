@@ -63,4 +63,9 @@ class ResultsScreenLogicTest {
             ),
         )
     }
+
+    @Test
+    fun etaFormattingHandlesMissingValue() {
+        assertEquals("calculating…", formatEta(null))
+    }
 }

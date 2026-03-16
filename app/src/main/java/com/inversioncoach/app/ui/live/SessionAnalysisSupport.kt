@@ -3,12 +3,16 @@ package com.inversioncoach.app.ui.live
 import android.net.Uri
 import android.util.Log
 import com.inversioncoach.app.biomechanics.DrillModeConfig
+import com.inversioncoach.app.model.AnnotatedExportFailureReason
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.DrillScore
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.PoseFrame
+import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.overlay.DrillCameraSide
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
@@ -334,6 +338,28 @@ data class PreferredReplayUri(
     val source: String,
 )
 
+enum class ReplayDisplayState {
+    RAW_ONLY,
+    ANNOTATED_PROCESSING,
+    ANNOTATED_READY,
+    ANNOTATED_FAILED,
+    INCONSISTENT_STATE,
+}
+
+enum class ExportProgressStage(val label: String) {
+    FINALIZING_RECORDING("Finalizing recording"),
+    SAVING_RAW_VIDEO("Saving raw video"),
+    BUILDING_ANNOTATED_REPLAY("Building annotated replay"),
+    VERIFYING_OUTPUT("Verifying output"),
+    DONE("Done"),
+}
+
+data class ExportProgressSnapshot(
+    val stage: ExportProgressStage,
+    val percent: Int,
+    val etaMs: Long?,
+)
+
 object SessionSummaryComputer {
     fun compute(
         validFrameScores: List<Int>,
@@ -404,6 +430,29 @@ fun resolvePreferredReplayUri(
     return PreferredReplayUri(uri = null, source = "none")
 }
 
+fun deriveReplayDisplayState(session: SessionRecord?, hasActiveExportJob: Boolean): ReplayDisplayState {
+    if (session == null) return ReplayDisplayState.INCONSISTENT_STATE
+    val annotatedUri = session.annotatedFinalUri ?: session.annotatedVideoUri
+    val rawUri = session.rawFinalUri ?: session.rawVideoUri ?: session.rawMasterUri
+    val annotatedReadable = mediaAssetExists(annotatedUri)
+    val rawReadable = mediaAssetExists(rawUri)
+    val hasInconsistentValues =
+        (session.rawPersistStatus == RawPersistStatus.SUCCEEDED &&
+            session.rawPersistFailureReason == AnnotatedExportFailureReason.RAW_SAVE_FAILED.name) ||
+            (session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING && !session.annotatedExportFailureReason.isNullOrBlank()) ||
+            (session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && !annotatedReadable)
+    if (hasInconsistentValues) return ReplayDisplayState.INCONSISTENT_STATE
+
+    return when {
+        session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING && hasActiveExportJob -> ReplayDisplayState.ANNOTATED_PROCESSING
+        session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && annotatedReadable -> ReplayDisplayState.ANNOTATED_READY
+        session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED && rawReadable -> ReplayDisplayState.RAW_ONLY
+        session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> ReplayDisplayState.ANNOTATED_FAILED
+        rawReadable -> ReplayDisplayState.RAW_ONLY
+        else -> ReplayDisplayState.INCONSISTENT_STATE
+    }
+}
+
 object SessionDiagnostics {
     private const val TAG = "SessionDiagnostics"
 
@@ -431,14 +480,24 @@ object SessionDiagnostics {
 
 object AnnotatedExportJobTracker {
     private val activeSessionIds = ConcurrentHashMap.newKeySet<Long>()
+    private val progressBySessionId = MutableStateFlow<Map<Long, ExportProgressSnapshot>>(emptyMap())
 
     fun markStarted(sessionId: Long) {
         activeSessionIds += sessionId
     }
 
+    fun updateProgress(sessionId: Long, stage: ExportProgressStage, percent: Int, etaMs: Long?) {
+        progressBySessionId.value = progressBySessionId.value.toMutableMap().apply {
+            put(sessionId, ExportProgressSnapshot(stage = stage, percent = percent.coerceIn(0, 100), etaMs = etaMs))
+        }
+    }
+
     fun markFinished(sessionId: Long) {
         activeSessionIds -= sessionId
+        progressBySessionId.value = progressBySessionId.value.toMutableMap().apply { remove(sessionId) }
     }
 
     fun isActive(sessionId: Long): Boolean = activeSessionIds.contains(sessionId)
+
+    fun progressFor(sessionId: Long) = progressBySessionId.map { it[sessionId] }
 }

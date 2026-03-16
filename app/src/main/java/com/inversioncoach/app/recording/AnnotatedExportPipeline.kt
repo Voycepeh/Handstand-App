@@ -90,9 +90,9 @@ class AnnotatedExportPipeline(
     private val updateExportStatus: suspend (Long, AnnotatedExportStatus) -> Unit,
     private val verifyMedia: (String?) -> MediaVerificationResult = { uri -> MediaVerificationHelper.verify(uri) },
     private val exportTimeoutMs: Long = EXPORT_TIMEOUT_MS,
-    private val renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, List<AnnotatedOverlayFrame>, Boolean) -> String? =
-        { rawUri, drill, side, frames, debug ->
-            compositor.export(rawUri, drill, side, frames, debug)
+    private val renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, List<AnnotatedOverlayFrame>, Boolean, (Int, Int) -> Unit) -> String? =
+        { rawUri, drill, side, frames, debug, onProgress ->
+            compositor.export(rawUri, drill, side, frames, debug, onProgress)
         },
 ) {
 
@@ -124,7 +124,7 @@ class AnnotatedExportPipeline(
         updateExportStatus: suspend (Long, AnnotatedExportStatus) -> Unit,
         verifyMedia: (String?) -> MediaVerificationResult = { uri -> MediaVerificationHelper.verify(uri) },
         exportTimeoutMs: Long = EXPORT_TIMEOUT_MS,
-        renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, List<AnnotatedOverlayFrame>, Boolean) -> String?,
+        renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, List<AnnotatedOverlayFrame>, Boolean, (Int, Int) -> Unit) -> String?,
     ) : this(
         compositor = throw IllegalStateException("Test constructor requires renderAnnotatedVideo"),
         debugValidationEnabled = false,
@@ -141,6 +141,7 @@ class AnnotatedExportPipeline(
         drillType: DrillType,
         drillCameraSide: DrillCameraSide,
         overlayFrames: List<AnnotatedOverlayFrame>,
+        onRenderProgress: (Int, Int) -> Unit = { _, _ -> },
     ): ExportResult {
         if (overlayFrames.isEmpty()) {
             updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
@@ -164,6 +165,7 @@ class AnnotatedExportPipeline(
                     drillCameraSide,
                     overlayFrames,
                     debugValidationEnabled,
+                    onRenderProgress,
                 )
             }
         } catch (_: CancellationException) {

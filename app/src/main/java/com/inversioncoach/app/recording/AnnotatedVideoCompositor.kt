@@ -11,6 +11,7 @@ import android.media.MediaMuxer
 import android.net.Uri
 import android.util.Log
 import com.inversioncoach.app.model.DrillType
+import com.inversioncoach.app.model.JointPoint
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.overlay.OverlayDrawingFrame
 import com.inversioncoach.app.overlay.OverlayFrameRenderer
@@ -18,9 +19,12 @@ import com.inversioncoach.app.overlay.OverlayGeometry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val TAG = "AnnotatedVideoCompositor"
+private const val EXPORT_FPS = 30
+private const val MAX_SAMPLE_DELTA_MS = 200L
 
 class AnnotatedVideoCompositor(
     private val context: Context,
@@ -31,6 +35,7 @@ class AnnotatedVideoCompositor(
         drillCameraSide: DrillCameraSide,
         overlayFrames: List<AnnotatedOverlayFrame>,
         debugValidation: Boolean = false,
+        onProgress: (Int, Int) -> Unit = { _, _ -> },
     ): String? = withContext(Dispatchers.IO) {
         if (overlayFrames.isEmpty()) return@withContext null
         val retriever = MediaMetadataRetriever()
@@ -44,19 +49,19 @@ class AnnotatedVideoCompositor(
             val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 720
             val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 1280
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-            val frameRate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toFloatOrNull()?.roundToInt()
-                ?.coerceIn(15, 60) ?: 30
+            val sourceFps = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toFloatOrNull()?.roundToInt()
+                ?.coerceIn(15, 60) ?: EXPORT_FPS
             if (durationMs <= 0L) {
                 Log.w(TAG, "Cannot export annotated video because duration metadata is unavailable")
                 return@withContext null
             }
 
-            Log.d(TAG, "export_start uri=$rawVideoUri width=$width height=$height durationMs=$durationMs fps=$frameRate")
+            Log.d(TAG, "export_start uri=$rawVideoUri width=$width height=$height durationMs=$durationMs sourceFps=$sourceFps exportFps=$EXPORT_FPS")
             val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
                 setInteger(MediaFormat.KEY_BIT_RATE, (width * height * 6).coerceAtLeast(1_500_000))
-                setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
+                setInteger(MediaFormat.KEY_FRAME_RATE, EXPORT_FPS)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             }
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -96,10 +101,11 @@ class AnnotatedVideoCompositor(
                 }
             }
 
-            val totalFrames = ((durationMs / 1000f) * frameRate).roundToInt().coerceAtLeast(1)
+            val totalFrames = ((durationMs / 1000f) * EXPORT_FPS).roundToInt().coerceAtLeast(1)
+            val timeline = OverlayTimeline(overlayFrames.sortedBy { it.timestampMs })
             val timestampStart = overlayFrames.first().timestampMs
             repeat(totalFrames) { idx ->
-                val frameTimeUs = (idx * 1_000_000L) / frameRate
+                val frameTimeUs = (idx * 1_000_000L) / EXPORT_FPS
                 val frameTimeMs = frameTimeUs / 1000L
                 val bitmap = retriever.getFrameAtTime(frameTimeUs, MediaMetadataRetriever.OPTION_CLOSEST) ?: return@repeat
                 val canvas = inputSurface.lockCanvas(null)
@@ -108,14 +114,17 @@ class AnnotatedVideoCompositor(
                     bitmap = bitmap,
                     width = width,
                     height = height,
-                    overlay = overlayFor(overlayFrames, timestampStart + frameTimeMs),
+                    overlay = timeline.overlayAt(timestampStart + frameTimeMs),
                     drillType = drillType,
                     drillCameraSide = drillCameraSide,
                 )
                 inputSurface.unlockCanvasAndPost(canvas)
                 bitmap.recycle()
-                if (idx % frameRate == 0) {
+                if (idx % EXPORT_FPS == 0) {
                     Log.d(TAG, "frame_render_progress frame=${idx + 1}/$totalFrames timeMs=$frameTimeMs")
+                }
+                if (idx % 3 == 0 || idx == totalFrames - 1) {
+                    onProgress(idx + 1, totalFrames)
                 }
                 drain(endOfStream = false)
             }
@@ -188,9 +197,6 @@ class AnnotatedVideoCompositor(
         )
     }
 
-
-
-
     private fun verifyReadableOutput(annotatedVideoUri: String): Boolean {
         val retriever = MediaMetadataRetriever()
         return try {
@@ -244,13 +250,64 @@ class AnnotatedVideoCompositor(
         }
     }
 
-    private fun overlayFor(frames: List<AnnotatedOverlayFrame>, targetTimestampMs: Long): AnnotatedOverlayFrame? {
-        val nearest = frames.minByOrNull { kotlin.math.abs(it.timestampMs - targetTimestampMs) } ?: return null
-        val delta = kotlin.math.abs(nearest.timestampMs - targetTimestampMs)
-        if (delta > 200L) {
-            Log.d(TAG, "missing_pose_frame timestampMs=$targetTimestampMs nearestDeltaMs=$delta")
-            return null
+    private class OverlayTimeline(frames: List<AnnotatedOverlayFrame>) {
+        private val samples = frames.sortedBy { it.timestampMs }
+        private var lowerIndex = 0
+
+        fun overlayAt(targetTimestampMs: Long): AnnotatedOverlayFrame? {
+            if (samples.isEmpty()) return null
+            while (lowerIndex < samples.lastIndex && samples[lowerIndex + 1].timestampMs <= targetTimestampMs) {
+                lowerIndex++
+            }
+            val previous = samples[lowerIndex]
+            val next = samples.getOrNull(lowerIndex + 1)
+            val nearest = when {
+                next == null -> previous
+                abs(previous.timestampMs - targetTimestampMs) <= abs(next.timestampMs - targetTimestampMs) -> previous
+                else -> next
+            }
+            if (abs(nearest.timestampMs - targetTimestampMs) > MAX_SAMPLE_DELTA_MS) {
+                Log.d(TAG, "missing_pose_frame timestampMs=$targetTimestampMs nearestDeltaMs=${abs(nearest.timestampMs - targetTimestampMs)}")
+                return null
+            }
+            if (next == null || previous.timestampMs == next.timestampMs) return nearest
+            if (targetTimestampMs <= previous.timestampMs) return previous
+            if (targetTimestampMs >= next.timestampMs) return next
+            val span = (next.timestampMs - previous.timestampMs).toFloat().coerceAtLeast(1f)
+            val t = ((targetTimestampMs - previous.timestampMs).toFloat() / span).coerceIn(0f, 1f)
+            return interpolate(previous, next, t)
         }
-        return nearest
+
+        private fun interpolate(previous: AnnotatedOverlayFrame, next: AnnotatedOverlayFrame, t: Float): AnnotatedOverlayFrame {
+            val prevByName = previous.smoothedLandmarks.associateBy { it.name }
+            val nextByName = next.smoothedLandmarks.associateBy { it.name }
+            val names = (prevByName.keys + nextByName.keys).sorted()
+            val interpolated = names.mapNotNull { name ->
+                val a = prevByName[name]
+                val b = nextByName[name]
+                when {
+                    a != null && b != null -> JointPoint(
+                        name = name,
+                        x = lerp(a.x, b.x, t),
+                        y = lerp(a.y, b.y, t),
+                        z = lerp(a.z, b.z, t),
+                        visibility = lerp(a.visibility, b.visibility, t),
+                    )
+                    a != null -> a
+                    else -> b
+                }
+            }
+            return previous.copy(
+                timestampMs = lerp(previous.timestampMs.toFloat(), next.timestampMs.toFloat(), t).toLong(),
+                landmarks = interpolated,
+                smoothedLandmarks = interpolated,
+                confidence = lerp(previous.confidence, next.confidence, t),
+                bodyVisible = previous.bodyVisible || next.bodyVisible,
+                showSkeleton = previous.showSkeleton || next.showSkeleton,
+                showIdealLine = previous.showIdealLine || next.showIdealLine,
+            )
+        }
+
+        private fun lerp(a: Float, b: Float, t: Float): Float = a + ((b - a) * t)
     }
 }
