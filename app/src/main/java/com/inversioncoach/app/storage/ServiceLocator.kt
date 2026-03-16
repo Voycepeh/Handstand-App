@@ -6,8 +6,6 @@ import com.inversioncoach.app.biomechanics.AlignmentMetricsEngine
 import com.inversioncoach.app.coaching.CueEngine
 import com.inversioncoach.app.storage.db.InversionCoachDatabase
 import com.inversioncoach.app.storage.repository.SessionRepository
-import com.inversioncoach.app.summary.RecommendationEngine
-import com.inversioncoach.app.summary.SummaryGenerator
 
 object ServiceLocator {
     @Volatile
@@ -32,8 +30,6 @@ object ServiceLocator {
             SessionBlobStorage(context.applicationContext),
         )
     }
-
-    fun summaryGenerator(): SummaryGenerator = SummaryGenerator(RecommendationEngine())
 
     fun metricsEngine(): AlignmentMetricsEngine = AlignmentMetricsEngine()
 
