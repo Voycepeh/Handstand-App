@@ -33,7 +33,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.model.IssueEvent
-import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.sessionMode
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.storage.ServiceLocator
@@ -46,10 +45,7 @@ import com.inversioncoach.app.ui.common.buildSessionSummaryDisplay
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.mediaAssetExists
 import com.inversioncoach.app.ui.live.selectReplayAsset
-import com.inversioncoach.app.ui.live.AnnotatedExportJobTracker
-import com.inversioncoach.app.ui.live.ReplayDisplayState
 import com.inversioncoach.app.ui.live.SessionDiagnostics
-import com.inversioncoach.app.ui.live.deriveReplayDisplayState
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -61,9 +57,6 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val issueTimeline by repository.observeIssueTimeline(sessionId).collectAsState(initial = emptyList())
     val replaySelection = remember(session) { selectReplayAsset(session) }
     val rawUri = session?.rawVideoUri?.takeIf(::mediaAssetExists)
-    val hasActiveExportJob = AnnotatedExportJobTracker.isActive(sessionId)
-    val replayDisplayState = remember(session, hasActiveExportJob) { deriveReplayDisplayState(session, hasActiveExportJob) }
-    val exportProgress by AnnotatedExportJobTracker.progressFor(sessionId).collectAsState(initial = null)
     val hasReplay = replaySelection.uri != null
     val showRawVideoButton = shouldShowRawVideoButton(
         replayUri = replaySelection.uri,
@@ -78,22 +71,13 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val sessionSummaryDisplay = remember(session) { buildSessionSummaryDisplay(session) }
     val sessionMode = session?.sessionMode()
 
-    LaunchedEffect(sessionId, session?.annotatedExportStatus, session?.annotatedVideoUri) {
+    LaunchedEffect(sessionId) {
         notes = repository.readSessionNotes(sessionId).orEmpty()
-        val isActiveJob = AnnotatedExportJobTracker.isActive(sessionId)
-        if (shouldReconcileStaleProcessing(
-                status = session?.annotatedExportStatus,
-                annotatedVideoUri = session?.annotatedVideoUri,
-                hasActiveExportJob = isActiveJob,
-            )
-        ) {
-            repository.reconcileStaleProcessingState(sessionId, hasActiveExportJob = isActiveJob)
-        }
         repository.reconcileRawPersistState(sessionId)
     }
 
 
-    LaunchedEffect(sessionId, replaySelection.uri, replaySelection.label, replayDisplayState) {
+    LaunchedEffect(sessionId, replaySelection.uri, replaySelection.label) {
         SessionDiagnostics.logStructured(
             event = "results_source_selection",
             sessionId = sessionId,
@@ -101,7 +85,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             rawUri = session?.rawVideoUri,
             annotatedUri = session?.annotatedVideoUri,
             overlayFrameCount = session?.overlayFrameCount ?: 0,
-            failureReason = "selection=${replaySelection.label};state=$replayDisplayState;jobActive=${AnnotatedExportJobTracker.isActive(sessionId)}",
+            failureReason = "selection=${replaySelection.label}",
         )
     }
 
@@ -198,32 +182,6 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             if (!hasReplay) {
                 Text("No replay asset is available for this session.")
             }
-            if (replayDisplayState == ReplayDisplayState.ANNOTATED_PROCESSING || replayDisplayState == ReplayDisplayState.ANNOTATED_PROCESSING_SLOW) {
-                val progress = exportProgress
-                val persistedPercent = session?.annotatedExportPercent ?: 0
-                val livePercent = progress?.percent ?: persistedPercent
-                val persistedEtaMs = session?.annotatedExportEtaSeconds?.toLong()?.times(1000L)
-                val eta = progress?.etaMs ?: persistedEtaMs
-                val elapsedMs = session?.annotatedExportElapsedMs ?: 0L
-                val stageLabel = progress?.stage?.label ?: session?.annotatedExportStage?.name?.lowercase()?.replace('_', ' ')?.replaceFirstChar { it.uppercase() } ?: "Processing"
-                val statusLabel = if (replayDisplayState == ReplayDisplayState.ANNOTATED_PROCESSING_SLOW) "Generating annotated replay… (slow)" else "Generating annotated replay…"
-                Text(statusLabel)
-                Text("$stageLabel • ${livePercent}%")
-                Text(
-                    "Elapsed: ${formatElapsedDuration(elapsedMs)} • ETA: ${formatEta(eta)}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text("Showing raw replay while annotated video is being generated.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (replayDisplayState == ReplayDisplayState.RAW_ONLY && !rawUri.isNullOrBlank()) {
-                Text("Showing raw replay while annotated replay is unavailable.")
-                if (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0 && session?.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED) {
-                    Text("Reason: ${session?.annotatedExportFailureReason ?: "Unavailable"}")
-                }
-            }
-            if (replayDisplayState == ReplayDisplayState.INCONSISTENT_STATE) {
-                Text("Replay state is inconsistent. Please reopen this session.")
-            }
             Text(
                 replayAvailabilityBadge(replaySelection.label),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -240,12 +198,9 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             if (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
                 Text("replay source selected: ${if (replaySelection.label == "Annotated replay") "annotated" else if (replaySelection.label == "Raw replay") "raw" else "none"}")
                 Text("rawPersistStatus: ${session?.rawPersistStatus}")
-                Text("annotatedExportStatus: ${session?.annotatedExportStatus}")
-                Text("annotatedExportFailureReason: ${session?.annotatedExportFailureReason.orEmpty()}")
                 Text("rawVideoUri: ${session?.rawVideoUri.orEmpty()}")
                 Text("annotatedVideoUri: ${session?.annotatedVideoUri.orEmpty()}")
                 Text("overlay frame count: ${session?.overlayFrameCount ?: 0}")
-                Text("derivedReplayDisplayState: $replayDisplayState")
             }
             Button(
                 onClick = {
@@ -299,23 +254,6 @@ internal fun shouldShowRawVideoButton(replayUri: String?, rawUri: String?): Bool
 
 internal fun replayAvailabilityBadge(replayLabel: String): String =
     if (replayLabel == "Annotated replay") "Annotated Replay Ready" else "Raw Only"
-
-internal fun shouldReconcileStaleProcessing(
-    status: AnnotatedExportStatus?,
-    annotatedVideoUri: String?,
-    hasActiveExportJob: Boolean,
-): Boolean =
-    (status == AnnotatedExportStatus.PROCESSING || status == AnnotatedExportStatus.PROCESSING_SLOW) &&
-        annotatedVideoUri.isNullOrBlank() &&
-        !hasActiveExportJob
-
-internal fun formatEta(etaMs: Long?): String {
-    if (etaMs == null || etaMs <= 0L) return "calculating…"
-    val totalSec = (etaMs / 1000L).coerceAtLeast(1L)
-    val min = totalSec / 60L
-    val sec = totalSec % 60L
-    return if (min > 0L) "${min}m ${sec}s" else "${sec}s"
-}
 
 
 internal fun formatElapsedDuration(elapsedMs: Long?): String {

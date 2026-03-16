@@ -1,8 +1,7 @@
 package com.inversioncoach.app.ui.results
 
-import com.inversioncoach.app.model.AnnotatedExportStatus
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -40,44 +39,6 @@ class ResultsScreenLogicTest {
     @Test
     fun replayBadgeShowsRawOnlyWhenPrimaryReplayIsRaw() {
         assertEquals("Raw Only", replayAvailabilityBadge("Raw replay"))
-    }
-
-    @Test
-    fun staleProcessingStateGetsReconciled() {
-        assertTrue(
-            shouldReconcileStaleProcessing(
-                status = AnnotatedExportStatus.PROCESSING,
-                annotatedVideoUri = null,
-                hasActiveExportJob = false,
-            ),
-        )
-    }
-
-    @Test
-    fun staleSlowProcessingStateGetsReconciled() {
-        assertTrue(
-            shouldReconcileStaleProcessing(
-                status = AnnotatedExportStatus.PROCESSING_SLOW,
-                annotatedVideoUri = null,
-                hasActiveExportJob = false,
-            ),
-        )
-    }
-
-    @Test
-    fun activeProcessingJobIsNotReconciled() {
-        assertFalse(
-            shouldReconcileStaleProcessing(
-                status = AnnotatedExportStatus.PROCESSING,
-                annotatedVideoUri = null,
-                hasActiveExportJob = true,
-            ),
-        )
-    }
-
-    @Test
-    fun etaFormattingHandlesMissingValue() {
-        assertEquals("calculating…", formatEta(null))
     }
 
     @Test
