@@ -5,6 +5,7 @@ import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.UserSettings
+import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.storage.SessionBlobStorage
 import com.inversioncoach.app.storage.db.FrameMetricDao
 import com.inversioncoach.app.storage.db.SessionDao
@@ -114,8 +115,34 @@ class SessionRepository(
         enforceStorageLimit(settings.maxStorageMb)
     }
 
+    suspend fun getDrillCameraSide(drillType: DrillType): DrillCameraSide? {
+        val settings = userSettingsDao.getSettings() ?: return null
+        return decodeDrillSides(settings.drillCameraSideSelections)[drillType]
+    }
+
+    suspend fun saveDrillCameraSide(drillType: DrillType, side: DrillCameraSide) {
+        val settings = userSettingsDao.getSettings() ?: UserSettings()
+        val updated = decodeDrillSides(settings.drillCameraSideSelections).toMutableMap().apply {
+            this[drillType] = side
+        }
+        userSettingsDao.upsert(settings.copy(drillCameraSideSelections = encodeDrillSides(updated)))
+    }
+
     private suspend fun enforceConfiguredStorageLimit() {
         val settings = userSettingsDao.getSettings() ?: UserSettings()
         enforceStorageLimit(settings.maxStorageMb)
     }
+
+    private fun encodeDrillSides(map: Map<DrillType, DrillCameraSide>): String =
+        map.entries.joinToString(separator = ";") { "${it.key.name}:${it.value.name}" }
+
+    private fun decodeDrillSides(raw: String): Map<DrillType, DrillCameraSide> =
+        raw.split(';')
+            .mapNotNull { token ->
+                val parts = token.split(':')
+                if (parts.size != 2) return@mapNotNull null
+                val drill = DrillType.entries.firstOrNull { it.name == parts[0] } ?: return@mapNotNull null
+                val side = DrillCameraSide.entries.firstOrNull { it.name == parts[1] } ?: return@mapNotNull null
+                drill to side
+            }.toMap()
 }

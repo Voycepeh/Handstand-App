@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,12 +17,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -30,7 +38,10 @@ import com.inversioncoach.app.R
 import com.inversioncoach.app.biomechanics.DrillConfigs
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.LiveSessionOptions
+import com.inversioncoach.app.overlay.DrillCameraSide
+import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import kotlinx.coroutines.launch
 
 private val defaultSessionOptions = LiveSessionOptions(
     voiceEnabled = true,
@@ -51,6 +62,8 @@ fun StartDrillScreen(
     onStart: (DrillType, LiveSessionOptions) -> Unit,
     onOpenDetail: (DrillType) -> Unit,
 ) {
+    val context = LocalContext.current
+    val repository = remember { ServiceLocator.repository(context) }
     val drillByType = remember { DrillConfigs.all.associateBy { it.type } }
     val gridItems = remember(drillByType) {
         listOf(
@@ -63,6 +76,18 @@ fun StartDrillScreen(
         ).filter { drillByType.containsKey(it.type) }
     }
 
+    val scope = rememberCoroutineScope()
+    var selectedDrill by remember { mutableStateOf<DrillType?>(null) }
+    var selectedSide by remember { mutableStateOf(DrillCameraSide.LEFT) }
+    var hasPersistedSide by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedDrill) {
+        val drill = selectedDrill ?: return@LaunchedEffect
+        val persisted = repository.getDrillCameraSide(drill)
+        hasPersistedSide = persisted != null
+        selectedSide = persisted ?: DrillCameraSide.LEFT
+    }
+
     ScaffoldedScreen(title = "Choose Drill", onBack = onBack) { padding ->
         Column(
             modifier = Modifier
@@ -73,7 +98,7 @@ fun StartDrillScreen(
         ) {
             Text("Choose your flow", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(
-                text = "Tap any drill to begin immediately.",
+                text = "Tap a drill, choose camera side, then start.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -82,13 +107,51 @@ fun StartDrillScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(bottom = 12.dp),
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.weight(1f),
             ) {
                 items(gridItems, key = { it.type.name }) { drill ->
                     DrillGridCard(
                         label = drill.type.displayName,
                         imageRes = drill.imageRes,
-                        onClick = { onStart(drill.type, defaultSessionOptions) },
+                        selected = selectedDrill == drill.type,
+                        onClick = { selectedDrill = drill.type },
+                    )
+                }
+            }
+
+            if (selectedDrill != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Camera Side", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        SideOptionRow("Left side facing camera", selectedSide == DrillCameraSide.LEFT) { selectedSide = DrillCameraSide.LEFT }
+                        SideOptionRow("Right side facing camera", selectedSide == DrillCameraSide.RIGHT) { selectedSide = DrillCameraSide.RIGHT }
+                        if (hasPersistedSide) {
+                            Text("Last used for this drill", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+
+                Card(
+                    onClick = {
+                        val drill = selectedDrill ?: return@Card
+                        scope.launch { repository.saveDrillCameraSide(drill, selectedSide) }
+                        onStart(
+                            drill,
+                            defaultSessionOptions.copy(drillCameraSide = selectedSide),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(
+                        "Start ${selectedDrill?.displayName}",
+                        modifier = Modifier.padding(14.dp),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.titleMedium,
                     )
                 }
             }
@@ -97,16 +160,27 @@ fun StartDrillScreen(
 }
 
 @Composable
+private fun SideOptionRow(label: String, selected: Boolean, onSelect: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+        RadioButton(selected = selected, onClick = onSelect)
+        Text(text = label, modifier = Modifier.padding(top = 12.dp))
+    }
+}
+
+@Composable
 private fun DrillGridCard(
     label: String,
     @DrawableRes imageRes: Int,
+    selected: Boolean,
     onClick: () -> Unit,
 ) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        ),
     ) {
         Column(
             modifier = Modifier

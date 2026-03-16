@@ -1,110 +1,90 @@
 package com.inversioncoach.app.overlay
 
+import androidx.compose.ui.graphics.Color
 import com.inversioncoach.app.model.JointPoint
 
-private const val MIN_RENDER_VISIBILITY = 0.35f
-private const val SIDE_SWITCH_ADVANTAGE = 0.75f
-private const val SIDE_SWITCH_FRAMES = 6
-
-enum class OverlayMode {
-    NORMAL_SIDE_VIEW,
-    DEBUG_SIDE_VIEW,
-    DEBUG_ALL_LANDMARKS,
-}
-
-enum class TrackedSide {
-    LEFT,
-    RIGHT,
-}
-
-enum class SideJoint(val baseName: String, val label: String) {
-    SHOULDER("shoulder", "SH"),
-    ELBOW("elbow", "EL"),
-    WRIST("wrist", "WR"),
-    HIP("hip", "HIP"),
-    KNEE("knee", "KN"),
-    ANKLE("ankle", "AN"),
-    HEEL("heel", ""),
-    FOOT_INDEX("foot_index", ""),
-}
-
-data class SideSelectionState(
-    val trackedSide: TrackedSide = TrackedSide.LEFT,
-    val leftScore: Float = 0f,
-    val rightScore: Float = 0f,
-    val switchStreak: Int = 0,
+data class OverlayJointStyle(
+    val color: Color,
+    val radius: Float,
 )
 
-class TrackedSideSelector {
-    private var state = SideSelectionState()
+data class OverlayRenderModel(
+    val joints: List<JointPoint>,
+    val connections: List<Pair<String, String>>,
+)
 
-    fun determineTrackedSide(fullLandmarks: List<JointPoint>): SideSelectionState {
-        val lookup = fullLandmarks.associateBy { it.name }
-        val leftScore = sideScore(TrackedSide.LEFT, lookup)
-        val rightScore = sideScore(TrackedSide.RIGHT, lookup)
-        val leading = if (leftScore >= rightScore) TrackedSide.LEFT else TrackedSide.RIGHT
-        val trailing = if (leading == TrackedSide.LEFT) rightScore else leftScore
-        val leaderScore = if (leading == TrackedSide.LEFT) leftScore else rightScore
-        val shouldSwitch =
-            leading != state.trackedSide &&
-                leaderScore - trailing >= SIDE_SWITCH_ADVANTAGE
+private const val MIN_RENDER_VISIBILITY = 0.35f
+private val SELECTED_JOINTS = listOf("nose", "shoulder", "elbow", "wrist", "hip", "knee", "ankle")
 
-        state = if (shouldSwitch) {
-            val nextStreak = state.switchStreak + 1
-            if (nextStreak >= SIDE_SWITCH_FRAMES) {
-                SideSelectionState(
-                    trackedSide = leading,
-                    leftScore = leftScore,
-                    rightScore = rightScore,
-                    switchStreak = 0,
-                )
-            } else {
-                state.copy(
-                    leftScore = leftScore,
-                    rightScore = rightScore,
-                    switchStreak = nextStreak,
-                )
+private val SIDE_CONNECTIONS = listOf(
+    "nose" to "{side}_shoulder",
+    "{side}_shoulder" to "{side}_elbow",
+    "{side}_elbow" to "{side}_wrist",
+    "{side}_shoulder" to "{side}_hip",
+    "{side}_hip" to "{side}_knee",
+    "{side}_knee" to "{side}_ankle",
+)
+
+private val BILATERAL_CONNECTORS = listOf(
+    "left_shoulder" to "right_shoulder",
+    "left_hip" to "right_hip",
+)
+
+class FreestyleOverlayStrategy {
+    fun build(joints: List<JointPoint>, viewMode: FreestyleViewMode): OverlayRenderModel {
+        val visible = joints.filter { it.visibility >= MIN_RENDER_VISIBILITY }.associateBy { it.name }
+        val keptNames = buildSet {
+            add("nose")
+            when (viewMode) {
+                FreestyleViewMode.BILATERAL_VIEW -> {
+                    SELECTED_JOINTS.filter { it != "nose" }.forEach { base ->
+                        add("left_$base")
+                        add("right_$base")
+                    }
+                }
+                FreestyleViewMode.LEFT_SIDE_VIEW -> SELECTED_JOINTS.filter { it != "nose" }.forEach { base -> add("left_$base") }
+                FreestyleViewMode.RIGHT_SIDE_VIEW -> SELECTED_JOINTS.filter { it != "nose" }.forEach { base -> add("right_$base") }
             }
-        } else {
-            state.copy(
-                leftScore = leftScore,
-                rightScore = rightScore,
-                switchStreak = 0,
-            )
         }
-        return state
-    }
 
-    private fun sideScore(side: TrackedSide, lookup: Map<String, JointPoint>): Float {
-        val prefix = side.name.lowercase()
-        return listOf("shoulder", "elbow", "wrist", "hip", "knee", "ankle")
-            .sumOf { (lookup["${prefix}_$it"]?.visibility ?: 0f).toDouble() }
-            .toFloat()
+        val filtered = keptNames.mapNotNull { visible[it] }
+        val connections = buildList {
+            when (viewMode) {
+                FreestyleViewMode.BILATERAL_VIEW -> {
+                    addAll(sideConnections("left"))
+                    addAll(sideConnections("right"))
+                    addAll(BILATERAL_CONNECTORS)
+                }
+                FreestyleViewMode.LEFT_SIDE_VIEW -> addAll(sideConnections("left"))
+                FreestyleViewMode.RIGHT_SIDE_VIEW -> addAll(sideConnections("right"))
+            }
+        }.filter { (from, to) -> visible[from] != null && visible[to] != null }
+
+        return OverlayRenderModel(filtered, connections)
     }
 }
 
-fun getRenderableLandmarks(fullLandmarks: List<JointPoint>, trackedSide: TrackedSide): List<JointPoint> {
-    val names = buildList {
-        add("nose")
-        SideJoint.entries.forEach { joint ->
-            add("${trackedSide.name.lowercase()}_${joint.baseName}")
-        }
+class FixedDrillSideOverlayStrategy {
+    fun build(joints: List<JointPoint>, side: DrillCameraSide): OverlayRenderModel {
+        val sidePrefix = if (side == DrillCameraSide.LEFT) "left" else "right"
+        val visible = joints.filter { it.visibility >= MIN_RENDER_VISIBILITY }.associateBy { it.name }
+        val names = listOf("nose") + SELECTED_JOINTS.filter { it != "nose" }.map { "${sidePrefix}_$it" }
+        val filtered = names.mapNotNull { visible[it] }
+        val connections = sideConnections(sidePrefix).filter { (from, to) -> visible[from] != null && visible[to] != null }
+        return OverlayRenderModel(filtered, connections)
     }
-    val byName = fullLandmarks.associateBy { it.name }
-    return names.mapNotNull { byName[it] }.filter { it.visibility >= MIN_RENDER_VISIBILITY }
 }
 
-fun getRenderableConnections(trackedSide: TrackedSide): List<Pair<String, String>> {
-    val prefix = trackedSide.name.lowercase()
-    return listOf(
-        "${prefix}_shoulder" to "${prefix}_elbow",
-        "${prefix}_elbow" to "${prefix}_wrist",
-        "${prefix}_shoulder" to "${prefix}_hip",
-        "${prefix}_hip" to "${prefix}_knee",
-        "${prefix}_knee" to "${prefix}_ankle",
-        "${prefix}_ankle" to "${prefix}_heel",
-        "${prefix}_ankle" to "${prefix}_foot_index",
-    )
+fun jointStyle(jointName: String, baseColor: Color, baseRadius: Float): OverlayJointStyle {
+    val largeRadius = baseRadius * 2f
+    return when {
+        jointName == "nose" -> OverlayJointStyle(Color.Green, largeRadius)
+        jointName.endsWith("_hip") -> OverlayJointStyle(Color.Red, largeRadius)
+        else -> OverlayJointStyle(baseColor, baseRadius)
+    }
 }
 
-fun TrackedSide.opposite(): TrackedSide = if (this == TrackedSide.LEFT) TrackedSide.RIGHT else TrackedSide.LEFT
+private fun sideConnections(side: String): List<Pair<String, String>> =
+    SIDE_CONNECTIONS.map { (from, to) ->
+        from.replace("{side}", side) to to.replace("{side}", side)
+    }

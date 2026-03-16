@@ -231,15 +231,16 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                 OverlayRenderer(
                     frame = smoothed,
                     drillType = drillType,
+                    sessionMode = uiState.sessionMode,
                     modifier = Modifier.fillMaxSize(),
                     showIdealLine = options.showIdealLine,
-                    problematicJointName = null,
                     showDebugOverlay = uiState.showDebugOverlay,
                     debugMetrics = uiState.debugMetrics,
                     debugAngles = uiState.debugAngles,
                     currentPhase = uiState.currentPhase,
                     activeFault = uiState.activeFault,
                     cueText = if (uiState.sessionMode == SessionMode.FREESTYLE) "" else uiState.currentCue,
+                    drillCameraSide = options.drillCameraSide,
                 )
             }
         }
@@ -257,6 +258,10 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             }
             Text("Time ${formatSessionDuration(sessionDurationMs)}", color = Color.White, fontSize = 14.sp)
             Text("Align ${uiState.smoothedAlignmentScore}% • ${uiState.currentPhase.uppercase()}", color = Color.White, fontSize = 14.sp)
+
+            if (uiState.sessionMode != SessionMode.FREESTYLE) {
+                Text("Camera Side: ${options.drillCameraSide.name.lowercase().replaceFirstChar { it.uppercase() }}", color = Color.White, fontSize = 13.sp)
+            }
 
             if (showDetailedStats) {
                 Text("Started: ${formatSessionDateTime(vm.sessionStartTimestampMs)}", color = Color.White, fontSize = 13.sp)

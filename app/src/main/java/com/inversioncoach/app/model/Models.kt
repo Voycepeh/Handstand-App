@@ -2,6 +2,7 @@ package com.inversioncoach.app.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.inversioncoach.app.overlay.DrillCameraSide
 
 enum class DrillType(val displayName: String) {
     FREESTYLE("Freestyle Live Coaching"),
@@ -171,6 +172,7 @@ data class UserSettings(
     val customMinimumGoodFormScore: Int = 72,
     val customRepAcceptanceThreshold: Int = 70,
     val customHoldAlignedThreshold: Int = 72,
+    val drillCameraSideSelections: String = "",
 )
 
 data class LiveSessionUiState(
@@ -217,6 +219,7 @@ data class LiveSessionUiState(
     val debugInferenceTimeMs: Long = 0L,
     val debugFrameDrops: Int = 0,
     val debugRejectionReason: String = "none",
+    val drillCameraSide: DrillCameraSide? = null,
 )
 
 data class LiveSessionOptions(
@@ -225,6 +228,7 @@ data class LiveSessionOptions(
     val showSkeletonOverlay: Boolean = true,
     val showIdealLine: Boolean = true,
     val zoomOutCamera: Boolean = true,
+    val drillCameraSide: DrillCameraSide = DrillCameraSide.LEFT,
 ) {
     companion object {
         fun freestyleDefaults(): LiveSessionOptions = LiveSessionOptions(

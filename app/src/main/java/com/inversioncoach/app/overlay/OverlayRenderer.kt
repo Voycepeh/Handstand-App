@@ -13,116 +13,73 @@ import com.inversioncoach.app.model.AlignmentMetric
 import com.inversioncoach.app.model.AngleDebugMetric
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.JointPoint
+import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.model.SmoothedPoseFrame
 
 @Composable
 fun OverlayRenderer(
     frame: SmoothedPoseFrame?,
     drillType: DrillType,
+    sessionMode: SessionMode,
     modifier: Modifier = Modifier,
     showIdealLine: Boolean,
-    problematicJointName: String? = null,
     showDebugOverlay: Boolean = false,
     debugMetrics: List<AlignmentMetric> = emptyList(),
     debugAngles: List<AngleDebugMetric> = emptyList(),
     currentPhase: String = "setup",
     activeFault: String = "",
     cueText: String = "",
-    showRawLandmarksInDebug: Boolean = false,
+    drillCameraSide: DrillCameraSide = DrillCameraSide.LEFT,
 ) {
-    val sideSelector = remember { TrackedSideSelector() }
+    val freestyleClassifier = remember { FreestyleOrientationClassifier() }
+    val freestyleStrategy = remember { FreestyleOverlayStrategy() }
+    val drillStrategy = remember { FixedDrillSideOverlayStrategy() }
+    val mapper = remember { OverlayCoordinateMapper() }
+
     Canvas(modifier = modifier) {
         val joints = frame?.joints.orEmpty()
-        val mode = when {
-            showDebugOverlay && showRawLandmarksInDebug -> OverlayMode.DEBUG_ALL_LANDMARKS
-            showDebugOverlay -> OverlayMode.DEBUG_SIDE_VIEW
-            else -> OverlayMode.NORMAL_SIDE_VIEW
+        val viewMode = freestyleClassifier.classify(joints)
+        val model = if (sessionMode == SessionMode.FREESTYLE) {
+            freestyleStrategy.build(joints, viewMode)
+        } else {
+            drillStrategy.build(joints, drillCameraSide)
         }
-        val sideState = sideSelector.determineTrackedSide(joints)
 
-        when (mode) {
-            OverlayMode.NORMAL_SIDE_VIEW -> renderTrackedSideSkeleton(
-                joints = joints,
-                trackedSide = sideState.trackedSide,
-                prominent = true,
-                showLabels = false,
-                problematicJointName = problematicJointName,
+        model.connections.forEach { (from, to) ->
+            val start = model.joints.firstOrNull { it.name == from } ?: return@forEach
+            val end = model.joints.firstOrNull { it.name == to } ?: return@forEach
+            drawLine(
+                color = Color(0xFF7CF0A9),
+                start = mapper.toOffset(start, size.width, size.height),
+                end = mapper.toOffset(end, size.width, size.height),
+                strokeWidth = 6f,
             )
+        }
 
-            OverlayMode.DEBUG_SIDE_VIEW -> {
-                renderAxisLines(joints)
-                renderTrackedSideSkeleton(joints, sideState.trackedSide, prominent = true, showLabels = true, problematicJointName = problematicJointName)
-                renderTrackedSideSkeleton(joints, sideState.trackedSide.opposite(), prominent = false, showLabels = false, problematicJointName = null)
-                renderAngleDebug(debugAngles)
-                renderMetricDebug(debugMetrics)
-                renderSideSelectionDebug(sideState)
-                renderFaultAndPhaseDebug(currentPhase, activeFault, cueText)
-            }
-
-            OverlayMode.DEBUG_ALL_LANDMARKS -> {
-                joints.forEach { joint ->
-                    drawCircle(confidenceColor(joint.visibility), radius = 5f, center = joint.toOffset(size.width, size.height))
-                }
-            }
+        model.joints.forEach { joint ->
+            val style = jointStyle(joint.name, Color(0xFF7CF0A9), 6f)
+            drawCircle(style.color, radius = style.radius, center = mapper.toOffset(joint, size.width, size.height))
         }
 
         if (showIdealLine) {
             val referenceXNorm = idealLineXForDrill(drillType, joints)
-            drawLine(
-                color = Color.Cyan.copy(alpha = if (mode == OverlayMode.NORMAL_SIDE_VIEW) 0.45f else 0.8f),
-                start = Offset(size.width * referenceXNorm, 0f),
-                end = Offset(size.width * referenceXNorm, size.height),
-                strokeWidth = 2f,
-            )
+            val start = mapper.map(referenceXNorm, 0f, size.width, size.height)
+            val end = mapper.map(referenceXNorm, 1f, size.width, size.height)
+            drawLine(color = Color.Cyan.copy(alpha = 0.45f), start = start, end = end, strokeWidth = 2f)
         }
-    }
-}
 
-private fun DrawScope.renderTrackedSideSkeleton(
-    joints: List<JointPoint>,
-    trackedSide: TrackedSide,
-    prominent: Boolean,
-    showLabels: Boolean,
-    problematicJointName: String?,
-) {
-    val renderable = getRenderableLandmarks(joints, trackedSide)
-    if (renderable.isEmpty()) return
-    val jointByName = renderable.associateBy { it.name }
-
-    getRenderableConnections(trackedSide).forEach { (from, to) ->
-        val start = jointByName[from] ?: return@forEach
-        val end = jointByName[to] ?: return@forEach
-        drawLine(
-            color = if (prominent) Color(0xFF7CF0A9) else Color(0x80A0AEC0),
-            start = start.toOffset(size.width, size.height),
-            end = end.toOffset(size.width, size.height),
-            strokeWidth = if (prominent) 6f else 3f,
-        )
-    }
-
-    renderable.forEach { joint ->
-        val center = joint.toOffset(size.width, size.height)
-        val color = if (joint.name == problematicJointName) Color.Red else confidenceColor(joint.visibility)
-        drawCircle(color = color, radius = if (prominent) 8f else 5f, center = center)
-        if (showLabels) {
-            val compactLabel = jointLabelFor(joint.name)
-            if (compactLabel.isNotBlank()) {
-                drawText(compactLabel, center + Offset(10f, -10f), Color.White)
-                drawText("${"%.2f".format(joint.visibility)}", center + Offset(10f, 12f), Color.LightGray, 22f)
+        if (showDebugOverlay) {
+            renderMetricDebug(debugMetrics)
+            renderAngleDebug(debugAngles)
+            renderFaultAndPhaseDebug(currentPhase, activeFault, cueText)
+            if (sessionMode == SessionMode.FREESTYLE) {
+                drawText("Freestyle view: ${viewMode.name}", Offset(size.width * 0.04f, size.height * 0.08f), Color.White)
             }
         }
     }
 }
 
-private fun DrawScope.renderAxisLines(joints: List<JointPoint>) {
-    val shoulderMid = midpoint(joints, "left_shoulder", "right_shoulder") ?: return
-    val hipMid = midpoint(joints, "left_hip", "right_hip") ?: return
-    val shoulderOffset = shoulderMid.toOffset(size.width, size.height)
-    val hipOffset = hipMid.toOffset(size.width, size.height)
-
-    drawLine(color = Color(0xFF89C2FF), start = shoulderOffset, end = hipOffset, strokeWidth = 3f)
-    drawLine(color = Color(0x66FFFFFF), start = Offset(hipOffset.x, 0f), end = Offset(hipOffset.x, size.height), strokeWidth = 2f)
-}
+private fun OverlayCoordinateMapper.toOffset(joint: JointPoint, width: Float, height: Float): Offset = map(joint.x, joint.y, width, height)
 
 private fun DrawScope.renderAngleDebug(angles: List<AngleDebugMetric>) {
     var y = size.height * 0.12f
@@ -140,12 +97,6 @@ private fun DrawScope.renderMetricDebug(metrics: List<AlignmentMetric>) {
     }
 }
 
-private fun DrawScope.renderSideSelectionDebug(state: SideSelectionState) {
-    val y = size.height * 0.06f
-    drawText("Tracked side: ${state.trackedSide.name}", Offset(size.width * 0.04f, y), Color.White)
-    drawText("L:${"%.2f".format(state.leftScore)}  R:${"%.2f".format(state.rightScore)}", Offset(size.width * 0.04f, y + 30f), Color.LightGray, 22f)
-}
-
 private fun DrawScope.renderFaultAndPhaseDebug(phase: String, fault: String, cueText: String) {
     drawText("Phase: ${phase.uppercase()}", Offset(size.width * 0.04f, size.height * 0.72f), Color.White)
     drawText(
@@ -157,32 +108,6 @@ private fun DrawScope.renderFaultAndPhaseDebug(phase: String, fault: String, cue
         drawText("Cue: ${cueText.take(56)}", Offset(size.width * 0.04f, size.height * 0.8f), Color(0xFFC4F1BE), 24f)
     }
 }
-
-private fun midpoint(joints: List<JointPoint>, first: String, second: String): JointPoint? {
-    val firstJoint = joints.firstOrNull { it.name == first } ?: return null
-    val secondJoint = joints.firstOrNull { it.name == second } ?: return null
-    if (firstJoint.visibility < 0.35f || secondJoint.visibility < 0.35f) return null
-    return JointPoint(
-        name = "midpoint_${first}_$second",
-        x = (firstJoint.x + secondJoint.x) / 2f,
-        y = (firstJoint.y + secondJoint.y) / 2f,
-        z = (firstJoint.z + secondJoint.z) / 2f,
-        visibility = minOf(firstJoint.visibility, secondJoint.visibility),
-    )
-}
-
-private fun jointLabelFor(jointName: String): String {
-    val suffix = jointName.substringAfter("_", missingDelimiterValue = jointName)
-    return SideJoint.entries.firstOrNull { it.baseName == suffix }?.label ?: if (jointName == "nose") "HD" else ""
-}
-
-private fun confidenceColor(visibility: Float): Color = when {
-    visibility >= 0.75f -> Color(0xFF44D17A)
-    visibility >= 0.5f -> Color(0xFFFFD166)
-    else -> Color(0xFFFF6B6B)
-}
-
-private fun JointPoint.toOffset(width: Float, height: Float): Offset = Offset(x * width, y * height)
 
 private fun DrawScope.drawText(text: String, at: Offset, color: Color, textSize: Float = 26f) {
     drawContext.canvas.nativeCanvas.drawText(

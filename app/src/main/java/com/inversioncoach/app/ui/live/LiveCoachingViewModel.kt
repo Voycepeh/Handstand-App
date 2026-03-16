@@ -22,6 +22,7 @@ import com.inversioncoach.app.motion.DrillCatalog
 import com.inversioncoach.app.motion.MotionAnalysisPipeline
 import com.inversioncoach.app.motion.QualityThresholds
 import com.inversioncoach.app.motion.UserCalibrationSettings
+import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.pose.PoseSmoother
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.summary.SummaryGenerator
@@ -62,6 +63,7 @@ class LiveCoachingViewModel(
             isRecording = false,
             showOverlay = options.showSkeletonOverlay,
             showIdealLine = options.showIdealLine,
+            drillCameraSide = if (sessionMode == SessionMode.FREESTYLE) null else options.drillCameraSide,
         ),
     )
     val uiState: StateFlow<LiveSessionUiState> = _uiState.asStateFlow()
@@ -145,7 +147,8 @@ class LiveCoachingViewModel(
 
     fun onPoseFrame(frame: PoseFrame, settings: UserSettings) {
         activeSettings = settings
-        val smoothed = smoother.smooth(frame)
+        val frameForSession = if (sessionMode == SessionMode.FREESTYLE) frame else frame.filterForDrillSide(options.drillCameraSide)
+        val smoothed = smoother.smooth(frameForSession)
         val calibration = if (settings.alignmentStrictness.name == "CUSTOM") {
             UserCalibrationSettings(
                 strictness = settings.alignmentStrictness,
@@ -161,14 +164,14 @@ class LiveCoachingViewModel(
         } else {
             UserCalibrationSettings(settings.alignmentStrictness)
         }
-        val motion = if (sessionMode == SessionMode.FREESTYLE) null else motionPipeline.analyze(frame, settings.alignmentStrictness, calibration)
+        val motion = if (sessionMode == SessionMode.FREESTYLE) null else motionPipeline.analyze(frameForSession, settings.alignmentStrictness, calibration)
         _smoothedFrame.value = smoothed
         val gate = frameGate
         if (gate == null) {
             _uiState.value = _uiState.value.copy(errorMessage = "Unsupported drill: $drillType")
             return
         }
-        val frameValidity = gate.evaluate(frame)
+        val frameValidity = gate.evaluate(frameForSession)
         val rejectionReason = if (frame.rejectionReason != "none") frame.rejectionReason else if (frameValidity.isValid) "none" else frameValidity.reason
         val rejectionMessage = rejectionMessageFor(rejectionReason)
 
@@ -176,9 +179,9 @@ class LiveCoachingViewModel(
             confidence = smoothed.confidence,
             warningMessage = rejectionMessage,
             showDebugOverlay = settings.debugOverlayEnabled,
-            debugLandmarksDetected = frame.landmarksDetected,
-            debugInferenceTimeMs = frame.inferenceTimeMs,
-            debugFrameDrops = frame.droppedFrames,
+            debugLandmarksDetected = frameForSession.landmarksDetected,
+            debugInferenceTimeMs = frameForSession.inferenceTimeMs,
+            debugFrameDrops = frameForSession.droppedFrames,
             debugRejectionReason = rejectionReason,
         )
 
@@ -543,6 +546,13 @@ class LiveCoachingViewModel(
                 stopSession(callback)
             }
         }
+    }
+
+
+    private fun PoseFrame.filterForDrillSide(side: DrillCameraSide): PoseFrame {
+        val prefix = if (side == DrillCameraSide.LEFT) "left_" else "right_"
+        val filtered = joints.filter { it.name == "nose" || !it.name.contains("_") || it.name.startsWith(prefix) }
+        return copy(joints = filtered, landmarksDetected = filtered.size)
     }
 
     private fun SmoothedPoseFrame.toPoseFrame(): PoseFrame = PoseFrame(timestampMs, joints, confidence)

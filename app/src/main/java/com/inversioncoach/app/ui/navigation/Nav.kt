@@ -9,6 +9,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.LiveSessionOptions
+import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.ui.drilldetail.DrillDetailScreen
 import com.inversioncoach.app.ui.history.HistoryScreen
 import com.inversioncoach.app.ui.home.HomeScreen
@@ -29,9 +30,9 @@ sealed class Route(val value: String) {
     data object DrillDetail : Route("drillDetail/{drill}") {
         fun create(drillType: DrillType): String = "drillDetail/${drillType.name}"
     }
-    data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}/{zoomOutCamera}") {
+    data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}/{zoomOutCamera}/{drillCameraSide}") {
         fun create(drillType: DrillType, options: LiveSessionOptions): String =
-            "live/${drillType.name}/${options.voiceEnabled}/${options.recordingEnabled}/${options.showSkeletonOverlay}/${options.showIdealLine}/${options.zoomOutCamera}"
+            "live/${drillType.name}/${options.voiceEnabled}/${options.recordingEnabled}/${options.showSkeletonOverlay}/${options.showIdealLine}/${options.zoomOutCamera}/${options.drillCameraSide.name}"
     }
     data object Results : Route("results/{sessionId}") {
         fun create(sessionId: Long) = "results/$sessionId"
@@ -88,6 +89,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 navArgument("skeleton") { type = NavType.BoolType },
                 navArgument("idealLine") { type = NavType.BoolType },
                 navArgument("zoomOutCamera") { type = NavType.BoolType },
+                navArgument("drillCameraSide") { type = NavType.StringType },
             ),
         ) { backStack ->
             val args = backStack.arguments
@@ -101,6 +103,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 showSkeletonOverlay = args?.getBoolean("skeleton") ?: true,
                 showIdealLine = args?.getBoolean("idealLine") ?: true,
                 zoomOutCamera = args?.getBoolean("zoomOutCamera") ?: true,
+                drillCameraSide = DrillCameraSide.entries.firstOrNull { it.name == args?.getString("drillCameraSide") } ?: DrillCameraSide.LEFT,
             )
             LiveCoachingScreen(
                 drillType = drill,
