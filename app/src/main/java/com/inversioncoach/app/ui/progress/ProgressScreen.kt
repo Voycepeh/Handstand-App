@@ -37,7 +37,6 @@ import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
-import com.inversioncoach.app.ui.common.formatPrimaryPerformance
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
@@ -269,11 +268,8 @@ private fun SessionSummaryRow(session: SessionRecord, onOpenSession: (Long) -> U
     ) {
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(session.title, fontWeight = FontWeight.SemiBold)
-            Text("Type: ${session.drillType.displayName}")
             Text("Started: ${formatSessionDateTime(session.startedAtMs)}")
             Text("Duration: ${formatSessionDuration(durationMs)}")
-            Text(formatPrimaryPerformance(session))
-            Text("Summary: ${session.issues.ifBlank { "No major issues" }}")
             OutlinedButton(onClick = { onOpenSession(session.id) }) {
                 Text("Open session details / video")
             }
