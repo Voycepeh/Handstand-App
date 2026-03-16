@@ -99,7 +99,7 @@ class LiveCoachingViewModel(
     private var activeSettings: UserSettings = UserSettings()
     private var sessionHadAnyVideo = false
     private val drillConfig = DrillConfigs.byTypeOrNull(drillType)
-    private val frameGate = drillConfig?.let { FrameValidityGate(drillType, it) }
+    private val readinessEngine = drillConfig?.let { SharedReadinessEngine(drillType, it, options.drillCameraSide) }
     private val issueAggregator = IssueEventAggregator()
     private val invalidReasonCounts = mutableMapOf<String, Int>()
     private var validFrameCount = 0
@@ -175,7 +175,9 @@ class LiveCoachingViewModel(
 
     fun onPoseFrame(frame: PoseFrame, settings: UserSettings) {
         activeSettings = settings
-        val frameForSession = if (sessionMode == SessionMode.FREESTYLE) frame else frame.filterForDrillSide(options.drillCameraSide)
+        val readiness = readinessEngine?.evaluate(frame)
+        val sideForAnalysis = readiness?.actualSide ?: options.drillCameraSide
+        val frameForSession = if (sessionMode == SessionMode.FREESTYLE) frame else frame.filterForDrillSide(sideForAnalysis)
         val smoothed = smoother.smooth(frameForSession)
         val calibration = if (settings.alignmentStrictness.name == "CUSTOM") {
             UserCalibrationSettings(
@@ -192,37 +194,52 @@ class LiveCoachingViewModel(
         } else {
             UserCalibrationSettings(settings.alignmentStrictness)
         }
-        val motion = if (sessionMode == SessionMode.FREESTYLE) null else motionPipeline.analyze(frameForSession, settings.alignmentStrictness, calibration)
+        val motionEligible = sessionMode == SessionMode.DRILL && (readiness?.timerEligible ?: false)
+        val motion = if (motionEligible) motionPipeline.analyze(frameForSession, settings.alignmentStrictness, calibration) else null
         _smoothedFrame.value = smoothed
         if (shouldCaptureOverlayFrame(smoothed.timestampMs)) {
             overlayFrames += overlayStabilizer.stabilize(smoothed, sessionMode)
             lastOverlayCaptureTsMs = smoothed.timestampMs
         }
-        val gate = frameGate
-        if (gate == null) {
+        if (sessionMode == SessionMode.DRILL && readiness == null) {
             _uiState.value = _uiState.value.copy(errorMessage = "Unsupported drill: $drillType")
             return
         }
-        val frameValidity = gate.evaluate(frameForSession)
-        val rejectionReason = if (frame.rejectionReason != "none") frame.rejectionReason else if (frameValidity.isValid) "none" else frameValidity.reason
-        val rejectionMessage = rejectionMessageFor(rejectionReason)
+
+        val rejectionReason = when {
+            frame.rejectionReason != "none" -> frame.rejectionReason
+            readiness != null && readiness.state < ReadinessState.READY_MINIMAL -> readiness.blockedReason
+            else -> "none"
+        }
+        val setupMessage = if (readiness != null && readiness.state < ReadinessState.READY_MINIMAL) {
+            setupGuidanceFor(readiness.blockedReason)
+        } else {
+            null
+        }
+        val rejectionMessage = setupMessage ?: rejectionMessageFor(rejectionReason)
+        val readinessSummary = readiness?.let {
+            "state=${it.state} preferred=${it.preferredSide} actual=${it.actualSide} left=${"%.2f".format(it.leftQuality.quality)} right=${"%.2f".format(it.rightQuality.quality)} timer=${it.timerEligible} rep=${it.repEligible} cue=${it.cueEligible} blocked=${it.blockedReason}"
+        } ?: "state=unsupported"
 
         _uiState.value = _uiState.value.copy(
             confidence = smoothed.confidence,
             warningMessage = rejectionMessage,
+            currentCue = if (readiness != null && readiness.state < ReadinessState.READY_MINIMAL) setupMessage ?: _uiState.value.currentCue else _uiState.value.currentCue,
             showDebugOverlay = settings.debugOverlayEnabled,
             debugLandmarksDetected = frameForSession.landmarksDetected,
             debugInferenceTimeMs = frameForSession.inferenceTimeMs,
             debugFrameDrops = frameForSession.droppedFrames,
-            debugRejectionReason = rejectionReason,
+            debugRejectionReason = "$rejectionReason|$readinessSummary",
         )
+        SessionDiagnostics.log("readiness drill=$drillType $readinessSummary")
 
-        if (rejectionReason != "none") {
+        if (sessionMode == SessionMode.DRILL && !motionEligible) {
             invalidFrameCount += 1
             invalidReasonCounts[rejectionReason] = (invalidReasonCounts[rejectionReason] ?: 0) + 1
             _uiState.value = _uiState.value.copy(
                 debugMetrics = emptyList(),
                 debugAngles = emptyList(),
+                currentPhase = "setup",
             )
             return
         }
@@ -295,7 +312,7 @@ class LiveCoachingViewModel(
             smoothedAlignmentScore = motion?.alignment?.smoothedScore ?: 0,
             stabilityScore = motion?.stability?.stabilityScore ?: 0,
             confidence = smoothed.confidence,
-            currentCue = cue?.text ?: motion?.cue?.text ?: _uiState.value.currentCue.ifBlank { "Human detected. Hold steady for drill scoring." },
+            currentCue = cue?.text ?: motion?.cue?.text ?: _uiState.value.currentCue.ifBlank { "Ready. Start drill reps/hold." },
             currentCueId = cue?.id ?: _uiState.value.currentCueId,
             currentCueGeneratedAtMs = cue?.generatedAtMs ?: _uiState.value.currentCueGeneratedAtMs,
             warningMessage = null,
@@ -354,6 +371,16 @@ class LiveCoachingViewModel(
         "wrong_orientation" -> "Wrong orientation for this drill. Use a clear side view."
         "frame_processing_failure" -> "Frame processing failure. Hold steady and retry."
         else -> null
+    }
+
+
+    private fun setupGuidanceFor(reason: String): String = when (reason) {
+        "no_person_detected" -> "Step back so your full body is visible."
+        "low_confidence" -> "Improve lighting and hold still for tracking."
+        "missing_required_landmarks" -> "Keep hands, hips, and feet in frame."
+        "wrong_orientation" -> "Turn to a clean side view for this drill."
+        "body_not_fully_visible" -> "Keep your whole body inside the camera frame."
+        else -> "Hold steady while we lock onto your setup pose."
     }
 
     private fun persistFrameData(

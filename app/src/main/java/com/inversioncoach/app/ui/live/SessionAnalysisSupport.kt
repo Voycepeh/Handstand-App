@@ -7,6 +7,7 @@ import com.inversioncoach.app.model.DrillScore
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.PoseFrame
 import com.inversioncoach.app.model.SessionRecord
+import com.inversioncoach.app.overlay.DrillCameraSide
 import java.io.File
 import kotlin.math.abs
 
@@ -23,6 +24,169 @@ data class FrameValidityResult(
     val isValid: Boolean,
     val reason: String = "none",
 )
+
+enum class ReadinessState {
+    NO_PERSON,
+    PERSON_PARTIAL,
+    READY_MINIMAL,
+    READY_FULL,
+}
+
+data class SideChainQuality(
+    val side: DrillCameraSide,
+    val quality: Float,
+    val presentCount: Int,
+    val requiredCount: Int,
+)
+
+data class ReadinessEvaluation(
+    val state: ReadinessState,
+    val preferredSide: DrillCameraSide,
+    val actualSide: DrillCameraSide,
+    val leftQuality: SideChainQuality,
+    val rightQuality: SideChainQuality,
+    val requiredLandmarks: Set<String>,
+    val presentLandmarks: Set<String>,
+    val missingLandmarks: Set<String>,
+    val timerEligible: Boolean,
+    val repEligible: Boolean,
+    val cueEligible: Boolean,
+    val blockedReason: String,
+)
+
+class SharedReadinessEngine(
+    private val drillType: DrillType,
+    private val config: DrillModeConfig,
+    private val preferredSide: DrillCameraSide,
+) {
+    private val requiredJoints = requiredJointsByDrill[drillType] ?: DEFAULT_REQUIRED_JOINTS
+    private var stableState = ReadinessState.NO_PERSON
+    private var enterCandidateCount = 0
+    private var exitCandidateCount = 0
+
+    fun evaluate(frame: PoseFrame): ReadinessEvaluation {
+        val joints = frame.joints.associateBy { it.name }
+        val presentLandmarks = joints.filterValues { it.visibility >= MIN_OVERLAY_VISIBILITY }.keys
+        val missingLandmarks = requiredJoints - presentLandmarks
+        val leftQuality = evaluateSideQuality(joints, DrillCameraSide.LEFT)
+        val rightQuality = evaluateSideQuality(joints, DrillCameraSide.RIGHT)
+        val actualSide = chooseActualSide(leftQuality, rightQuality)
+
+        val visibleJoints = joints.values.count { it.visibility >= MIN_OVERLAY_VISIBILITY }
+        val bestQuality = maxOf(leftQuality.quality, rightQuality.quality)
+        val bestPresentCount = maxOf(leftQuality.presentCount, rightQuality.presentCount)
+
+        val targetState = when {
+            joints.isEmpty() || frame.confidence < MIN_NO_PERSON_CONFIDENCE || visibleJoints < MIN_VISIBLE_JOINTS_FOR_PARTIAL -> ReadinessState.NO_PERSON
+            frame.confidence >= MIN_READY_FULL_CONFIDENCE && bestQuality >= MIN_FULL_CHAIN_QUALITY && missingLandmarks.size <= MAX_MISSING_FULL_LANDMARKS -> ReadinessState.READY_FULL
+            frame.confidence >= MIN_READY_MINIMAL_CONFIDENCE && bestQuality >= MIN_MINIMAL_CHAIN_QUALITY && bestPresentCount >= MIN_CHAIN_LANDMARKS_FOR_MINIMAL -> ReadinessState.READY_MINIMAL
+            else -> ReadinessState.PERSON_PARTIAL
+        }
+
+        val smoothedState = smoothState(targetState)
+        val blockedReason = when (smoothedState) {
+            ReadinessState.NO_PERSON -> "no_person_detected"
+            ReadinessState.PERSON_PARTIAL -> when {
+                frame.confidence < MIN_READY_MINIMAL_CONFIDENCE -> "low_confidence"
+                bestPresentCount < MIN_CHAIN_LANDMARKS_FOR_MINIMAL -> "missing_required_landmarks"
+                config.sideViewPrimary && bestQuality < MIN_MINIMAL_CHAIN_QUALITY -> "wrong_orientation"
+                else -> "body_not_fully_visible"
+            }
+            else -> "none"
+        }
+
+        val isReadyMinimal = smoothedState >= ReadinessState.READY_MINIMAL
+        return ReadinessEvaluation(
+            state = smoothedState,
+            preferredSide = preferredSide,
+            actualSide = actualSide,
+            leftQuality = leftQuality,
+            rightQuality = rightQuality,
+            requiredLandmarks = requiredJoints,
+            presentLandmarks = presentLandmarks,
+            missingLandmarks = missingLandmarks,
+            timerEligible = isReadyMinimal,
+            repEligible = isReadyMinimal,
+            cueEligible = smoothedState >= ReadinessState.PERSON_PARTIAL,
+            blockedReason = blockedReason,
+        )
+    }
+
+    private fun smoothState(target: ReadinessState): ReadinessState {
+        return if (target.ordinal > stableState.ordinal) {
+            enterCandidateCount += 1
+            exitCandidateCount = 0
+            if (enterCandidateCount >= FRAMES_TO_ENTER_READY) {
+                stableState = target
+                enterCandidateCount = 0
+            }
+            stableState
+        } else if (target.ordinal < stableState.ordinal) {
+            exitCandidateCount += 1
+            enterCandidateCount = 0
+            if (exitCandidateCount >= FRAMES_TO_EXIT_READY) {
+                stableState = target
+                exitCandidateCount = 0
+            }
+            stableState
+        } else {
+            enterCandidateCount = 0
+            exitCandidateCount = 0
+            stableState
+        }
+    }
+
+    private fun chooseActualSide(left: SideChainQuality, right: SideChainQuality): DrillCameraSide {
+        val preferredQuality = if (preferredSide == DrillCameraSide.LEFT) left else right
+        val oppositeQuality = if (preferredSide == DrillCameraSide.LEFT) right else left
+        return if (oppositeQuality.quality - preferredQuality.quality >= SIDE_FALLBACK_QUALITY_MARGIN) {
+            oppositeQuality.side
+        } else {
+            preferredSide
+        }
+    }
+
+    private fun evaluateSideQuality(joints: Map<String, com.inversioncoach.app.model.JointPoint>, side: DrillCameraSide): SideChainQuality {
+        val prefix = if (side == DrillCameraSide.LEFT) "left_" else "right_"
+        val chain = SIDE_CHAIN_JOINTS.map { "$prefix$it" }
+        val present = chain.mapNotNull { joints[it]?.visibility?.takeIf { visibility -> visibility >= MIN_OVERLAY_VISIBILITY } }
+        val presenceRatio = present.size.toFloat() / chain.size.toFloat()
+        val avgVisibility = if (present.isEmpty()) 0f else present.average().toFloat()
+        val quality = (presenceRatio * 0.6f) + (avgVisibility * 0.4f)
+        return SideChainQuality(
+            side = side,
+            quality = quality.coerceIn(0f, 1f),
+            presentCount = present.size,
+            requiredCount = chain.size,
+        )
+    }
+
+    companion object {
+        private val DEFAULT_REQUIRED_JOINTS = setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_knee", "right_knee")
+        private val requiredJointsByDrill = mapOf(
+            DrillType.FREESTYLE to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
+            DrillType.CHEST_TO_WALL_HANDSTAND to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
+            DrillType.PIKE_PUSH_UP to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
+            DrillType.ELEVATED_PIKE_PUSH_UP to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
+            DrillType.NEGATIVE_WALL_HANDSTAND_PUSH_UP to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
+            DrillType.FREESTANDING_HANDSTAND_FUTURE to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
+            DrillType.PUSH_UP to setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_ankle", "right_ankle", "left_wrist", "right_wrist"),
+        )
+        private val SIDE_CHAIN_JOINTS = listOf("shoulder", "elbow", "wrist", "hip", "knee", "ankle")
+        private const val MIN_OVERLAY_VISIBILITY = 0.2f
+        private const val MIN_NO_PERSON_CONFIDENCE = 0.12f
+        private const val MIN_READY_MINIMAL_CONFIDENCE = 0.28f
+        private const val MIN_READY_FULL_CONFIDENCE = 0.42f
+        private const val MIN_VISIBLE_JOINTS_FOR_PARTIAL = 4
+        private const val MIN_CHAIN_LANDMARKS_FOR_MINIMAL = 4
+        private const val MIN_MINIMAL_CHAIN_QUALITY = 0.44f
+        private const val MIN_FULL_CHAIN_QUALITY = 0.67f
+        private const val MAX_MISSING_FULL_LANDMARKS = 2
+        private const val SIDE_FALLBACK_QUALITY_MARGIN = 0.15f
+        private const val FRAMES_TO_ENTER_READY = 3
+        private const val FRAMES_TO_EXIT_READY = 4
+    }
+}
 
 class FrameValidityGate(
     private val drillType: DrillType,

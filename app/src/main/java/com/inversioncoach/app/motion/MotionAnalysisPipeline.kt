@@ -32,6 +32,10 @@ class MotionAnalysisPipeline(
     private val stabilityEngine = StabilityAnalysisEngine()
     private var configuredStrictness: AlignmentStrictness = AlignmentStrictness.BEGINNER
 
+    private companion object {
+        private const val MINIMAL_ALIGNMENT_DELTA = 12
+    }
+
     data class Output(
         val smoothed: SmoothedPoseFrame,
         val angles: AngleFrame,
@@ -45,6 +49,10 @@ class MotionAnalysisPipeline(
         val stability: StabilitySnapshot,
         val holdQuality: HoldQualitySnapshot?,
         val repQuality: RepQualitySnapshot?,
+        val timerEligible: Boolean,
+        val repEligible: Boolean,
+        val cueEligible: Boolean,
+        val blockedReason: String,
     )
 
     fun analyze(frame: LegacyPoseFrame, strictness: AlignmentStrictness = AlignmentStrictness.BEGINNER, calibration: UserCalibrationSettings? = null): Output {
@@ -65,18 +73,20 @@ class MotionAnalysisPipeline(
         val preliminaryFaults = faultEngine.detect(angles, movementProbe)
         val alignment = alignmentEngine.score(angles, preliminaryFaults)
         val thresholds = effectiveCalibration.resolvedThresholds()
+        val minimalAlignmentThreshold = (thresholds.minimumGoodFormScore - MINIMAL_ALIGNMENT_DELTA).coerceAtLeast(50)
         val isAligned = alignment.smoothedScore >= thresholds.minimumGoodFormScore
+        val isMinimallyAligned = alignment.smoothedScore >= minimalAlignmentThreshold
         val movement = if (drillDefinition.repMode == RepMode.REP_BASED) {
-            phaseDetector.update(angles, isAligned)
+            phaseDetector.update(angles, isMinimallyAligned)
         } else {
-            MovementState(MovementPhase.HOLD, if (isAligned) 1f else 0f, 0.8f, frame.timestampMs, 0)
+            MovementState(MovementPhase.HOLD, if (isMinimallyAligned) 1f else 0f, 0.8f, frame.timestampMs, 0)
         }
         val faults = faultEngine.detect(angles, movement)
         val cue = feedbackEngine.selectCue(faults, frame.timestampMs)
         val stability = stabilityEngine.analyze(smoothed)
 
         val repTracking = if (drillDefinition.repMode == RepMode.REP_BASED) phaseDetector.snapshot() else null
-        val holdTracking = if (drillDefinition.repMode == RepMode.HOLD_BASED) holdTrackerCompat.update(frame.timestampMs, isAligned) else null
+        val holdTracking = if (drillDefinition.repMode == RepMode.HOLD_BASED) holdTrackerCompat.update(frame.timestampMs, isMinimallyAligned) else null
 
         val holdQuality = if (drillDefinition.repMode == RepMode.HOLD_BASED) {
             holdQualityTracker.update(frame.timestampMs, alignment.smoothedScore)
@@ -110,6 +120,10 @@ class MotionAnalysisPipeline(
             stability = stability,
             holdQuality = holdQuality,
             repQuality = repQuality,
+            timerEligible = isMinimallyAligned,
+            repEligible = isMinimallyAligned,
+            cueEligible = true,
+            blockedReason = if (isMinimallyAligned) "none" else "alignment_below_minimal",
         )
     }
 
