@@ -32,6 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.inversioncoach.app.model.AnnotatedExportFailureReason
+import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.model.sessionMode
 import com.inversioncoach.app.model.SessionMode
@@ -43,6 +45,7 @@ import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.common.parseSessionMetrics
 import com.inversioncoach.app.ui.common.buildSessionSummaryDisplay
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import com.inversioncoach.app.ui.live.LiveCoachingViewModel
 import com.inversioncoach.app.ui.live.mediaAssetExists
 import com.inversioncoach.app.ui.live.selectReplayAsset
 import kotlinx.coroutines.launch
@@ -72,6 +75,19 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
 
     LaunchedEffect(sessionId) {
         notes = repository.readSessionNotes(sessionId).orEmpty()
+    }
+
+    LaunchedEffect(session?.id, session?.annotatedExportStatus, session?.annotatedVideoUri) {
+        val current = session ?: return@LaunchedEffect
+        if (shouldReconcileStaleProcessingState(current, LiveCoachingViewModel.isExportJobActive(current.id))) {
+            repository.saveSession(
+                current.copy(
+                    annotatedExportStatus = AnnotatedExportStatus.FAILED,
+                    annotatedExportFailureReason = AnnotatedExportFailureReason.STALE_PROCESSING_STATE.name,
+                    annotatedVideoUri = null,
+                ),
+            )
+        }
     }
 
     ScaffoldedScreen(title = "Results") { padding ->
@@ -239,6 +255,15 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
 
 internal fun shouldShowRawVideoButton(replayUri: String?, rawUri: String?): Boolean =
     !rawUri.isNullOrBlank() && replayUri != rawUri
+
+internal fun shouldReconcileStaleProcessingState(
+    session: com.inversioncoach.app.model.SessionRecord,
+    hasActiveExportJob: Boolean,
+): Boolean {
+    return session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING &&
+        session.annotatedVideoUri.isNullOrBlank() &&
+        !hasActiveExportJob
+}
 
 internal fun replayAvailabilityBadge(replayLabel: String): String =
     if (replayLabel == "Annotated replay") "Annotated Replay Ready" else "Raw Only"
