@@ -89,6 +89,8 @@ data class UploadVideoUiState(
 data class UploadFlowResult(
     val sessionId: Long,
     val replayUri: String?,
+    val annotatedReady: Boolean,
+    val exportFailureReason: String? = null,
 )
 
 interface UploadVideoAnalysisRunner {
@@ -128,29 +130,30 @@ class DefaultUploadVideoAnalysisRunner(
             ),
         )
         Log.i(TAG, "analysis_start sessionId=$sessionId uri=$uri")
+        var persistedRawUri: String? = null
+        try {
+            persistedRawUri = repository.saveRawVideoBlob(sessionId, uri.toString())
+                ?: error("Unable to import selected video")
+            repository.updateRawPersistStatus(sessionId, RawPersistStatus.SUCCEEDED)
 
-        val persistedRawUri = repository.saveRawVideoBlob(sessionId, uri.toString())
-            ?: error("Unable to import selected video")
-        repository.updateRawPersistStatus(sessionId, RawPersistStatus.SUCCEEDED)
+            val totalStart = System.currentTimeMillis()
+            val prepareStart = System.currentTimeMillis()
+            onProgress(UploadProgress(UploadStage.PREPARING_VIDEO, 0.1f))
+            val profile = ExistingDrillToProfileAdapter().fromDrill(drillType)
+            val prepareDurationMs = System.currentTimeMillis() - prepareStart
+            val frameSource = MlKitVideoPoseFrameSource(context.applicationContext, sampleFps = preset.analysisFps)
+            val analyzer = UploadedVideoAnalyzer(frameSource)
+            onProgress(UploadProgress(UploadStage.ANALYZING, 0.25f))
+            val analysisStart = System.currentTimeMillis()
+            val analysis = analyzer.analyze(Uri.parse(persistedRawUri), profile)
+            val analysisDurationMs = System.currentTimeMillis() - analysisStart
+            if (analysis.overlayTimeline.isEmpty()) {
+                error("No body landmarks detected. Try another video with full-body side view.")
+            }
 
-        val totalStart = System.currentTimeMillis()
-        val prepareStart = System.currentTimeMillis()
-        onProgress(UploadProgress(UploadStage.PREPARING_VIDEO, 0.1f))
-        val profile = ExistingDrillToProfileAdapter().fromDrill(drillType)
-        val prepareDurationMs = System.currentTimeMillis() - prepareStart
-        val frameSource = MlKitVideoPoseFrameSource(context.applicationContext, sampleFps = preset.analysisFps)
-        val analyzer = UploadedVideoAnalyzer(frameSource)
-        onProgress(UploadProgress(UploadStage.ANALYZING, 0.25f))
-        val analysisStart = System.currentTimeMillis()
-        val analysis = analyzer.analyze(Uri.parse(persistedRawUri), profile)
-        val analysisDurationMs = System.currentTimeMillis() - analysisStart
-        if (analysis.overlayTimeline.isEmpty()) {
-            error("No body landmarks detected. Try another video with full-body side view.")
-        }
-
-        onProgress(UploadProgress(UploadStage.ANALYZING, 0.6f))
-        val orientationClassifier = FreestyleOrientationClassifier()
-        val overlayFrames = analysis.overlayTimeline.map { point ->
+            onProgress(UploadProgress(UploadStage.ANALYZING, 0.6f))
+            val orientationClassifier = FreestyleOrientationClassifier()
+            val overlayFrames = analysis.overlayTimeline.map { point ->
             val joints = point.landmarks.map { (name, pointPair) ->
                 com.inversioncoach.app.model.JointPoint(name, pointPair.first, pointPair.second, 0f, point.confidence)
             }
@@ -170,8 +173,8 @@ class DefaultUploadVideoAnalysisRunner(
             )
         }
 
-        overlayFrames.forEach { frame ->
-            repository.saveFrameMetric(
+            overlayFrames.forEach { frame ->
+                repository.saveFrameMetric(
                 FrameMetricRecord(
                     sessionId = sessionId,
                     timestampMs = frame.timestampMs,
@@ -183,67 +186,101 @@ class DefaultUploadVideoAnalysisRunner(
                     anglesJson = "{}",
                     activeIssue = null,
                 ),
+                )
+            }
+
+            val overlayTimeline = OverlayTimeline(
+                startedAtMs = 0L,
+                sampleIntervalMs = 80L,
+                frames = overlayFrames.map { it.toTimelineFrame() },
             )
-        }
 
-        onProgress(UploadProgress(UploadStage.RENDERING, 0.7f))
-        val renderStart = System.currentTimeMillis()
-        val exportPipeline = AnnotatedExportPipeline(repository, AnnotatedVideoCompositor(context.applicationContext))
-        val export = exportPipeline.export(
-            sessionId = sessionId,
-            rawVideoUri = persistedRawUri,
-            drillType = drillType,
-            drillCameraSide = DrillCameraSide.LEFT,
-            overlayTimeline = OverlayTimeline(startedAtMs = 0L, sampleIntervalMs = 80L, frames = overlayFrames.map { it.toTimelineFrame() }),
-            preset = preset,
-            onRenderProgress = { rendered, total ->
-                val ratio = if (total <= 0) 0f else rendered.toFloat() / total.toFloat()
-                onProgress(UploadProgress(UploadStage.RENDERING, 0.7f + (ratio * 0.25f), null))
-            },
-        )
-        val renderDurationMs = System.currentTimeMillis() - renderStart
-        val overlayTimelineUri = repository.saveOverlayTimeline(sessionId, OverlayTimelineJson.encode(OverlayTimeline(startedAtMs = 0L, sampleIntervalMs = 80L, frames = overlayFrames.map { it.toTimelineFrame() })))
-        if (!export.failureReason.isNullOrBlank()) {
-            Log.w(TAG, "analysis_export_failed sessionId=$sessionId reason=${export.failureReason}")
-        }
+            onProgress(UploadProgress(UploadStage.RENDERING, 0.7f))
+            val renderStart = System.currentTimeMillis()
+            val exportPipeline = AnnotatedExportPipeline(repository, AnnotatedVideoCompositor(context.applicationContext))
+            val export = exportPipeline.export(
+                sessionId = sessionId,
+                rawVideoUri = persistedRawUri,
+                drillType = drillType,
+                drillCameraSide = DrillCameraSide.LEFT,
+                overlayTimeline = overlayTimeline,
+                preset = preset,
+                onRenderProgress = { rendered, total ->
+                    val ratio = if (total <= 0) 0f else rendered.toFloat() / total.toFloat()
+                    onProgress(UploadProgress(UploadStage.RENDERING, 0.7f + (ratio * 0.25f), null))
+                },
+            )
+            val renderDurationMs = System.currentTimeMillis() - renderStart
+            val overlayTimelineUri = repository.saveOverlayTimeline(sessionId, OverlayTimelineJson.encode(overlayTimeline))
+            if (!export.failureReason.isNullOrBlank()) {
+                Log.w(TAG, "analysis_export_failed sessionId=$sessionId reason=${export.failureReason}")
+                repository.updateAnnotatedExportFailureReason(sessionId, export.failureReason)
+            }
 
-        onProgress(UploadProgress(UploadStage.VERIFYING, 0.97f))
-        val verifyStart = System.currentTimeMillis()
-        val now = System.currentTimeMillis()
-        val verifyDurationMs = now - verifyStart
-        val totalDurationMs = now - totalStart
-        val replayUri = export.persistedUri ?: persistedRawUri
-        repository.updateMediaPipelineState(sessionId) { session ->
-            session.copy(
+            onProgress(UploadProgress(UploadStage.VERIFYING, 0.97f))
+            val verifyStart = System.currentTimeMillis()
+            val now = System.currentTimeMillis()
+            val verifyDurationMs = now - verifyStart
+            val totalDurationMs = now - totalStart
+            val replayUri = export.persistedUri ?: persistedRawUri
+            repository.updateMediaPipelineState(sessionId) { session ->
+                session.copy(
                 completedAtMs = now,
                 overallScore = ((analysis.overlayTimeline.map { it.metrics["alignment_score"] ?: 0f }.average()) * 100f).toInt().coerceIn(0, 100),
                 strongestArea = "Alignment",
                 limitingFactor = "Consistency",
                 wins = "Processed uploaded video",
                 issues = if (analysis.droppedFrames > 0) "Dropped ${analysis.droppedFrames} low-confidence frames" else "",
-                metricsJson = (analysis.telemetry + mapOf(
-                    "decode_time_ms" to analysis.telemetry["decode_time_ms"].toString(),
-                    "analysis_time_ms" to analysisDurationMs.toString(),
-                    "render_time_ms" to renderDurationMs.toString(),
-                    "encode_time_ms" to renderDurationMs.toString(),
-                    "verification_time_ms" to verifyDurationMs.toString(),
-                    "prepare_time_ms" to prepareDurationMs.toString(),
-                    "total_job_time_ms" to totalDurationMs.toString(),
-                    "export_preset" to preset.name,
-                    "decode_worker_count" to frameSource.lastDecodeTelemetry.workerCount.toString(),
-                    "decode_max_backlog" to frameSource.lastDecodeTelemetry.maxQueueBacklog.toString(),
-                    "decode_avg_worker_active" to "%.2f".format(frameSource.lastDecodeTelemetry.averageWorkerActive),
-                )).toString(),
+                metricsJson = buildString {
+                    append("trackingMode:HOLD_BASED")
+                    append("|validFrames:${analysis.overlayTimeline.size}")
+                    append("|invalidFrames:${analysis.droppedFrames}")
+                    append("|alignedDurationMs:${analysis.overlayTimeline.size * 80L}")
+                    append("|bestAlignedStreakMs:${analysis.overlayTimeline.size * 80L}")
+                    append("|sessionTrackedMs:${analysis.overlayTimeline.size * 80L}")
+                    append("|alignmentRate:1.000")
+                    append("|avgAlignment:${((analysis.overlayTimeline.map { it.metrics["alignment_score"] ?: 0f }.average()) * 100f).toInt().coerceIn(0, 100)}")
+                    append("|avgStability:0")
+                    append("|analysisTimeMs:$analysisDurationMs")
+                    append("|renderTimeMs:$renderDurationMs")
+                    append("|verificationTimeMs:$verifyDurationMs")
+                    append("|prepareTimeMs:$prepareDurationMs")
+                    append("|totalJobTimeMs:$totalDurationMs")
+                    append("|exportPreset:${preset.name}")
+                    append("|decodeWorkerCount:${frameSource.lastDecodeTelemetry.workerCount}")
+                    append("|decodeMaxBacklog:${frameSource.lastDecodeTelemetry.maxQueueBacklog}")
+                    append("|decodeAvgWorkerActive:${"%.2f".format(frameSource.lastDecodeTelemetry.averageWorkerActive)}")
+                },
                 bestPlayableUri = replayUri,
                 rawVideoUri = persistedRawUri,
                 annotatedVideoUri = export.persistedUri,
                 overlayFrameCount = overlayFrames.size,
                 overlayTimelineUri = overlayTimelineUri,
             )
+            }
+            Log.i(TAG, "analysis_complete sessionId=$sessionId replayUri=$replayUri")
+            onProgress(UploadProgress(UploadStage.SUCCESS, 1f, 0L))
+            return UploadFlowResult(
+                sessionId = sessionId,
+                replayUri = replayUri,
+                annotatedReady = !export.persistedUri.isNullOrBlank(),
+                exportFailureReason = export.failureReason,
+            )
+        } catch (error: Throwable) {
+            repository.updateRawPersistStatus(sessionId, if (persistedRawUri.isNullOrBlank()) RawPersistStatus.FAILED else RawPersistStatus.SUCCEEDED)
+            repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
+            repository.updateAnnotatedExportFailureReason(sessionId, error.message ?: "UPLOAD_ANALYSIS_FAILED")
+            repository.updateMediaPipelineState(sessionId) { session ->
+                session.copy(
+                    completedAtMs = System.currentTimeMillis(),
+                    bestPlayableUri = persistedRawUri,
+                    rawVideoUri = persistedRawUri ?: session.rawVideoUri,
+                    annotatedVideoUri = null,
+                    limitingFactor = "Upload processing failed",
+                )
+            }
+            throw error
         }
-        Log.i(TAG, "analysis_complete sessionId=$sessionId replayUri=$replayUri")
-        onProgress(UploadProgress(UploadStage.SUCCESS, 1f, 0L))
-        return UploadFlowResult(sessionId = sessionId, replayUri = replayUri)
     }
 }
 
@@ -291,12 +328,18 @@ class UploadVideoViewModel(
                     }
                 }
             }.onSuccess { result ->
+                val completionMessage = if (result.annotatedReady) {
+                    "Analysis complete"
+                } else {
+                    "Analysis complete (raw replay only)"
+                }
                 _state.update {
                     it.copy(
                         stage = UploadStage.SUCCESS,
-                        stageText = "Analysis complete",
+                        stageText = completionMessage,
                         sessionId = result.sessionId,
                         replayUri = result.replayUri,
+                        errorMessage = result.exportFailureReason?.let { reason -> "Annotated overlay export unavailable: $reason" },
                         progressPercent = 1f,
                         canCancel = false,
                     )

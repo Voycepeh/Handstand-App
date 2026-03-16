@@ -23,7 +23,7 @@ class UploadVideoViewModelTest {
                 onProgress(UploadProgress(UploadStage.PREPARING_VIDEO, 0.1f))
                 onProgress(UploadProgress(UploadStage.ANALYZING, 0.4f))
                 onProgress(UploadProgress(UploadStage.RENDERING, 0.8f))
-                return UploadFlowResult(sessionId = 42L, replayUri = "file:///annotated.mp4")
+                return UploadFlowResult(sessionId = 42L, replayUri = "file:///annotated.mp4", annotatedReady = true)
             }
         }
         val viewModel = UploadVideoViewModel(runner)
@@ -59,7 +59,7 @@ class UploadVideoViewModelTest {
     fun pickerInvalidSelectionMovesToFailure() {
         val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
             override suspend fun run(uri: Uri, onProgress: (UploadProgress) -> Unit): UploadFlowResult =
-                UploadFlowResult(1L, null)
+                UploadFlowResult(1L, null, annotatedReady = false)
         })
 
         viewModel.onInvalidSelection("not a video")
@@ -67,4 +67,31 @@ class UploadVideoViewModelTest {
         assertEquals(UploadStage.FAILURE, viewModel.state.value.stage)
         assertEquals("not a video", viewModel.state.value.errorMessage)
     }
+
+    @Test
+    fun exportFallbackStillCompletesWithTruthfulMessage() = runTest(dispatcher) {
+        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+        val runner = object : UploadVideoAnalysisRunner {
+            override suspend fun run(uri: Uri, onProgress: (UploadProgress) -> Unit): UploadFlowResult {
+                onProgress(UploadProgress(UploadStage.RENDERING, 0.8f))
+                return UploadFlowResult(
+                    sessionId = 7L,
+                    replayUri = "file:///raw.mp4",
+                    annotatedReady = false,
+                    exportFailureReason = "VERIFICATION_FAILED",
+                )
+            }
+        }
+        val viewModel = UploadVideoViewModel(runner)
+
+        viewModel.analyze(Uri.parse("content://video"))
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertEquals(UploadStage.SUCCESS, state.stage)
+        assertEquals("Analysis complete (raw replay only)", state.stageText)
+        assertTrue(state.errorMessage?.contains("VERIFICATION_FAILED") == true)
+        kotlinx.coroutines.Dispatchers.resetMain()
+    }
+
 }
