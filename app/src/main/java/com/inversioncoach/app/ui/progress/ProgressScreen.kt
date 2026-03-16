@@ -3,6 +3,7 @@ package com.inversioncoach.app.ui.progress
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -90,11 +91,13 @@ fun ProgressScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     val weekLabel = remember(weekDays) { formatWeekLabel(weekDays.first(), weekDays.last()) }
 
     ScaffoldedScreen(title = "Progress", onBack = onBack) { padding ->
+        val contentScrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
+                .padding(16.dp)
+                .verticalScroll(contentScrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Progress at a glance", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)

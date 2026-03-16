@@ -1,6 +1,9 @@
 package com.inversioncoach.app.storage.repository
 
 import com.inversioncoach.app.model.AnnotatedExportStatus
+import com.inversioncoach.app.model.CleanupStatus
+import com.inversioncoach.app.model.CompressionStatus
+import com.inversioncoach.app.model.RetainedAssetType
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.IssueEvent
@@ -31,7 +34,7 @@ class SessionRepository(
     suspend fun saveRawVideoBlob(sessionId: Long, sourceUri: String): String? {
         val persistedUri = sessionBlobStorage.persistRawVideo(sessionId, sourceUri) ?: return null
         val session = sessionDao.getById(sessionId) ?: return persistedUri
-        sessionDao.upsert(session.copy(rawVideoUri = persistedUri))
+        sessionDao.upsert(session.copy(rawVideoUri = persistedUri, rawMasterUri = persistedUri))
         enforceConfiguredStorageLimit()
         return persistedUri
     }
@@ -39,11 +42,28 @@ class SessionRepository(
     suspend fun saveAnnotatedVideoBlob(sessionId: Long, sourceUri: String): String? {
         val persistedUri = sessionBlobStorage.persistAnnotatedVideo(sessionId, sourceUri) ?: return null
         val session = sessionDao.getById(sessionId) ?: return persistedUri
-        sessionDao.upsert(session.copy(annotatedVideoUri = persistedUri))
+        sessionDao.upsert(session.copy(annotatedVideoUri = persistedUri, annotatedMasterUri = persistedUri))
         enforceConfiguredStorageLimit()
         return persistedUri
     }
 
+
+
+    suspend fun saveAnnotatedFinalVideoBlob(sessionId: Long, sourceUri: String): String? {
+        val persistedUri = sessionBlobStorage.persistAnnotatedFinalVideo(sessionId, sourceUri) ?: return null
+        val session = sessionDao.getById(sessionId) ?: return persistedUri
+        sessionDao.upsert(session.copy(annotatedFinalUri = persistedUri, annotatedVideoUri = persistedUri))
+        enforceConfiguredStorageLimit()
+        return persistedUri
+    }
+
+    suspend fun saveRawFinalVideoBlob(sessionId: Long, sourceUri: String): String? {
+        val persistedUri = sessionBlobStorage.persistRawFinalVideo(sessionId, sourceUri) ?: return null
+        val session = sessionDao.getById(sessionId) ?: return persistedUri
+        sessionDao.upsert(session.copy(rawFinalUri = persistedUri, rawVideoUri = persistedUri))
+        enforceConfiguredStorageLimit()
+        return persistedUri
+    }
 
     suspend fun updateAnnotatedExportStatus(sessionId: Long, status: AnnotatedExportStatus) {
         val session = sessionDao.getById(sessionId) ?: return
@@ -65,6 +85,14 @@ class SessionRepository(
         sessionDao.upsert(session.copy(rawPersistFailureReason = reason))
     }
 
+
+    suspend fun updateMediaPipelineState(
+        sessionId: Long,
+        block: (SessionRecord) -> SessionRecord,
+    ) {
+        val session = sessionDao.getById(sessionId) ?: return
+        sessionDao.upsert(block(session))
+    }
     suspend fun saveSessionNotes(sessionId: Long, notes: String): String {
         val notesUri = sessionBlobStorage.persistNotes(sessionId, notes)
         val session = sessionDao.getById(sessionId)
@@ -108,8 +136,17 @@ class SessionRepository(
                 rawPersistStatus = RawPersistStatus.NOT_STARTED,
                 rawPersistFailureReason = null,
                 annotatedVideoUri = null,
+                rawMasterUri = null,
+                annotatedMasterUri = null,
+                rawFinalUri = null,
+                annotatedFinalUri = null,
+                bestPlayableUri = null,
                 annotatedExportStatus = AnnotatedExportStatus.NOT_STARTED,
                 annotatedExportFailureReason = null,
+                rawCompressionStatus = CompressionStatus.NOT_STARTED,
+                annotatedCompressionStatus = CompressionStatus.NOT_STARTED,
+                cleanupStatus = CleanupStatus.NOT_STARTED,
+                retainedAssetType = RetainedAssetType.NONE,
                 overlayFrameCount = 0,
             ),
         )
@@ -131,6 +168,11 @@ class SessionRepository(
 
     fun observeIssueTimeline(sessionId: Long): Flow<List<IssueEvent>> =
         frameMetricDao.observeIssueTimeline(sessionId)
+
+
+    fun deleteUri(uri: String?): Boolean = sessionBlobStorage.deleteUri(uri)
+
+    fun sessionWorkingFile(sessionId: Long, fileName: String) = sessionBlobStorage.sessionWorkingFile(sessionId, fileName)
 
     suspend fun clearAllSessions() {
         sessionDao.getAllIds().forEach { sessionBlobStorage.deleteSessionBlob(it) }

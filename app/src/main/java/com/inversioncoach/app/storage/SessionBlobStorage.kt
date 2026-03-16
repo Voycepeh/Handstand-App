@@ -9,10 +9,16 @@ class SessionBlobStorage(
     private val context: Context,
 ) {
     fun persistRawVideo(sessionId: Long, sourceUri: String): String? =
-        persistVideo(sessionId, sourceUri, RAW_VIDEO_FILE_NAME)
+        persistVideo(sessionId, sourceUri, RAW_MASTER_FILE_NAME)
 
     fun persistAnnotatedVideo(sessionId: Long, sourceUri: String): String? =
-        persistVideo(sessionId, sourceUri, ANNOTATED_VIDEO_FILE_NAME)
+        persistVideo(sessionId, sourceUri, ANNOTATED_MASTER_FILE_NAME)
+
+    fun persistRawFinalVideo(sessionId: Long, sourceUri: String): String? =
+        persistVideo(sessionId, sourceUri, RAW_FINAL_FILE_NAME)
+
+    fun persistAnnotatedFinalVideo(sessionId: Long, sourceUri: String): String? =
+        persistVideo(sessionId, sourceUri, ANNOTATED_FINAL_FILE_NAME)
 
     fun persistNotes(sessionId: Long, notes: String): String {
         val notesFile = sessionDir(sessionId).resolve(NOTES_FILE_NAME)
@@ -36,9 +42,21 @@ class SessionBlobStorage(
     }
 
     fun deleteVideoFiles(sessionId: Long) {
-        sessionDir(sessionId).resolve(RAW_VIDEO_FILE_NAME).delete()
-        sessionDir(sessionId).resolve(ANNOTATED_VIDEO_FILE_NAME).delete()
+        listOf(
+            RAW_MASTER_FILE_NAME,
+            ANNOTATED_MASTER_FILE_NAME,
+            RAW_FINAL_FILE_NAME,
+            ANNOTATED_FINAL_FILE_NAME,
+        ).forEach { sessionDir(sessionId).resolve(it).delete() }
     }
+
+    fun deleteUri(uri: String?): Boolean {
+        if (uri.isNullOrBlank()) return true
+        val path = runCatching { Uri.parse(uri).path }.getOrNull() ?: return false
+        return runCatching { File(path).delete() }.getOrDefault(false)
+    }
+
+    fun sessionWorkingFile(sessionId: Long, fileName: String): File = sessionDir(sessionId).resolve(fileName)
 
     fun deleteAllBlobs() {
         rootDir().deleteRecursively()
@@ -73,8 +91,10 @@ class SessionBlobStorage(
     companion object {
         private const val TAG = "SessionBlobStorage"
         private const val ROOT_DIRECTORY = "session_blobs"
-        private const val RAW_VIDEO_FILE_NAME = "raw.mp4"
-        private const val ANNOTATED_VIDEO_FILE_NAME = "annotated.mp4"
+        const val RAW_MASTER_FILE_NAME = "raw_master.mp4"
+        const val ANNOTATED_MASTER_FILE_NAME = "annotated_master.mp4"
+        const val RAW_FINAL_FILE_NAME = "raw_final.mp4"
+        const val ANNOTATED_FINAL_FILE_NAME = "annotated_final.mp4"
         private const val NOTES_FILE_NAME = "notes.txt"
     }
 }

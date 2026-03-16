@@ -171,28 +171,41 @@ sequenceDiagram
 ```
 
 
-## Annotated export pipeline (updated)
+## Media finalization architecture (storage-efficient)
 
-- Live preview overlays are still rendered on top of CameraX preview.
-- Recording and export are separate stages:
-  1. capture + finalize raw camera replay (`raw.mp4`)
-  2. post-process raw video with saved overlay frames into `annotated.mp4`
-- Recorded source media always remains a **raw** camera file first.
-- Annotated replay is a deterministic post-processing pipeline (not screen recording / MediaProjection).
-- On finalize, the app runs a compositor that decodes raw frames, redraws overlays from timestamped pose data, and re-encodes a true annotated MP4.
-- Exported `annotated.mp4` includes:
-  - skeleton / limb lines
-  - head and hip dots
-  - ideal vertical alignment line
-  - drill-aware overlay geometry (camera-side and orientation logic)
-- Replay selection prefers annotated asset when available and readable.
-- Raw replay remains the fallback whenever annotated export fails.
-- Export lifecycle is explicit and deterministic: `IDLE -> RAW_FINALIZED -> RAW_PERSISTED -> ANNOTATED_EXPORTING -> (ANNOTATED_READY | ANNOTATED_FAILED)`.
-- Raw persistence status is tracked separately from annotated export status.
-- Annotated replay is only marked ready after output verification (file exists, bytes > 0, metadata duration readable).
-- Failure reasons are persisted in session metadata (`annotatedExportFailureReason`) for diagnostics.
+- **Live performance first**
+  - CameraX records at high quality for downstream export quality.
+  - Live pose analysis runs on a resized analysis stream to protect FPS and overlay responsiveness.
+  - Overlay rendering stays lightweight and independent from finalize-time compression.
+  - No compression/transcoding is performed while recording is active.
 
-Debug builds also perform a lightweight validation pass that compares raw vs annotated frames to verify the overlay appears in the generated file.
+- **Ordered finalization pipeline**
+  1. Persist `raw_master` first.
+  2. Export `annotated_master` from `raw_master`.
+  3. Compress `annotated_master` -> `annotated_final`.
+  4. If annotated path fails or times out, compress `raw_master` -> `raw_final` fallback.
+  5. Verify output (exists, non-zero size, readable duration) after each stage before promoting status.
+
+- **Successor-based cleanup**
+  - A source file is never deleted until its successor has been successfully created and verified.
+  - After verified `annotated_final`, delete `annotated_master` and `raw_master` (normal mode).
+  - After verified `raw_final` fallback, delete `raw_master` (normal mode).
+  - Cleanup failures are persisted but do not block selecting a playable asset.
+
+- **Retention policy**
+  - Default: retain only compressed playback assets.
+  - Preferred retained asset: `annotated_final`.
+  - Fallback retained asset: `raw_final`.
+  - Master/intermediate assets are retained only in debug mode.
+
+- **Playback selection**
+  - History/results resolve replay in this order: `annotated_final` -> `raw_final` -> legacy/raw fallback.
+  - `bestPlayableUri` points to the best verified retained asset.
+
+### Developer note
+
+The app analyzes resized frames live to keep real-time coaching smooth (stable FPS, low latency cues, responsive overlays), but exports from high-quality intermediate recordings to preserve replay fidelity and annotation quality for post-session review.
+
 
 ## Repository structure
 

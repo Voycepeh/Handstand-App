@@ -61,6 +61,33 @@ class FrameValidityGateTest {
         assertEquals("none", result.reason)
     }
 
+
+    @Test
+    fun acceptsFreestyleFrontViewWithoutWrongOrientation() {
+        val drillType = DrillType.FREESTYLE
+        val gate = FrameValidityGate(drillType, DrillConfigs.byType(drillType))
+
+        val frame = PoseFrame(
+            timestampMs = 1_000L,
+            joints = listOf(
+                joint("left_shoulder", 0.35f, 0.25f),
+                joint("right_shoulder", 0.65f, 0.25f),
+                joint("left_hip", 0.42f, 0.45f),
+                joint("right_hip", 0.58f, 0.45f),
+                joint("left_ankle", 0.44f, 0.78f),
+                joint("right_ankle", 0.56f, 0.79f),
+                joint("left_wrist", 0.38f, 0.62f),
+                joint("right_wrist", 0.62f, 0.63f),
+            ),
+            confidence = 0.95f,
+        )
+
+        val result = gate.evaluate(frame)
+
+        assertTrue(result.isValid)
+        assertEquals("none", result.reason)
+    }
+
     private fun joint(name: String, x: Float, y: Float): JointPoint = JointPoint(
         name = name,
         x = x,

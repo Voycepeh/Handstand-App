@@ -1,8 +1,6 @@
 package com.inversioncoach.app.recording
 
 import android.util.Log
-import android.media.MediaMetadataRetriever
-import android.net.Uri
 import com.inversioncoach.app.model.AnnotatedExportFailureReason
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.DrillType
@@ -12,7 +10,6 @@ import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.storage.repository.SessionRepository
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.File
 import kotlin.math.abs
 
 private const val TAG = "AnnotatedExportPipeline"
@@ -142,14 +139,14 @@ class AnnotatedExportPipeline(
         overlayFrames: List<AnnotatedOverlayFrame>,
     ): ExportResult {
         if (overlayFrames.isEmpty()) {
-            updateExportStatus(sessionId, AnnotatedExportStatus.FAILED)
+            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
             Log.w(TAG, "export_failure sessionId=$sessionId reason=overlay_frames_empty")
             return ExportResult(
                 failureReason = AnnotatedExportFailureReason.OVERLAY_FRAMES_EMPTY.name,
                 verificationStatus = VerificationStatus.FAILED,
             )
         }
-        updateExportStatus(sessionId, AnnotatedExportStatus.PROCESSING)
+        updateExportStatus(sessionId, AnnotatedExportStatus.EXPORTING)
         Log.d(
             TAG,
             "export_start sessionId=$sessionId rawVideoUri=$rawVideoUri overlayFrames=${overlayFrames.size} " +
@@ -166,46 +163,29 @@ class AnnotatedExportPipeline(
                 )
             }
         } catch (t: Throwable) {
-            updateExportStatus(sessionId, AnnotatedExportStatus.FAILED)
+            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
             return ExportResult(failureReason = "EXCEPTION_${t::class.simpleName ?: "UNKNOWN"}", verificationStatus = VerificationStatus.FAILED)
         }
         if (renderedUri == null) {
-            updateExportStatus(sessionId, AnnotatedExportStatus.FAILED)
-            return ExportResult(failureReason = AnnotatedExportFailureReason.EXPORT_TIMED_OUT.name, verificationStatus = VerificationStatus.FAILED)
+            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
+            return ExportResult(failureReason = AnnotatedExportFailureReason.ANNOTATED_EXPORT_TIMED_OUT.name, verificationStatus = VerificationStatus.FAILED)
         }
         if (renderedUri.isNullOrBlank()) {
-            updateExportStatus(sessionId, AnnotatedExportStatus.FAILED)
+            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
             Log.w(TAG, "export_failure sessionId=$sessionId reason=rendered_uri_empty")
             return ExportResult(failureReason = AnnotatedExportFailureReason.EXPORT_RETURNED_EMPTY.name, verificationStatus = VerificationStatus.FAILED)
         }
         val persisted = persistAnnotatedVideo(sessionId, renderedUri)
-        val failure = verifyOutput(persisted)
-        val status = if (failure == null) AnnotatedExportStatus.READY else AnnotatedExportStatus.FAILED
+        val verification = MediaVerificationHelper.verify(persisted)
+        val status = if (verification.isValid) AnnotatedExportStatus.EXPORTED_MASTER else AnnotatedExportStatus.ANNOTATED_FAILED
         updateExportStatus(sessionId, status)
-        if (failure != null) {
+        if (!verification.isValid) {
+            val failure = verification.failureReason?.name ?: AnnotatedExportFailureReason.UNKNOWN.name
             Log.w(TAG, "export_failure sessionId=$sessionId reason=$failure")
             return ExportResult(failureReason = failure, verificationStatus = VerificationStatus.FAILED)
         } else {
             Log.d(TAG, "export_complete sessionId=$sessionId persistedUri=$persisted")
             return ExportResult(persistedUri = persisted, verificationStatus = VerificationStatus.PASSED)
-        }
-    }
-
-    private fun verifyOutput(uri: String?): String? {
-        if (uri.isNullOrBlank()) return AnnotatedExportFailureReason.EXPORT_RETURNED_EMPTY.name
-        val path = runCatching { Uri.parse(uri).path }.getOrNull()
-        val candidate = path?.let { File(it) }
-        if (candidate == null || !candidate.exists()) return AnnotatedExportFailureReason.OUTPUT_FILE_MISSING.name
-        if (candidate.length() <= 0L) return AnnotatedExportFailureReason.OUTPUT_FILE_ZERO_BYTES.name
-        val retriever = MediaMetadataRetriever()
-        return try {
-            retriever.setDataSource(candidate.absolutePath)
-            val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-            if (duration > 0L) null else AnnotatedExportFailureReason.OUTPUT_METADATA_UNREADABLE.name
-        } catch (t: Throwable) {
-            "EXCEPTION_${t::class.simpleName ?: "UNKNOWN"}"
-        } finally {
-            runCatching { retriever.release() }
         }
     }
 

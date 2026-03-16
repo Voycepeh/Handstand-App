@@ -3,9 +3,12 @@ package com.inversioncoach.app.storage.db
 import androidx.room.TypeConverter
 import com.inversioncoach.app.model.AlignmentStrictness
 import com.inversioncoach.app.model.AnnotatedExportStatus
+import com.inversioncoach.app.model.CleanupStatus
+import com.inversioncoach.app.model.CompressionStatus
 import com.inversioncoach.app.model.CueStyle
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.RawPersistStatus
+import com.inversioncoach.app.model.RetainedAssetType
 
 class Converters {
     @TypeConverter
@@ -33,7 +36,12 @@ class Converters {
 
     @TypeConverter
     fun annotatedExportStatusFromString(raw: String): AnnotatedExportStatus =
-        runCatching { AnnotatedExportStatus.valueOf(raw) }.getOrDefault(AnnotatedExportStatus.NOT_STARTED)
+        when (raw) {
+            "PROCESSING" -> AnnotatedExportStatus.EXPORTING
+            "READY" -> AnnotatedExportStatus.ANNOTATED_FINAL_READY
+            "FAILED" -> AnnotatedExportStatus.ANNOTATED_FAILED
+            else -> runCatching { AnnotatedExportStatus.valueOf(raw) }.getOrDefault(AnnotatedExportStatus.NOT_STARTED)
+        }
 
     @TypeConverter
     fun annotatedExportStatusToString(value: AnnotatedExportStatus): String = value.name
@@ -44,5 +52,26 @@ class Converters {
 
     @TypeConverter
     fun rawPersistStatusToString(value: RawPersistStatus): String = value.name
+
+    @TypeConverter
+    fun compressionStatusFromString(raw: String): CompressionStatus =
+        runCatching { CompressionStatus.valueOf(raw) }.getOrDefault(CompressionStatus.NOT_STARTED)
+
+    @TypeConverter
+    fun compressionStatusToString(value: CompressionStatus): String = value.name
+
+    @TypeConverter
+    fun cleanupStatusFromString(raw: String): CleanupStatus =
+        runCatching { CleanupStatus.valueOf(raw) }.getOrDefault(CleanupStatus.NOT_STARTED)
+
+    @TypeConverter
+    fun cleanupStatusToString(value: CleanupStatus): String = value.name
+
+    @TypeConverter
+    fun retainedAssetTypeFromString(raw: String): RetainedAssetType =
+        runCatching { RetainedAssetType.valueOf(raw) }.getOrDefault(RetainedAssetType.NONE)
+
+    @TypeConverter
+    fun retainedAssetTypeToString(value: RetainedAssetType): String = value.name
 
 }

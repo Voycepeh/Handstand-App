@@ -98,9 +98,33 @@ data class DrillScore(
 
 enum class AnnotatedExportStatus {
     NOT_STARTED,
-    PROCESSING,
+    EXPORTING,
+    EXPORTED_MASTER,
+    COMPRESSING_FINAL,
+    ANNOTATED_FINAL_READY,
+    ANNOTATED_FAILED,
+    FALLBACK_RAW_FINAL_READY,
+}
+
+enum class CompressionStatus {
+    NOT_STARTED,
+    COMPRESSING,
     READY,
     FAILED,
+}
+
+enum class CleanupStatus {
+    NOT_STARTED,
+    DELETING_INTERMEDIATES,
+    COMPLETE,
+    PARTIAL,
+    FAILED,
+}
+
+enum class RetainedAssetType {
+    ANNOTATED_FINAL,
+    RAW_FINAL,
+    NONE,
 }
 
 enum class RawPersistStatus {
@@ -111,13 +135,19 @@ enum class RawPersistStatus {
 }
 
 enum class AnnotatedExportFailureReason {
+    RAW_SAVE_FAILED,
     RAW_URI_EMPTY,
     OVERLAY_FRAMES_EMPTY,
     EXPORT_RETURNED_EMPTY,
+    ANNOTATED_EXPORT_FAILED,
+    ANNOTATED_EXPORT_TIMED_OUT,
     OUTPUT_FILE_MISSING,
     OUTPUT_FILE_ZERO_BYTES,
-    OUTPUT_METADATA_UNREADABLE,
-    EXPORT_TIMED_OUT,
+    OUTPUT_DURATION_UNREADABLE,
+    ANNOTATED_COMPRESSION_FAILED,
+    RAW_COMPRESSION_FAILED,
+    CLEANUP_DELETE_FAILED,
+    UNKNOWN,
 }
 
 enum class CueStyle { CONCISE, TECHNICAL, ENCOURAGING }
@@ -152,10 +182,24 @@ data class SessionRecord(
     val metricsJson: String,
     val annotatedVideoUri: String?,
     val rawVideoUri: String?,
+    val rawMasterUri: String? = rawVideoUri,
+    val annotatedMasterUri: String? = annotatedVideoUri,
+    val rawFinalUri: String? = rawVideoUri,
+    val annotatedFinalUri: String? = annotatedVideoUri,
+    val bestPlayableUri: String? = annotatedVideoUri ?: rawVideoUri,
     val rawPersistStatus: RawPersistStatus = RawPersistStatus.NOT_STARTED,
     val rawPersistFailureReason: String? = null,
     val annotatedExportStatus: AnnotatedExportStatus = AnnotatedExportStatus.NOT_STARTED,
     val annotatedExportFailureReason: String? = null,
+    val rawCompressionStatus: CompressionStatus = CompressionStatus.NOT_STARTED,
+    val annotatedCompressionStatus: CompressionStatus = CompressionStatus.NOT_STARTED,
+    val cleanupStatus: CleanupStatus = CleanupStatus.NOT_STARTED,
+    val retainedAssetType: RetainedAssetType = RetainedAssetType.NONE,
+    val rawPersistedAtMs: Long? = null,
+    val annotatedExportedAtMs: Long? = null,
+    val annotatedFinalizedAtMs: Long? = null,
+    val rawFinalizedAtMs: Long? = null,
+    val cleanupCompletedAtMs: Long? = null,
     val overlayFrameCount: Int = 0,
     val notesUri: String?,
     val bestFrameTimestampMs: Long?,

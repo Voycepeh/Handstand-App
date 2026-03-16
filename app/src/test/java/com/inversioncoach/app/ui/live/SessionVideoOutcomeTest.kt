@@ -12,11 +12,11 @@ class SessionVideoOutcomeTest {
         val outcome = resolveSessionVideoOutcome(
             rawVideoUri = "file:///raw.mp4",
             annotatedVideoUri = null,
-            exportStatus = AnnotatedExportStatus.FAILED,
+            exportStatus = AnnotatedExportStatus.ANNOTATED_FAILED,
         )
 
         assertEquals("file:///raw.mp4", outcome.rawVideoUri)
         assertNull(outcome.annotatedVideoUri)
-        assertEquals(AnnotatedExportStatus.FAILED, outcome.annotatedExportStatus)
+        assertEquals(AnnotatedExportStatus.ANNOTATED_FAILED, outcome.annotatedExportStatus)
     }
 }

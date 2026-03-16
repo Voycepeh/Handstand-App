@@ -390,11 +390,11 @@ fun resolvePreferredReplayUri(
     session: SessionRecord?,
     isReadable: (String?) -> Boolean = ::mediaAssetExists,
 ): PreferredReplayUri {
-    val annotatedUri = session?.annotatedVideoUri
+    val annotatedUri = session?.annotatedFinalUri ?: session?.annotatedVideoUri
     if (isReadable(annotatedUri)) {
         return PreferredReplayUri(uri = annotatedUri, source = "annotated")
     }
-    val rawUri = session?.rawVideoUri
+    val rawUri = session?.rawFinalUri ?: session?.rawVideoUri ?: session?.rawMasterUri
     if (isReadable(rawUri)) {
         return PreferredReplayUri(uri = rawUri, source = "raw")
     }

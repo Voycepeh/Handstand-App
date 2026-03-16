@@ -43,12 +43,12 @@ class CameraSessionManager(
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .setImageQueueDepth(2)
-                    .setTargetResolution(Size(1280, 720))
+                    .setTargetResolution(Size(960, 540))
                     .build().apply {
                         setAnalyzer(cameraExecutor, analyzer)
                     }
                 val qualitySelector = QualitySelector.fromOrderedList(
-                    listOf(Quality.SD, Quality.HD, Quality.FHD),
+                    listOf(Quality.FHD, Quality.HD, Quality.SD),
                 )
                 videoCapture = VideoCapture.withOutput(
                     Recorder.Builder()

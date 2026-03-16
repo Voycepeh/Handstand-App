@@ -5,11 +5,12 @@ import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.overlay.DrillCameraSide
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.io.File
 
 class AnnotatedExportPipelineTest {
 
@@ -84,7 +85,7 @@ class AnnotatedExportPipelineTest {
             )
         }
 
-        assertEquals(AnnotatedExportFailureReason.EXPORT_TIMED_OUT.name, exported.failureReason)
+        assertEquals(AnnotatedExportFailureReason.ANNOTATED_EXPORT_TIMED_OUT.name, exported.failureReason)
     }
 
     @Test
