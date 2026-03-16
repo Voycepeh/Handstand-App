@@ -188,6 +188,7 @@ sequenceDiagram
 - Replay selection prefers annotated asset when available and readable.
 - Raw replay remains the fallback whenever annotated export fails.
 - Export lifecycle is explicit and deterministic: `IDLE -> RAW_FINALIZED -> RAW_PERSISTED -> ANNOTATED_EXPORTING -> (ANNOTATED_READY | ANNOTATED_FAILED)`.
+- Raw persistence status is tracked separately from annotated export status.
 - Annotated replay is only marked ready after output verification (file exists, bytes > 0, metadata duration readable).
 - Failure reasons are persisted in session metadata (`annotatedExportFailureReason`) for diagnostics.
 

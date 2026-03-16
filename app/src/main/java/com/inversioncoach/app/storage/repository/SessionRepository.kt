@@ -4,6 +4,7 @@ import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.IssueEvent
+import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.overlay.DrillCameraSide
@@ -54,6 +55,16 @@ class SessionRepository(
         sessionDao.upsert(session.copy(annotatedExportFailureReason = reason))
     }
 
+    suspend fun updateRawPersistStatus(sessionId: Long, status: RawPersistStatus) {
+        val session = sessionDao.getById(sessionId) ?: return
+        sessionDao.upsert(session.copy(rawPersistStatus = status))
+    }
+
+    suspend fun updateRawPersistFailureReason(sessionId: Long, reason: String?) {
+        val session = sessionDao.getById(sessionId) ?: return
+        sessionDao.upsert(session.copy(rawPersistFailureReason = reason))
+    }
+
     suspend fun saveSessionNotes(sessionId: Long, notes: String): String {
         val notesUri = sessionBlobStorage.persistNotes(sessionId, notes)
         val session = sessionDao.getById(sessionId)
@@ -94,9 +105,12 @@ class SessionRepository(
         sessionDao.upsert(
             session.copy(
                 rawVideoUri = null,
+                rawPersistStatus = RawPersistStatus.NOT_STARTED,
+                rawPersistFailureReason = null,
                 annotatedVideoUri = null,
                 annotatedExportStatus = AnnotatedExportStatus.NOT_STARTED,
                 annotatedExportFailureReason = null,
+                overlayFrameCount = 0,
             ),
         )
     }

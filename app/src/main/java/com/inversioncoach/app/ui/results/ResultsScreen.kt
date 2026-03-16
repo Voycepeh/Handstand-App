@@ -168,7 +168,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 }
             }
             Text(
-                if (replaySelection.label == "Annotated replay") "Annotated Replay Ready" else "Raw Only",
+                replayAvailabilityBadge(replaySelection.label),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (showRawVideoButton) {
@@ -179,6 +179,15 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 ) {
                     Text("Raw replay")
                 }
+            }
+            if (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+                Text("replay source selected: ${if (replaySelection.label == "Annotated replay") "annotated" else if (replaySelection.label == "Raw replay") "raw" else "none"}")
+                Text("rawPersistStatus: ${session?.rawPersistStatus}")
+                Text("annotatedExportStatus: ${session?.annotatedExportStatus}")
+                Text("annotatedExportFailureReason: ${session?.annotatedExportFailureReason.orEmpty()}")
+                Text("rawVideoUri: ${session?.rawVideoUri.orEmpty()}")
+                Text("annotatedVideoUri: ${session?.annotatedVideoUri.orEmpty()}")
+                Text("overlay frame count: ${session?.overlayFrameCount ?: 0}")
             }
             Button(
                 onClick = {
@@ -229,6 +238,9 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
 
 internal fun shouldShowRawVideoButton(replayUri: String?, rawUri: String?): Boolean =
     !rawUri.isNullOrBlank() && replayUri != rawUri
+
+internal fun replayAvailabilityBadge(replayLabel: String): String =
+    if (replayLabel == "Annotated replay") "Annotated Replay Ready" else "Raw Only"
 
 
 private data class CollapsedIssueRange(

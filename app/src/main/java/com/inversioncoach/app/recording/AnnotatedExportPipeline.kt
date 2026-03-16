@@ -1,6 +1,8 @@
 package com.inversioncoach.app.recording
 
 import android.util.Log
+import android.media.MediaMetadataRetriever
+import android.net.Uri
 import com.inversioncoach.app.model.AnnotatedExportFailureReason
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.DrillType
@@ -9,6 +11,8 @@ import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.storage.repository.SessionRepository
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
 import kotlin.math.abs
 
 private const val TAG = "AnnotatedExportPipeline"
@@ -86,16 +90,25 @@ class AnnotatedExportPipeline(
     private val debugValidationEnabled: Boolean = false,
     private val persistAnnotatedVideo: suspend (Long, String) -> String?,
     private val updateExportStatus: suspend (Long, AnnotatedExportStatus) -> Unit,
+    private val exportTimeoutMs: Long = EXPORT_TIMEOUT_MS,
     private val renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, List<AnnotatedOverlayFrame>, Boolean) -> String? =
         { rawUri, drill, side, frames, debug ->
             compositor.export(rawUri, drill, side, frames, debug)
         },
 ) {
 
+    enum class VerificationStatus {
+        PASSED,
+        FAILED,
+        NOT_RUN,
+    }
+
     data class ExportResult(
         val persistedUri: String? = null,
-        val failureReason: AnnotatedExportFailureReason? = null,
+        val failureReason: String? = null,
+        val verificationStatus: VerificationStatus = VerificationStatus.NOT_RUN,
     )
+
     constructor(
         repository: SessionRepository,
         compositor: AnnotatedVideoCompositor,
@@ -110,12 +123,14 @@ class AnnotatedExportPipeline(
     internal constructor(
         persistAnnotatedVideo: suspend (Long, String) -> String?,
         updateExportStatus: suspend (Long, AnnotatedExportStatus) -> Unit,
+        exportTimeoutMs: Long = EXPORT_TIMEOUT_MS,
         renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, List<AnnotatedOverlayFrame>, Boolean) -> String?,
     ) : this(
         compositor = throw IllegalStateException("Test constructor requires renderAnnotatedVideo"),
         debugValidationEnabled = false,
         persistAnnotatedVideo = persistAnnotatedVideo,
         updateExportStatus = updateExportStatus,
+        exportTimeoutMs = exportTimeoutMs,
         renderAnnotatedVideo = renderAnnotatedVideo,
     )
 
@@ -129,7 +144,10 @@ class AnnotatedExportPipeline(
         if (overlayFrames.isEmpty()) {
             updateExportStatus(sessionId, AnnotatedExportStatus.FAILED)
             Log.w(TAG, "export_failure sessionId=$sessionId reason=overlay_frames_empty")
-            return ExportResult(failureReason = AnnotatedExportFailureReason.OVERLAY_FRAMES_EMPTY)
+            return ExportResult(
+                failureReason = AnnotatedExportFailureReason.OVERLAY_FRAMES_EMPTY.name,
+                verificationStatus = VerificationStatus.FAILED,
+            )
         }
         updateExportStatus(sessionId, AnnotatedExportStatus.PROCESSING)
         Log.d(
@@ -137,27 +155,61 @@ class AnnotatedExportPipeline(
             "export_start sessionId=$sessionId rawVideoUri=$rawVideoUri overlayFrames=${overlayFrames.size} " +
                 "firstFrameTs=${overlayFrames.first().timestampMs} lastFrameTs=${overlayFrames.last().timestampMs}",
         )
-        val renderedUri = renderAnnotatedVideo(
-            rawVideoUri,
-            drillType,
-            drillCameraSide,
-            overlayFrames,
-            debugValidationEnabled,
-        )
+        val renderedUri = try {
+            withTimeoutOrNull(exportTimeoutMs) {
+                renderAnnotatedVideo(
+                    rawVideoUri,
+                    drillType,
+                    drillCameraSide,
+                    overlayFrames,
+                    debugValidationEnabled,
+                )
+            }
+        } catch (t: Throwable) {
+            updateExportStatus(sessionId, AnnotatedExportStatus.FAILED)
+            return ExportResult(failureReason = "EXCEPTION_${t::class.simpleName ?: "UNKNOWN"}", verificationStatus = VerificationStatus.FAILED)
+        }
+        if (renderedUri == null) {
+            updateExportStatus(sessionId, AnnotatedExportStatus.FAILED)
+            return ExportResult(failureReason = AnnotatedExportFailureReason.EXPORT_TIMED_OUT.name, verificationStatus = VerificationStatus.FAILED)
+        }
         if (renderedUri.isNullOrBlank()) {
             updateExportStatus(sessionId, AnnotatedExportStatus.FAILED)
             Log.w(TAG, "export_failure sessionId=$sessionId reason=rendered_uri_empty")
-            return ExportResult(failureReason = AnnotatedExportFailureReason.EXPORT_RETURNED_NULL)
+            return ExportResult(failureReason = AnnotatedExportFailureReason.EXPORT_RETURNED_EMPTY.name, verificationStatus = VerificationStatus.FAILED)
         }
         val persisted = persistAnnotatedVideo(sessionId, renderedUri)
-        val status = if (persisted.isNullOrBlank()) AnnotatedExportStatus.FAILED else AnnotatedExportStatus.READY
+        val failure = verifyOutput(persisted)
+        val status = if (failure == null) AnnotatedExportStatus.READY else AnnotatedExportStatus.FAILED
         updateExportStatus(sessionId, status)
-        if (persisted.isNullOrBlank()) {
-            Log.w(TAG, "export_failure sessionId=$sessionId reason=persist_annotated_failed")
-            return ExportResult(failureReason = AnnotatedExportFailureReason.EXPORT_RETURNED_NULL)
+        if (failure != null) {
+            Log.w(TAG, "export_failure sessionId=$sessionId reason=$failure")
+            return ExportResult(failureReason = failure, verificationStatus = VerificationStatus.FAILED)
         } else {
             Log.d(TAG, "export_complete sessionId=$sessionId persistedUri=$persisted")
-            return ExportResult(persistedUri = persisted)
+            return ExportResult(persistedUri = persisted, verificationStatus = VerificationStatus.PASSED)
         }
+    }
+
+    private fun verifyOutput(uri: String?): String? {
+        if (uri.isNullOrBlank()) return AnnotatedExportFailureReason.EXPORT_RETURNED_EMPTY.name
+        val path = runCatching { Uri.parse(uri).path }.getOrNull()
+        val candidate = path?.let { File(it) }
+        if (candidate == null || !candidate.exists()) return AnnotatedExportFailureReason.OUTPUT_FILE_MISSING.name
+        if (candidate.length() <= 0L) return AnnotatedExportFailureReason.OUTPUT_FILE_ZERO_BYTES.name
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(candidate.absolutePath)
+            val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            if (duration > 0L) null else AnnotatedExportFailureReason.OUTPUT_METADATA_UNREADABLE.name
+        } catch (t: Throwable) {
+            "EXCEPTION_${t::class.simpleName ?: "UNKNOWN"}"
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
+    companion object {
+        private const val EXPORT_TIMEOUT_MS = 25_000L
     }
 }

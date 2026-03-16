@@ -6,6 +6,7 @@ import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.overlay.DrillCameraSide
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.delay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -32,7 +33,7 @@ class AnnotatedExportPipelineTest {
         }
 
         assertNull(exported.persistedUri)
-        assertEquals(AnnotatedExportFailureReason.OVERLAY_FRAMES_EMPTY, exported.failureReason)
+        assertEquals(AnnotatedExportFailureReason.OVERLAY_FRAMES_EMPTY.name, exported.failureReason)
         assertEquals(listOf(AnnotatedExportStatus.FAILED), statuses)
     }
 
@@ -57,7 +58,54 @@ class AnnotatedExportPipelineTest {
 
         assertEquals("file:///persisted_annotated.mp4", exported.persistedUri)
         assertNull(exported.failureReason)
+        assertEquals(AnnotatedExportPipeline.VerificationStatus.PASSED, exported.verificationStatus)
         assertEquals(listOf(AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.READY), statuses)
+    }
+
+    @Test
+    fun timeoutMapsToExportTimedOutReason() {
+        val pipeline = AnnotatedExportPipeline(
+            persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
+            updateExportStatus = { _, _ -> },
+            exportTimeoutMs = 25L,
+            renderAnnotatedVideo = { _, _, _, _, _ ->
+                delay(100L)
+                "file:///rendered_annotated.mp4"
+            },
+        )
+
+        val exported = runBlocking {
+            pipeline.export(
+                sessionId = 7L,
+                rawVideoUri = "file:///raw.mp4",
+                drillType = DrillType.CHEST_TO_WALL_HANDSTAND,
+                drillCameraSide = DrillCameraSide.LEFT,
+                overlayFrames = listOf(testFrame(1000L)),
+            )
+        }
+
+        assertEquals(AnnotatedExportFailureReason.EXPORT_TIMED_OUT.name, exported.failureReason)
+    }
+
+    @Test
+    fun exceptionsMapToTypedExceptionReason() {
+        val pipeline = AnnotatedExportPipeline(
+            persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
+            updateExportStatus = { _, _ -> },
+            renderAnnotatedVideo = { _, _, _, _, _ -> throw IllegalStateException("boom") },
+        )
+
+        val exported = runBlocking {
+            pipeline.export(
+                sessionId = 7L,
+                rawVideoUri = "file:///raw.mp4",
+                drillType = DrillType.CHEST_TO_WALL_HANDSTAND,
+                drillCameraSide = DrillCameraSide.LEFT,
+                overlayFrames = listOf(testFrame(1000L)),
+            )
+        }
+
+        assertEquals("EXCEPTION_IllegalStateException", exported.failureReason)
     }
 
     private fun testFrame(timestampMs: Long) = AnnotatedOverlayFrame(

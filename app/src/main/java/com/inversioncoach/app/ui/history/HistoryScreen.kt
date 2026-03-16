@@ -35,6 +35,7 @@ import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.common.formatLimiterText
 import com.inversioncoach.app.ui.common.formatPrimaryPerformance
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import com.inversioncoach.app.ui.live.resolvePreferredReplayUri
 
 @Composable
 fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
@@ -119,6 +120,16 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
                             )
                             if (isDebuggable && session.annotatedExportStatus.name == "FAILED") {
                                 Text("Reason: ${session.annotatedExportFailureReason.orEmpty()}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            if (isDebuggable) {
+                                val replaySource = resolvePreferredReplayUri(session).source
+                                Text("replay source selected: $replaySource", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("rawPersistStatus: ${session.rawPersistStatus}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("annotatedExportStatus: ${session.annotatedExportStatus}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("annotatedExportFailureReason: ${session.annotatedExportFailureReason.orEmpty()}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("rawVideoUri: ${session.rawVideoUri.orEmpty()}", maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("annotatedVideoUri: ${session.annotatedVideoUri.orEmpty()}", maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("overlay frame count: ${session.overlayFrameCount}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Text("Storage: $sizeMb MB", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

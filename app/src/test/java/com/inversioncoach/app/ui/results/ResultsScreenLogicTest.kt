@@ -1,6 +1,7 @@
 package com.inversioncoach.app.ui.results
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -33,5 +34,10 @@ class ResultsScreenLogicTest {
                 rawUri = null,
             ),
         )
+    }
+
+    @Test
+    fun replayBadgeShowsRawOnlyWhenPrimaryReplayIsRaw() {
+        assertEquals("Raw Only", replayAvailabilityBadge("Raw replay"))
     }
 }

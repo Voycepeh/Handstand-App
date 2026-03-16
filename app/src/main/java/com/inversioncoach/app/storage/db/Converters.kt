@@ -5,6 +5,7 @@ import com.inversioncoach.app.model.AlignmentStrictness
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.CueStyle
 import com.inversioncoach.app.model.DrillType
+import com.inversioncoach.app.model.RawPersistStatus
 
 class Converters {
     @TypeConverter
@@ -36,5 +37,12 @@ class Converters {
 
     @TypeConverter
     fun annotatedExportStatusToString(value: AnnotatedExportStatus): String = value.name
+
+    @TypeConverter
+    fun rawPersistStatusFromString(raw: String): RawPersistStatus =
+        runCatching { RawPersistStatus.valueOf(raw) }.getOrDefault(RawPersistStatus.NOT_STARTED)
+
+    @TypeConverter
+    fun rawPersistStatusToString(value: RawPersistStatus): String = value.name
 
 }

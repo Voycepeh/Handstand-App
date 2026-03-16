@@ -90,10 +90,17 @@ enum class AnnotatedExportStatus {
     FAILED,
 }
 
+enum class RawPersistStatus {
+    NOT_STARTED,
+    PROCESSING,
+    SUCCEEDED,
+    FAILED,
+}
+
 enum class AnnotatedExportFailureReason {
     RAW_URI_EMPTY,
     OVERLAY_FRAMES_EMPTY,
-    EXPORT_RETURNED_NULL,
+    EXPORT_RETURNED_EMPTY,
     OUTPUT_FILE_MISSING,
     OUTPUT_FILE_ZERO_BYTES,
     OUTPUT_METADATA_UNREADABLE,
@@ -132,8 +139,11 @@ data class SessionRecord(
     val metricsJson: String,
     val annotatedVideoUri: String?,
     val rawVideoUri: String?,
+    val rawPersistStatus: RawPersistStatus = RawPersistStatus.NOT_STARTED,
+    val rawPersistFailureReason: String? = null,
     val annotatedExportStatus: AnnotatedExportStatus = AnnotatedExportStatus.NOT_STARTED,
     val annotatedExportFailureReason: String? = null,
+    val overlayFrameCount: Int = 0,
     val notesUri: String?,
     val bestFrameTimestampMs: Long?,
     val worstFrameTimestampMs: Long?,
