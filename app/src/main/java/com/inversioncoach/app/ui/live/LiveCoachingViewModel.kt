@@ -55,7 +55,7 @@ class LiveCoachingViewModel(
     private val smoother: PoseSmoother = PoseSmoother(),
     private val motionPipeline: MotionAnalysisPipeline = MotionAnalysisPipeline(drillType),
     private val overlayStabilizer: OverlayStabilizer = OverlayStabilizer(),
-    private val annotatedExportPipeline: AnnotatedExportPipeline = AnnotatedExportPipeline(repository),
+    private val annotatedExportPipeline: AnnotatedExportPipeline,
 ) : ViewModel() {
 
     private val sessionMode = drillType.sessionMode()

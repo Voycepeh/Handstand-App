@@ -170,6 +170,21 @@ sequenceDiagram
     VM-->>Live: SessionStopResult
 ```
 
+
+## Annotated export pipeline (updated)
+
+- Live preview overlays are still rendered on top of CameraX preview.
+- Recorded source media remains a **raw** camera file (`raw.mp4`).
+- On finalize, the app now runs a dedicated compositor that decodes raw frames, redraws overlays using recorded timestamped pose data, and re-encodes a true annotated MP4.
+- Exported `annotated.mp4` includes:
+  - skeleton / limb lines
+  - head and hip dots
+  - ideal vertical alignment line
+  - drill-aware overlay geometry (camera-side and orientation logic)
+- Replay prefers annotated asset when available; falls back to raw if export fails.
+
+Debug builds also perform a lightweight validation pass that compares raw vs annotated frames to verify the overlay appears in the generated file.
+
 ## Repository structure
 
 - `app/src/main/java/com/inversioncoach/app/`

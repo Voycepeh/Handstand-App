@@ -3,7 +3,6 @@ package com.inversioncoach.app.overlay
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -12,7 +11,6 @@ import androidx.compose.ui.graphics.nativeCanvas
 import com.inversioncoach.app.model.AlignmentMetric
 import com.inversioncoach.app.model.AngleDebugMetric
 import com.inversioncoach.app.model.DrillType
-import com.inversioncoach.app.model.JointPoint
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.model.SmoothedPoseFrame
 
@@ -31,34 +29,19 @@ fun OverlayRenderer(
     cueText: String = "",
     drillCameraSide: DrillCameraSide = DrillCameraSide.LEFT,
 ) {
-    val mapper = remember { OverlayCoordinateMapper() }
-
     Canvas(modifier = modifier) {
         val joints = frame?.joints.orEmpty()
         val model = OverlayGeometry.build(drillType, sessionMode, joints, drillCameraSide)
-
-        model.connections.forEach { (from, to) ->
-            val start = model.joints.firstOrNull { it.name == from } ?: return@forEach
-            val end = model.joints.firstOrNull { it.name == to } ?: return@forEach
-            drawLine(
-                color = Color(0xFF7CF0A9),
-                start = mapper.toOffset(start, size.width, size.height),
-                end = mapper.toOffset(end, size.width, size.height),
-                strokeWidth = 6f,
-            )
-        }
-
-        model.joints.forEach { joint ->
-            val style = jointStyle(joint.name, Color(0xFF7CF0A9), 6f)
-            drawCircle(style.color, radius = style.radius, center = mapper.toOffset(joint, size.width, size.height))
-        }
-
-        if (showIdealLine) {
-            val referenceXNorm = model.idealLineX
-            val start = mapper.map(referenceXNorm, 0f, size.width, size.height)
-            val end = mapper.map(referenceXNorm, 1f, size.width, size.height)
-            drawLine(color = Color.Cyan.copy(alpha = 0.45f), start = start, end = end, strokeWidth = 2f)
-        }
+        OverlayFrameRenderer.drawAndroid(
+            canvas = drawContext.canvas.nativeCanvas,
+            width = size.width.toInt().coerceAtLeast(1),
+            height = size.height.toInt().coerceAtLeast(1),
+            model = model,
+            frame = OverlayDrawingFrame(
+                drawSkeleton = joints.isNotEmpty(),
+                drawIdealLine = showIdealLine,
+            ),
+        )
 
         if (showDebugOverlay) {
             renderMetricDebug(debugMetrics)
@@ -67,8 +50,6 @@ fun OverlayRenderer(
         }
     }
 }
-
-private fun OverlayCoordinateMapper.toOffset(joint: JointPoint, width: Float, height: Float): Offset = map(joint.x, joint.y, width, height)
 
 private fun DrawScope.renderAngleDebug(angles: List<AngleDebugMetric>) {
     var y = size.height * 0.12f
@@ -109,12 +90,4 @@ private fun DrawScope.drawText(text: String, at: Offset, color: Color, textSize:
             isAntiAlias = true
         },
     )
-}
-
-private fun Color.toArgbCompat(): Int {
-    val r = (red * 255).toInt().coerceIn(0, 255)
-    val g = (green * 255).toInt().coerceIn(0, 255)
-    val b = (blue * 255).toInt().coerceIn(0, 255)
-    val a = (alpha * 255).toInt().coerceIn(0, 255)
-    return (a shl 24) or (r shl 16) or (g shl 8) or b
 }
