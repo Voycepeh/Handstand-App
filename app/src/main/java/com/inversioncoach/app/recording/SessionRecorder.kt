@@ -29,6 +29,7 @@ class SessionRecorder(
         val outputFile = createOutputFile(title)
         activeOutputFile = outputFile
         val outputOptions = FileOutputOptions.Builder(outputFile).build()
+        Log.d(TAG, "recording_started title=$title output=${outputFile.absolutePath} withAudio=$withAudio")
 
         var pending: PendingRecording = capture.output.prepareRecording(context, outputOptions)
         if (withAudio) pending = pending.withAudioEnabled()
@@ -46,6 +47,7 @@ class SessionRecorder(
         }.onFailure { throwable ->
             Log.w(TAG, "Ignoring recorder stop failure", throwable)
         }
+        Log.d(TAG, "recording_stop_requested")
         recording = null
     }
 

@@ -73,10 +73,38 @@ class OverlayStabilizer {
 }
 
 class AnnotatedExportPipeline(
-    private val repository: SessionRepository,
     private val compositor: AnnotatedVideoCompositor,
     private val debugValidationEnabled: Boolean = false,
+    private val persistAnnotatedVideo: suspend (Long, String) -> String?,
+    private val updateExportStatus: suspend (Long, AnnotatedExportStatus) -> Unit,
+    private val renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, List<AnnotatedOverlayFrame>, Boolean) -> String? =
+        { rawUri, drill, side, frames, debug ->
+            compositor.export(rawUri, drill, side, frames, debug)
+        },
 ) {
+    constructor(
+        repository: SessionRepository,
+        compositor: AnnotatedVideoCompositor,
+        debugValidationEnabled: Boolean = false,
+    ) : this(
+        compositor = compositor,
+        debugValidationEnabled = debugValidationEnabled,
+        persistAnnotatedVideo = repository::saveAnnotatedVideoBlob,
+        updateExportStatus = repository::updateAnnotatedExportStatus,
+    )
+
+    internal constructor(
+        persistAnnotatedVideo: suspend (Long, String) -> String?,
+        updateExportStatus: suspend (Long, AnnotatedExportStatus) -> Unit,
+        renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, List<AnnotatedOverlayFrame>, Boolean) -> String?,
+    ) : this(
+        compositor = throw IllegalStateException("Test constructor requires renderAnnotatedVideo"),
+        debugValidationEnabled = false,
+        persistAnnotatedVideo = persistAnnotatedVideo,
+        updateExportStatus = updateExportStatus,
+        renderAnnotatedVideo = renderAnnotatedVideo,
+    )
+
     suspend fun export(
         sessionId: Long,
         rawVideoUri: String,
@@ -85,29 +113,36 @@ class AnnotatedExportPipeline(
         overlayFrames: List<AnnotatedOverlayFrame>,
     ): String? {
         if (overlayFrames.isEmpty()) {
-            repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.FAILED)
+            updateExportStatus(sessionId, AnnotatedExportStatus.FAILED)
+            Log.w(TAG, "export_failure sessionId=$sessionId reason=overlay_frames_empty")
             return null
         }
-        repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.PROCESSING)
-        Log.d(TAG, "export_start sessionId=$sessionId overlayFrames=${overlayFrames.size}")
-        val renderedUri = compositor.export(
-            rawVideoUri = rawVideoUri,
-            drillType = drillType,
-            drillCameraSide = drillCameraSide,
-            overlayFrames = overlayFrames,
-            debugValidation = debugValidationEnabled,
+        updateExportStatus(sessionId, AnnotatedExportStatus.PROCESSING)
+        Log.d(
+            TAG,
+            "export_start sessionId=$sessionId rawVideoUri=$rawVideoUri overlayFrames=${overlayFrames.size} " +
+                "firstFrameTs=${overlayFrames.first().timestampMs} lastFrameTs=${overlayFrames.last().timestampMs}",
+        )
+        val renderedUri = renderAnnotatedVideo(
+            rawVideoUri,
+            drillType,
+            drillCameraSide,
+            overlayFrames,
+            debugValidationEnabled,
         )
         if (renderedUri.isNullOrBlank()) {
-            repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.FAILED)
+            updateExportStatus(sessionId, AnnotatedExportStatus.FAILED)
             Log.w(TAG, "export_failure sessionId=$sessionId reason=rendered_uri_empty")
             return null
         }
-        val persisted = repository.saveAnnotatedVideoBlob(sessionId, renderedUri)
-        repository.updateAnnotatedExportStatus(
-            sessionId,
-            if (persisted.isNullOrBlank()) AnnotatedExportStatus.FAILED else AnnotatedExportStatus.READY,
-        )
-        Log.d(TAG, "export_complete sessionId=$sessionId persistedUri=$persisted")
+        val persisted = persistAnnotatedVideo(sessionId, renderedUri)
+        val status = if (persisted.isNullOrBlank()) AnnotatedExportStatus.FAILED else AnnotatedExportStatus.READY
+        updateExportStatus(sessionId, status)
+        if (persisted.isNullOrBlank()) {
+            Log.w(TAG, "export_failure sessionId=$sessionId reason=persist_annotated_failed")
+        } else {
+            Log.d(TAG, "export_complete sessionId=$sessionId persistedUri=$persisted")
+        }
         return persisted
     }
 }

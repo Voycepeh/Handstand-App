@@ -161,6 +161,9 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             if (!hasReplay) {
                 Text("No replay asset is available for this session.")
             }
+            if (session?.annotatedExportStatus == com.inversioncoach.app.model.AnnotatedExportStatus.FAILED && !rawUri.isNullOrBlank()) {
+                Text("Annotated replay unavailable, showing raw replay")
+            }
             if (showRawVideoButton) {
                 Button(
                     onClick = { openVideo(context, rawUri) },

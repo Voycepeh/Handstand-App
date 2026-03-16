@@ -33,6 +33,11 @@ class AnnotatedVideoCompositor(
         debugValidation: Boolean = false,
     ): String? = withContext(Dispatchers.IO) {
         if (overlayFrames.isEmpty()) return@withContext null
+        val rawFile = File(Uri.parse(rawVideoUri).path.orEmpty())
+        if (!rawFile.exists() || !rawFile.canRead()) {
+            Log.w(TAG, "export_failure reason=input_unreadable uri=$rawVideoUri")
+            return@withContext null
+        }
         val retriever = MediaMetadataRetriever()
         val output = File(context.cacheDir, "recordings/annotated_${System.currentTimeMillis()}.mp4").apply {
             parentFile?.mkdirs()
@@ -127,6 +132,16 @@ class AnnotatedVideoCompositor(
             if (muxerStarted) muxer.stop()
             muxer.release()
             val outputUri = Uri.fromFile(output).toString()
+            if (!output.exists() || output.length() <= 0L) {
+                Log.w(TAG, "export_failure reason=output_missing_or_empty path=${output.absolutePath}")
+                output.delete()
+                return@withContext null
+            }
+            if (!verifyReadableOutput(outputUri)) {
+                Log.w(TAG, "export_failure reason=output_not_readable uri=$outputUri")
+                output.delete()
+                return@withContext null
+            }
             if (debugValidation) {
                 val verified = verifyAnnotatedDifference(rawVideoUri, outputUri)
                 Log.d(TAG, "debug_validation overlay_present=$verified")
@@ -177,6 +192,24 @@ class AnnotatedVideoCompositor(
     }
 
 
+
+
+    private fun verifyReadableOutput(annotatedVideoUri: String): Boolean {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, Uri.parse(annotatedVideoUri))
+            val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            val frame = retriever.getFrameAtTime(250_000L, MediaMetadataRetriever.OPTION_CLOSEST)
+            val readable = durationMs > 0L && frame != null
+            frame?.recycle()
+            readable
+        } catch (t: Throwable) {
+            Log.w(TAG, "output_verification_error", t)
+            false
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
 
     private fun verifyAnnotatedDifference(rawVideoUri: String, annotatedVideoUri: String): Boolean {
         val rawRetriever = MediaMetadataRetriever()
