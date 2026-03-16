@@ -17,6 +17,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,7 +45,13 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-private data class HeatmapCellKey(val dayStartMs: Long, val hour: Int)
+private data class HeatmapCellKey(val dayStartMs: Long, val blockIndex: Int)
+
+private enum class HeatmapZoom(val label: String, val blockHours: Int) {
+    Day("Day", 24),
+    FourHours("4h", 4),
+    Hour("1h", 1),
+}
 
 @Composable
 fun ProgressScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
@@ -55,6 +62,9 @@ fun ProgressScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
 
     var selectedDrill: DrillType? by remember { mutableStateOf(null) }
     var expandedCell: HeatmapCellKey? by remember { mutableStateOf(null) }
+    var showSummaryCards by remember { mutableStateOf(false) }
+    var weekOffset by remember { mutableStateOf(0) }
+    var zoom by remember { mutableStateOf(HeatmapZoom.FourHours) }
 
     val minimumDurationMs = settings.minSessionDurationSeconds * 1000L
     val filteredSessions = remember(sessions, selectedDrill, minimumDurationMs) {
@@ -71,11 +81,13 @@ fun ProgressScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     val avgDurationMs = if (filteredSessions.isEmpty()) 0L else filteredSessions.map { computeSessionDurationMs(it.startedAtMs, it.completedAtMs) }.average().toLong()
     val latestSessionStart = filteredSessions.maxByOrNull { it.startedAtMs }?.startedAtMs ?: 0L
 
-    val days = remember { buildRecentDays(14) }
-    val groupedByHour = remember(filteredSessions) { groupSessionsByHour(filteredSessions) }
-    val maxCount = groupedByHour.values.maxOfOrNull { it.size } ?: 0
-    val expandedSessions = expandedCell?.let { groupedByHour[it] }.orEmpty().sortedByDescending { it.startedAtMs }
+    val weekDays = remember(weekOffset) { buildDaysForWeek(weekOffset) }
+    val groupedByBlock = remember(filteredSessions, zoom) { groupSessionsByBlock(filteredSessions, zoom.blockHours) }
+    val maxCount = groupedByBlock.values.maxOfOrNull { it.size } ?: 0
+    val expandedSessions = expandedCell?.let { groupedByBlock[it] }.orEmpty().sortedByDescending { it.startedAtMs }
     val availableDrills = remember(sessions) { sessions.map { it.drillType }.distinct().sortedBy { it.displayName } }
+    val hasNewerWeek = weekOffset < 0
+    val weekLabel = remember(weekDays) { formatWeekLabel(weekDays.first(), weekDays.last()) }
 
     ScaffoldedScreen(title = "Progress", onBack = onBack) { padding ->
         Column(
@@ -97,23 +109,56 @@ fun ProgressScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
                 },
             )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                ProgressCard("Clean sessions", "$cleanSessions", Modifier.weight(1f))
-                ProgressCard("Sessions", "${filteredSessions.size}", Modifier.weight(1f))
-            }
-            ProgressCard("Sessions with issues", "$sessionsWithIssues", Modifier.fillMaxWidth())
-            ProgressCard("Average session duration", formatSessionDuration(avgDurationMs), Modifier.fillMaxWidth())
-            ProgressCard("Latest session", formatSessionDateTime(latestSessionStart), Modifier.fillMaxWidth())
-            ProgressCard("Most practiced drill", topDrill, Modifier.fillMaxWidth())
+            Text("Activity heatmap", fontWeight = FontWeight.SemiBold)
+            WeekAndZoomControls(
+                weekLabel = weekLabel,
+                hasNewerWeek = hasNewerWeek,
+                zoom = zoom,
+                onPreviousWeek = {
+                    weekOffset -= 1
+                    expandedCell = null
+                },
+                onNextWeek = {
+                    weekOffset += 1
+                    expandedCell = null
+                },
+                onZoomOut = {
+                    zoom = zoom.zoomedOut()
+                    expandedCell = null
+                },
+                onZoomIn = {
+                    zoom = zoom.zoomedIn()
+                    expandedCell = null
+                },
+            )
 
-            Text("Activity heatmap (day x 1-hour block)", fontWeight = FontWeight.SemiBold)
             HeatmapTable(
-                days = days,
-                groupedByHour = groupedByHour,
+                days = weekDays,
+                groupedByBlock = groupedByBlock,
                 maxCount = maxCount,
+                blockHours = zoom.blockHours,
                 expandedCell = expandedCell,
                 onCellClick = { clicked -> expandedCell = if (expandedCell == clicked) null else clicked },
             )
+
+            TextButton(onClick = { showSummaryCards = !showSummaryCards }) {
+                Text(if (showSummaryCards) "Hide summary metrics" else "Show summary metrics")
+            }
+
+            if (showSummaryCards) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        ProgressCard("Clean", "$cleanSessions", Modifier.weight(1f))
+                        ProgressCard("Sessions", "${filteredSessions.size}", Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        ProgressCard("With issues", "$sessionsWithIssues", Modifier.weight(1f))
+                        ProgressCard("Avg duration", formatSessionDuration(avgDurationMs), Modifier.weight(1f))
+                    }
+                    ProgressCard("Latest", formatSessionDateTime(latestSessionStart), Modifier.fillMaxWidth())
+                    ProgressCard("Top drill", topDrill, Modifier.fillMaxWidth())
+                }
+            }
 
             if (expandedCell != null) {
                 Card(
@@ -160,12 +205,14 @@ private fun FilterChips(selectedDrill: DrillType?, availableDrills: List<DrillTy
 @Composable
 private fun HeatmapTable(
     days: List<Long>,
-    groupedByHour: Map<HeatmapCellKey, List<SessionRecord>>,
+    groupedByBlock: Map<HeatmapCellKey, List<SessionRecord>>,
     maxCount: Int,
+    blockHours: Int,
     expandedCell: HeatmapCellKey?,
     onCellClick: (HeatmapCellKey) -> Unit,
 ) {
     val hourScroll = rememberScrollState()
+    val blockCount = 24 / blockHours
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -174,8 +221,13 @@ private fun HeatmapTable(
         ) {
             Text("Day", modifier = Modifier.padding(end = 4.dp))
             Row(modifier = Modifier.horizontalScroll(hourScroll), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                (0..23).forEach { hour ->
-                    Text("%02d".format(hour), style = MaterialTheme.typography.labelSmall, modifier = Modifier.size(18.dp))
+                (0 until blockCount).forEach { blockIndex ->
+                    val startHour = blockIndex * blockHours
+                    Text(
+                        "%02d".format(startHour),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.size(if (blockHours == 1) 18.dp else 22.dp),
+                    )
                 }
             }
         }
@@ -187,13 +239,13 @@ private fun HeatmapTable(
             ) {
                 Text(formatDayLabel(dayStartMs), modifier = Modifier.padding(end = 4.dp))
                 Row(modifier = Modifier.horizontalScroll(hourScroll), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    (0..23).forEach { hour ->
-                        val key = HeatmapCellKey(dayStartMs, hour)
-                        val count = groupedByHour[key]?.size ?: 0
+                    (0 until blockCount).forEach { blockIndex ->
+                        val key = HeatmapCellKey(dayStartMs, blockIndex)
+                        val count = groupedByBlock[key]?.size ?: 0
                         val isExpanded = expandedCell == key
                         Box(
                             modifier = Modifier
-                                .size(18.dp)
+                                .size(if (blockHours == 1) 18.dp else 22.dp)
                                 .background(cellColor(count, maxCount, isExpanded), RoundedCornerShape(3.dp))
                                 .clickable { onCellClick(key) },
                         )
@@ -240,22 +292,77 @@ private fun ProgressCard(title: String, value: String, modifier: Modifier = Modi
     }
 }
 
-private fun buildRecentDays(days: Int): List<Long> {
+private fun buildDaysForWeek(weekOffset: Int): List<Long> {
     val today = Calendar.getInstance().apply { setToDayStart() }
-    return (days - 1 downTo 0).map { offset ->
-        (today.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -offset) }.timeInMillis
+    val monday = (today.clone() as Calendar).apply {
+        firstDayOfWeek = Calendar.MONDAY
+        while (get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+            add(Calendar.DAY_OF_YEAR, -1)
+        }
+        add(Calendar.WEEK_OF_YEAR, weekOffset)
+    }
+    return (0..6).map { offset ->
+        (monday.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, offset) }.timeInMillis
     }
 }
 
-private fun groupSessionsByHour(sessions: List<SessionRecord>): Map<HeatmapCellKey, List<SessionRecord>> =
+private fun groupSessionsByBlock(sessions: List<SessionRecord>, blockHours: Int): Map<HeatmapCellKey, List<SessionRecord>> =
     sessions.groupBy { session ->
         val calendar = Calendar.getInstance().apply { timeInMillis = session.startedAtMs }
         val dayStart = (calendar.clone() as Calendar).apply { setToDayStart() }.timeInMillis
-        HeatmapCellKey(dayStartMs = dayStart, hour = calendar.get(Calendar.HOUR_OF_DAY))
+        val blockIndex = calendar.get(Calendar.HOUR_OF_DAY) / blockHours
+        HeatmapCellKey(dayStartMs = dayStart, blockIndex = blockIndex)
     }
 
 private fun formatDayLabel(dayStartMs: Long): String =
     SimpleDateFormat("EEE dd", Locale.getDefault()).format(Date(dayStartMs))
+
+private fun formatWeekLabel(startMs: Long, endMs: Long): String {
+    val formatter = SimpleDateFormat("dd MMM", Locale.getDefault())
+    return "${formatter.format(Date(startMs))} - ${formatter.format(Date(endMs))}"
+}
+
+@Composable
+private fun WeekAndZoomControls(
+    weekLabel: String,
+    hasNewerWeek: Boolean,
+    zoom: HeatmapZoom,
+    onPreviousWeek: () -> Unit,
+    onNextWeek: () -> Unit,
+    onZoomOut: () -> Unit,
+    onZoomIn: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedButton(onClick = onPreviousWeek) { Text("← Prev week") }
+            Text(weekLabel, style = MaterialTheme.typography.labelLarge)
+            OutlinedButton(onClick = onNextWeek, enabled = hasNewerWeek) { Text("Next week →") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = onZoomOut, enabled = zoom != HeatmapZoom.Day) { Text("Zoom out") }
+            Text("${zoom.label} blocks", style = MaterialTheme.typography.labelLarge)
+            OutlinedButton(onClick = onZoomIn, enabled = zoom != HeatmapZoom.Hour) { Text("Zoom in") }
+        }
+    }
+}
+
+private fun HeatmapZoom.zoomedOut(): HeatmapZoom =
+    when (this) {
+        HeatmapZoom.Hour -> HeatmapZoom.FourHours
+        HeatmapZoom.FourHours -> HeatmapZoom.Day
+        HeatmapZoom.Day -> HeatmapZoom.Day
+    }
+
+private fun HeatmapZoom.zoomedIn(): HeatmapZoom =
+    when (this) {
+        HeatmapZoom.Day -> HeatmapZoom.FourHours
+        HeatmapZoom.FourHours -> HeatmapZoom.Hour
+        HeatmapZoom.Hour -> HeatmapZoom.Hour
+    }
 
 private fun cellColor(count: Int, maxCount: Int, isExpanded: Boolean): Color {
     if (isExpanded) return Color(0xFF1B5E20)
