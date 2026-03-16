@@ -48,10 +48,10 @@ class JointAngleEngine {
     fun compute(frame: PoseFrame): AngleFrame {
         val asMap = frame.joints.associateBy({ toJointId(it.name) }, { com.inversioncoach.app.motion.Landmark2D(it.x, it.y) })
         return angleEngine.compute(
-            com.inversioncoach.app.motion.PoseFrame(
+            com.inversioncoach.app.motion.SmoothedPoseFrame(
                 timestampMs = frame.timestampMs,
-                landmarks = asMap,
-                confidenceByLandmark = emptyMap(),
+                filteredLandmarks = asMap,
+                velocityByLandmark = emptyMap(),
             )
         )
     }
