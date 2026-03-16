@@ -20,6 +20,7 @@ import com.inversioncoach.app.ui.results.SessionTooShortScreen
 import com.inversioncoach.app.ui.settings.DeveloperTuningScreen
 import com.inversioncoach.app.ui.settings.SettingsScreen
 import com.inversioncoach.app.ui.startdrill.StartDrillScreen
+import com.inversioncoach.app.ui.upload.UploadVideoScreen
 
 private fun parseDrillTypeOrDefault(rawValue: String?, fallback: DrillType): DrillType =
     rawValue?.let(DrillType::fromStoredName) ?: fallback
@@ -44,6 +45,7 @@ sealed class Route(val value: String) {
     data object Progress : Route("progress")
     data object Settings : Route("settings")
     data object DevTuning : Route("settings/dev-tuning")
+    data object UploadVideo : Route("upload-video")
 }
 
 @Composable
@@ -64,6 +66,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onHistory = { navController.navigate(Route.History.value) },
                 onProgress = { navController.navigate(Route.Progress.value) },
                 onSettings = { navController.navigate(Route.Settings.value) },
+                onUploadVideo = { navController.navigate(Route.UploadVideo.value) },
             )
         }
         composable(Route.Start.value) {
@@ -156,5 +159,11 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             )
         }
         composable(Route.DevTuning.value) { DeveloperTuningScreen(onBack = { navController.popBackStack() }) }
+        composable(Route.UploadVideo.value) {
+            UploadVideoScreen(
+                onBack = { navController.popBackStack() },
+                onOpenResults = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
+            )
+        }
     }
 }
