@@ -2,7 +2,6 @@ package com.inversioncoach.app.ui.live
 
 import android.net.Uri
 import android.util.Log
-import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.biomechanics.DrillModeConfig
 import com.inversioncoach.app.model.DrillScore
 import com.inversioncoach.app.model.DrillType
