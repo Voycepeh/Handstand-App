@@ -2,7 +2,6 @@ package com.inversioncoach.app.storage.repository
 
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
-import com.inversioncoach.app.model.AnnotatedExportFailureReason
 import com.inversioncoach.app.model.CleanupStatus
 import com.inversioncoach.app.model.CompressionStatus
 import com.inversioncoach.app.model.RetainedAssetType
@@ -120,14 +119,17 @@ class SessionRepository(
     suspend fun reconcileStaleProcessingState(sessionId: Long, hasActiveExportJob: Boolean): Boolean {
         val session = sessionDao.getById(sessionId) ?: return false
         val isStale =
-            session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING &&
+            (session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING ||
+                session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW) &&
                 session.annotatedVideoUri.isNullOrBlank() &&
                 !hasActiveExportJob
         if (!isStale) return false
         sessionDao.upsert(
             session.copy(
-                annotatedExportStatus = AnnotatedExportStatus.ANNOTATED_FAILED,
-                annotatedExportFailureReason = AnnotatedExportFailureReason.STALE_PROCESSING_STATE.name,
+                annotatedExportStatus = AnnotatedExportStatus.PROCESSING_SLOW,
+                annotatedExportFailureReason = null,
+                annotatedExportFailureDetail = null,
+                annotatedExportLastUpdatedAt = System.currentTimeMillis(),
             ),
         )
         return true

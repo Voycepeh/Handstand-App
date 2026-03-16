@@ -21,6 +21,18 @@ class ReplayDisplayStateTest {
         assertEquals(ReplayDisplayState.INCONSISTENT_STATE, deriveReplayDisplayState(session, hasActiveExportJob = true))
     }
 
+
+    @Test
+    fun slowProcessingStateStaysProcessing() {
+        val session = baseSession.copy(
+            rawPersistStatus = RawPersistStatus.SUCCEEDED,
+            annotatedExportStatus = AnnotatedExportStatus.PROCESSING_SLOW,
+            annotatedExportFailureReason = null,
+            annotatedVideoUri = null,
+        )
+        assertEquals(ReplayDisplayState.ANNOTATED_PROCESSING_SLOW, deriveReplayDisplayState(session, hasActiveExportJob = false))
+    }
+
     @Test
     fun failedWithRawReadableShowsRawOnly() {
         val raw = File.createTempFile("raw_replay_state", ".mp4").apply { writeText("raw") }

@@ -100,6 +100,7 @@ data class DrillScore(
 enum class AnnotatedExportStatus {
     NOT_STARTED,
     PROCESSING,
+    PROCESSING_SLOW,
     ANNOTATED_READY,
     ANNOTATED_FAILED,
 }

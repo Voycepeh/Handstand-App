@@ -19,4 +19,26 @@ class SessionVideoOutcomeTest {
         assertNull(outcome.annotatedVideoUri)
         assertEquals(AnnotatedExportStatus.ANNOTATED_FAILED, outcome.annotatedExportStatus)
     }
+    @Test
+    fun processingAnnotatedExportWithRawKeepsProcessing() {
+        val outcome = resolveSessionVideoOutcome(
+            rawVideoUri = "file:///raw.mp4",
+            annotatedVideoUri = null,
+            exportStatus = AnnotatedExportStatus.PROCESSING,
+        )
+
+        assertEquals(AnnotatedExportStatus.PROCESSING, outcome.annotatedExportStatus)
+    }
+
+    @Test
+    fun slowProcessingAnnotatedExportWithRawKeepsSlowProcessing() {
+        val outcome = resolveSessionVideoOutcome(
+            rawVideoUri = "file:///raw.mp4",
+            annotatedVideoUri = null,
+            exportStatus = AnnotatedExportStatus.PROCESSING_SLOW,
+        )
+
+        assertEquals(AnnotatedExportStatus.PROCESSING_SLOW, outcome.annotatedExportStatus)
+    }
+
 }

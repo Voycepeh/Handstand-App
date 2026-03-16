@@ -54,6 +54,17 @@ class ResultsScreenLogicTest {
     }
 
     @Test
+    fun staleSlowProcessingStateGetsReconciled() {
+        assertTrue(
+            shouldReconcileStaleProcessing(
+                status = AnnotatedExportStatus.PROCESSING_SLOW,
+                annotatedVideoUri = null,
+                hasActiveExportJob = false,
+            ),
+        )
+    }
+
+    @Test
     fun activeProcessingJobIsNotReconciled() {
         assertFalse(
             shouldReconcileStaleProcessing(
@@ -67,5 +78,10 @@ class ResultsScreenLogicTest {
     @Test
     fun etaFormattingHandlesMissingValue() {
         assertEquals("calculating…", formatEta(null))
+    }
+
+    @Test
+    fun elapsedFormattingHandlesMissingValue() {
+        assertEquals("0s", formatElapsedDuration(null))
     }
 }

@@ -345,6 +345,7 @@ data class PreferredReplayUri(
 enum class ReplayDisplayState {
     RAW_ONLY,
     ANNOTATED_PROCESSING,
+    ANNOTATED_PROCESSING_SLOW,
     ANNOTATED_READY,
     ANNOTATED_FAILED,
     INCONSISTENT_STATE,
@@ -457,12 +458,15 @@ fun deriveReplayDisplayState(session: SessionRecord?, hasActiveExportJob: Boolea
     val annotatedReadable = mediaAssetExists(annotatedUri)
     val rawReadable = mediaAssetExists(rawUri)
     val hasInconsistentValues =
-                    (session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING && !session.annotatedExportFailureReason.isNullOrBlank()) ||
+        ((session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING ||
+            session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW) &&
+            !session.annotatedExportFailureReason.isNullOrBlank()) ||
             (session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && !annotatedReadable)
     if (hasInconsistentValues) return ReplayDisplayState.INCONSISTENT_STATE
 
     return when {
         session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING -> ReplayDisplayState.ANNOTATED_PROCESSING
+        session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW -> ReplayDisplayState.ANNOTATED_PROCESSING_SLOW
         session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && annotatedReadable -> ReplayDisplayState.ANNOTATED_READY
         session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && !annotatedReadable && rawReadable -> ReplayDisplayState.RAW_ONLY
         session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED && rawReadable -> ReplayDisplayState.RAW_ONLY

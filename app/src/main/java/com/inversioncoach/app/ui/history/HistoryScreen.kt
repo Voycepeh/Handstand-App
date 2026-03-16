@@ -135,7 +135,7 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
                             Text("Time: ${formatSessionDateTime(session.startedAtMs)}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                             LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                             Text(status, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING && session.annotatedExportEtaSeconds != null) {
+                            if ((session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING || session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW) && session.annotatedExportEtaSeconds != null) {
                                 val etaMin = session.annotatedExportEtaSeconds / 60
                                 val etaSec = session.annotatedExportEtaSeconds % 60
                                 Text("Estimated time left: ${etaMin}m ${etaSec}s", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -156,7 +156,7 @@ private enum class HistorySort { RECENCY, STORAGE_SIZE, SESSION_DURATION }
 
 private fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): String = when {
     !session.annotatedVideoUri.isNullOrBlank() -> "Annotated replay ready"
-    session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING -> "Annotated video processing · ${session.annotatedExportPercent}%"
+    session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING || session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW -> "Annotated video processing · ${session.annotatedExportPercent}%"
     !session.rawVideoUri.isNullOrBlank() -> "Raw replay ready"
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> "Annotated replay failed"
     else -> "Replay processing"
@@ -164,7 +164,7 @@ private fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): St
 
 private fun uploadProgress(session: com.inversioncoach.app.model.SessionRecord): Float = when {
     !session.annotatedVideoUri.isNullOrBlank() -> 1f
-    session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING -> (session.annotatedExportPercent / 100f).coerceIn(0.05f, 0.95f)
+    session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING || session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW -> (session.annotatedExportPercent / 100f).coerceIn(0.05f, 0.95f)
     !session.rawVideoUri.isNullOrBlank() -> 0.6f
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> 0.35f
     else -> 0.15f

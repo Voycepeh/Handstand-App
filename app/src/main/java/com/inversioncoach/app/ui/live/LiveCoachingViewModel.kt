@@ -195,6 +195,15 @@ class LiveCoachingViewModel(
         AnnotatedExportJobTracker.markStarted(activeSessionId)
         AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.PREPARING, 3, null)
         sessionHadAnyVideo = true
+        SessionDiagnostics.logStructured(
+            event = "annotated_export_requested",
+            sessionId = activeSessionId,
+            drillType = drillType,
+            rawUri = finalizedUri,
+            annotatedUri = null,
+            overlayFrameCount = overlayFrames.size,
+            failureReason = "timeoutMs=$ANNOTATED_EXPORT_TIMEOUT_MS;thread=${Thread.currentThread().name}",
+        )
         if (finalizedUri.isNullOrBlank()) {
             setAnnotatedExportState(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportFailureReason.RAW_URI_EMPTY.name)
             exportLifecycleState = ExportLifecycleState.FAILED
@@ -538,9 +547,9 @@ class LiveCoachingViewModel(
                     )
                     return@launch
                 }
-                resolveTerminalAnnotatedExportStatus()
-                val (reconciledStatus, reconciledFailureReason) =
-                    reconcileMediaStateForPersistence(AnnotatedExportJobTracker.isActive(activeSessionId))
+                val hasActiveExportJob = AnnotatedExportJobTracker.isActive(activeSessionId)
+                resolveTerminalAnnotatedExportStatus(hasActiveExportJob)
+                val (reconciledStatus, reconciledFailureReason) = reconcileMediaStateForPersistence(hasActiveExportJob)
                 if (reconciledStatus == AnnotatedExportStatus.ANNOTATED_FAILED && !reconciledFailureReason.isNullOrBlank()) {
                     repository.updateAnnotatedExportStatus(activeSessionId, reconciledStatus)
                     repository.updateAnnotatedExportFailureReason(activeSessionId, reconciledFailureReason)
@@ -748,9 +757,11 @@ class LiveCoachingViewModel(
     private fun setAnnotatedExportState(status: AnnotatedExportStatus, failureReason: String?) {
         annotatedExportStatus = status
         annotatedExportFailureReason = when (status) {
-            AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.ANNOTATED_READY -> null
-            AnnotatedExportStatus.ANNOTATED_FAILED -> failureReason
+            AnnotatedExportStatus.PROCESSING,
+            AnnotatedExportStatus.PROCESSING_SLOW,
+            AnnotatedExportStatus.ANNOTATED_READY,
             AnnotatedExportStatus.NOT_STARTED -> null
+            AnnotatedExportStatus.ANNOTATED_FAILED -> failureReason
         }
         if (status == AnnotatedExportStatus.ANNOTATED_READY && annotatedVideoUri.isNullOrBlank()) {
             annotatedExportStatus = AnnotatedExportStatus.ANNOTATED_FAILED
@@ -779,6 +790,15 @@ class LiveCoachingViewModel(
             failureDetail = annotatedExportFailureDetail,
             failureReason = annotatedExportFailureReason,
         )
+        SessionDiagnostics.logStructured(
+            event = "annotated_export_progress",
+            sessionId = activeSessionId,
+            drillType = drillType,
+            rawUri = rawVideoUri,
+            annotatedUri = annotatedVideoUri,
+            overlayFrameCount = overlayFrames.size,
+            failureReason = "stage=$stage;percent=$annotatedExportPercent;elapsedMs=$elapsedMs;etaSeconds=${annotatedExportEtaSeconds ?: -1};thread=${Thread.currentThread().name}",
+        )
     }
 
     private fun reconcileMediaStateForPersistence(hasActiveExportJob: Boolean): Pair<AnnotatedExportStatus, String?> {
@@ -789,13 +809,23 @@ class LiveCoachingViewModel(
         if (rawPersistStatus == RawPersistStatus.SUCCEEDED && rawPersistFailureReason == AnnotatedExportFailureReason.RAW_SAVE_FAILED.name) {
             rawPersistFailureReason = null
         }
-        if (annotatedExportStatus == AnnotatedExportStatus.PROCESSING && !hasActiveExportJob) {
-            setAnnotatedExportState(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportFailureReason.STALE_PROCESSING_STATE.name)
+        if ((annotatedExportStatus == AnnotatedExportStatus.PROCESSING || annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW) && hasActiveExportJob) {
+            if (annotatedExportStatus != AnnotatedExportStatus.PROCESSING_SLOW && shouldMarkProcessingSlow()) {
+                setAnnotatedExportState(AnnotatedExportStatus.PROCESSING_SLOW, null)
+                annotatedExportStage = AnnotatedExportStage.RENDERING
+                annotatedExportLastUpdatedAt = System.currentTimeMillis()
+            }
         }
         if (annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && annotatedVideoUri.isNullOrBlank()) {
             setAnnotatedExportState(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportFailureReason.OUTPUT_URI_NULL.name)
         }
         return annotatedExportStatus to annotatedExportFailureReason
+    }
+
+
+    private fun shouldMarkProcessingSlow(): Boolean {
+        val elapsedMs = annotatedExportElapsedMs ?: 0L
+        return elapsedMs >= PROCESSING_SLOW_THRESHOLD_MS
     }
 
     private fun shouldCaptureOverlayFrame(timestampMs: Long): Boolean {
@@ -912,13 +942,31 @@ class LiveCoachingViewModel(
             )
             AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.COMPLETED, 100, 0L)
         } catch (_: TimeoutCancellationException) {
+            SessionDiagnostics.logStructured(
+                event = "annotated_export_timeout",
+                sessionId = activeSessionId,
+                drillType = drillType,
+                rawUri = rawVideoUri,
+                annotatedUri = annotatedVideoUri,
+                overlayFrameCount = exportFrames.size,
+                failureReason = "timeoutMs=$ANNOTATED_EXPORT_TIMEOUT_MS;elapsedMs=${System.currentTimeMillis() - exportStartMs}",
+            )
             persistAnnotatedExportFailed(activeSessionId, AnnotatedExportFailureReason.EXPORT_TIMED_OUT.name)
         } catch (_: CancellationException) {
+            SessionDiagnostics.logStructured(
+                event = "annotated_export_cancelled",
+                sessionId = activeSessionId,
+                drillType = drillType,
+                rawUri = rawVideoUri,
+                annotatedUri = annotatedVideoUri,
+                overlayFrameCount = exportFrames.size,
+                failureReason = "elapsedMs=${System.currentTimeMillis() - exportStartMs}",
+            )
             persistAnnotatedExportFailed(activeSessionId, AnnotatedExportFailureReason.EXPORT_CANCELLED.name)
         } catch (t: Throwable) {
             persistAnnotatedExportFailed(activeSessionId, "EXCEPTION_${t::class.simpleName ?: "UNKNOWN"}")
         } finally {
-            if (annotatedExportStatus == AnnotatedExportStatus.PROCESSING) {
+            if (annotatedExportStatus == AnnotatedExportStatus.PROCESSING || annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW) {
                 persistAnnotatedExportFailed(activeSessionId, AnnotatedExportFailureReason.UNKNOWN.name)
             }
             if (bestPlayableUri.isNullOrBlank()) {
@@ -964,10 +1012,17 @@ class LiveCoachingViewModel(
         AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.FAILED, 100, 0L)
     }
 
-    private fun resolveTerminalAnnotatedExportStatus(): AnnotatedExportStatus {
-        if (annotatedExportStatus != AnnotatedExportStatus.PROCESSING) return annotatedExportStatus
-        setAnnotatedExportState(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportFailureReason.STALE_PROCESSING_STATE.name)
-        exportLifecycleState = ExportLifecycleState.FAILED
+    private fun resolveTerminalAnnotatedExportStatus(hasActiveExportJob: Boolean): AnnotatedExportStatus {
+        if (annotatedExportStatus != AnnotatedExportStatus.PROCESSING && annotatedExportStatus != AnnotatedExportStatus.PROCESSING_SLOW) {
+            return annotatedExportStatus
+        }
+        if (hasActiveExportJob) {
+            if (shouldMarkProcessingSlow()) {
+                setAnnotatedExportState(AnnotatedExportStatus.PROCESSING_SLOW, null)
+            }
+            return annotatedExportStatus
+        }
+        setAnnotatedExportState(AnnotatedExportStatus.PROCESSING_SLOW, null)
         return annotatedExportStatus
     }
 
@@ -1061,6 +1116,7 @@ class LiveCoachingViewModel(
         private const val MAX_EXPORT_FRAME_INTERVAL_MS = 50L
         private const val OVERLAY_FRAME_LOG_INTERVAL = 60
         private const val ANNOTATED_EXPORT_TIMEOUT_MS = 120_000L
+        private const val PROCESSING_SLOW_THRESHOLD_MS = 90_000L
     }
 }
 
@@ -1080,11 +1136,16 @@ internal fun resolveSessionVideoOutcome(
         )
     }
     val raw = rawVideoUri?.takeIf(::mediaAssetExists)
+    val reconciledStatus = when {
+        raw == null -> exportStatus
+        exportStatus == AnnotatedExportStatus.ANNOTATED_READY -> AnnotatedExportStatus.ANNOTATED_FAILED
+        else -> exportStatus
+    }
     return SessionVideoOutcome(
         rawVideoUri = raw,
         annotatedVideoUri = null,
         bestPlayableUri = raw,
         retainedAssetType = if (raw == null) RetainedAssetType.NONE else RetainedAssetType.RAW_FINAL,
-        annotatedExportStatus = if (raw == null) exportStatus else AnnotatedExportStatus.ANNOTATED_FAILED,
+        annotatedExportStatus = reconciledStatus,
     )
 }
