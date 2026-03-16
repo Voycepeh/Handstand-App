@@ -47,6 +47,23 @@ class UploadedVideoAnalysisTest {
         root.deleteRecursively()
     }
 
+
+    @Test
+    fun analyzeReturnsEmptyOverlayWhenNoDetections() {
+        val profile = ExistingDrillToProfileAdapter().fromDrill(DrillType.FREESTYLE)
+        val source = object : VideoPoseFrameSource {
+            override fun decode(videoUri: Uri): Sequence<PoseFrame> = sequence {
+                yield(frame(0, 0f))
+                yield(frame(33, 0f))
+            }
+        }
+
+        val result = UploadedVideoAnalyzer(source).analyze(Uri.parse("file:///tmp/empty.mp4"), profile)
+
+        assertTrue(result.overlayTimeline.isEmpty())
+        assertEquals(2, result.droppedFrames)
+    }
+
     @Test
     fun compatibilityAdapterPreservesDrillIdentity() {
         val adapter = ExistingDrillToProfileAdapter()

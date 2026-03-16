@@ -12,44 +12,125 @@ import com.google.mlkit.vision.pose.PoseLandmark
 import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
 import com.inversioncoach.app.model.JointPoint
 import com.inversioncoach.app.model.PoseFrame
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import java.util.concurrent.atomic.AtomicInteger
 
 private const val TAG = "UploadPoseFrameSource"
 
 class MlKitVideoPoseFrameSource(
     private val context: Context,
     private val sampleFps: Int = 12,
+    workerCount: Int = defaultWorkerCount(),
+    private val queueCapacity: Int = 6,
 ) : VideoPoseFrameSource {
+    data class DecodeTelemetry(
+        val sampledFrames: Int,
+        val workerCount: Int,
+        val maxQueueBacklog: Int,
+        val averageWorkerActive: Double,
+    )
+
+    private val boundedWorkerCount = workerCount.coerceIn(1, 4)
+    @Volatile
+    var lastDecodeTelemetry: DecodeTelemetry = DecodeTelemetry(0, boundedWorkerCount, 0, 0.0)
+        private set
+
     override fun decode(videoUri: Uri): Sequence<PoseFrame> {
-        val retriever = MediaMetadataRetriever()
-        val detector = PoseDetection.getClient(
-            PoseDetectorOptions.Builder()
-                .setDetectorMode(PoseDetectorOptions.SINGLE_IMAGE_MODE)
-                .build(),
-        )
         val frames = mutableListOf<PoseFrame>()
-        try {
-            retriever.setDataSource(context, videoUri)
-            val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 720
-            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 1280
-            if (durationMs <= 0L) {
-                Log.w(TAG, "decode_failed reason=missing_duration uri=$videoUri")
-                frames
-            } else {
-                val intervalMs = (1000f / sampleFps.coerceAtLeast(1)).toLong().coerceAtLeast(16L)
-                var timestampMs = 0L
-                while (timestampMs <= durationMs) {
-                    val bitmap = retriever.getFrameAtTime(timestampMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST)
-                    val frame = bitmap?.let { mapBitmapToPoseFrame(it, detector, timestampMs, width, height) }
-                    bitmap?.recycle()
-                    if (frame != null) frames += frame
-                    timestampMs += intervalMs
+        runBlocking(Dispatchers.Default) {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(context, videoUri)
+                val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 720
+                val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 1280
+                if (durationMs <= 0L) {
+                    Log.w(TAG, "decode_failed reason=missing_duration uri=$videoUri")
+                    return@runBlocking
                 }
-                frames
+                data class FramePacket(val index: Int, val timestampMs: Long, val bitmap: Bitmap)
+                val frameQueue = Channel<FramePacket>(capacity = queueCapacity.coerceAtLeast(2))
+                val resultQueue = Channel<Pair<Int, PoseFrame>>(capacity = queueCapacity.coerceAtLeast(2))
+                val orderedFrames = mutableMapOf<Int, PoseFrame>()
+                val backlog = AtomicInteger(0)
+                var maxBacklog = 0
+                val activeWorkers = AtomicInteger(0)
+                var activeSamples = 0L
+                var activeTicks = 0
+
+                coroutineScope {
+                    val workers = (0 until boundedWorkerCount).map {
+                        launch(Dispatchers.Default) {
+                            val detector = PoseDetection.getClient(
+                                PoseDetectorOptions.Builder()
+                                    .setDetectorMode(PoseDetectorOptions.SINGLE_IMAGE_MODE)
+                                    .build(),
+                            )
+                            try {
+                                for (packet in frameQueue) {
+                                    activeWorkers.incrementAndGet()
+                                    try {
+                                        val poseFrame = mapBitmapToPoseFrame(packet.bitmap, detector, packet.timestampMs, width, height)
+                                        resultQueue.send(packet.index to poseFrame)
+                                    } finally {
+                                        packet.bitmap.recycle()
+                                        activeWorkers.decrementAndGet()
+                                        backlog.decrementAndGet()
+                                    }
+                                }
+                            } finally {
+                                runCatching { detector.close() }
+                            }
+                        }
+                    }
+
+                    val producer = launch(Dispatchers.IO) {
+                        val intervalMs = (1000f / sampleFps.coerceAtLeast(1)).toLong().coerceAtLeast(16L)
+                        var timestampMs = 0L
+                        var index = 0
+                        while (timestampMs <= durationMs) {
+                            retriever.getFrameAtTime(timestampMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST)?.let { bitmap ->
+                                frameQueue.send(FramePacket(index = index, timestampMs = timestampMs, bitmap = bitmap))
+                                maxBacklog = maxOf(maxBacklog, backlog.incrementAndGet())
+                                activeSamples += activeWorkers.get().toLong()
+                                activeTicks += 1
+                                index += 1
+                            }
+                            timestampMs += intervalMs
+                        }
+                        frameQueue.close()
+                    }
+                    val collector = launch(Dispatchers.Default) {
+                        for ((index, frame) in resultQueue) {
+                            orderedFrames[index] = frame
+                        }
+                    }
+
+                    producer.join()
+                    workers.forEach { it.join() }
+                    resultQueue.close()
+                    collector.join()
+                }
+
+                frames += orderedFrames.toSortedMap().values
+                lastDecodeTelemetry = DecodeTelemetry(
+                    sampledFrames = frames.size,
+                    workerCount = boundedWorkerCount,
+                    maxQueueBacklog = maxBacklog,
+                    averageWorkerActive = if (activeTicks == 0) 0.0 else activeSamples.toDouble() / activeTicks.toDouble(),
+                )
+                Log.i(
+                    TAG,
+                    "decode_pipeline_complete sampled=${frames.size} workers=$boundedWorkerCount maxBacklog=$maxBacklog avgActive=${"%.2f".format(lastDecodeTelemetry.averageWorkerActive)}",
+                )
             }
-        } finally {
-            runCatching { detector.close() }
-            runCatching { retriever.release() }
+            finally {
+                runCatching { retriever.release() }
+            }
         }
         return frames.asSequence()
     }
@@ -119,5 +200,12 @@ class MlKitVideoPoseFrameSource(
         PoseLandmark.LEFT_FOOT_INDEX -> "left_foot_index"
         PoseLandmark.RIGHT_FOOT_INDEX -> "right_foot_index"
         else -> "joint_$type"
+    }
+
+    companion object {
+        private fun defaultWorkerCount(): Int {
+            val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+            return (cores - 2).coerceIn(1, 4)
+        }
     }
 }

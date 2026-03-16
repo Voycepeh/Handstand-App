@@ -34,6 +34,7 @@ class AnnotatedVideoCompositor(
         drillType: DrillType,
         drillCameraSide: DrillCameraSide,
         overlayFrames: List<AnnotatedOverlayFrame>,
+        preset: ExportPreset = ExportPreset.BALANCED,
         debugValidation: Boolean = false,
         onProgress: (Int, Int) -> Unit = { _, _ -> },
     ): String? = withContext(Dispatchers.IO) {
@@ -46,22 +47,25 @@ class AnnotatedVideoCompositor(
         try {
             val rawUri = Uri.parse(rawVideoUri)
             retriever.setDataSource(context, rawUri)
-            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 720
-            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 1280
+            val sourceWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 720
+            val sourceHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 1280
+            val scale = (preset.targetHeight.toFloat() / sourceHeight.toFloat()).coerceAtMost(1f)
+            val width = ((sourceWidth * scale) / 2f).roundToInt().coerceAtLeast(2) * 2
+            val height = ((sourceHeight * scale) / 2f).roundToInt().coerceAtLeast(2) * 2
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
             val sourceFps = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toFloatOrNull()?.roundToInt()
-                ?.coerceIn(15, 60) ?: EXPORT_FPS
+                ?.coerceIn(15, 60) ?: preset.outputFps
             if (durationMs <= 0L) {
                 Log.w(TAG, "Cannot export annotated video because duration metadata is unavailable")
                 return@withContext null
             }
 
-            Log.d(TAG, "export_start uri=$rawVideoUri width=$width height=$height durationMs=$durationMs sourceFps=$sourceFps exportFps=$EXPORT_FPS")
+            Log.d(TAG, "export_start uri=$rawVideoUri width=$width height=$height durationMs=$durationMs sourceFps=$sourceFps exportFps=${preset.outputFps} preset=${preset.name}")
             val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
                 setInteger(MediaFormat.KEY_BIT_RATE, (width * height * 6).coerceAtLeast(1_500_000))
-                setInteger(MediaFormat.KEY_FRAME_RATE, EXPORT_FPS)
+                setInteger(MediaFormat.KEY_FRAME_RATE, preset.outputFps)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             }
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -101,11 +105,11 @@ class AnnotatedVideoCompositor(
                 }
             }
 
-            val totalFrames = ((durationMs / 1000f) * EXPORT_FPS).roundToInt().coerceAtLeast(1)
+            val totalFrames = ((durationMs / 1000f) * preset.outputFps).roundToInt().coerceAtLeast(1)
             val timeline = OverlayTimeline(overlayFrames.sortedBy { it.timestampMs })
             val timestampStart = overlayFrames.first().timestampMs
             repeat(totalFrames) { idx ->
-                val frameTimeUs = (idx * 1_000_000L) / EXPORT_FPS
+                val frameTimeUs = (idx * 1_000_000L) / preset.outputFps
                 val frameTimeMs = frameTimeUs / 1000L
                 val bitmap = retriever.getFrameAtTime(frameTimeUs, MediaMetadataRetriever.OPTION_CLOSEST) ?: return@repeat
                 val canvas = inputSurface.lockCanvas(null)
