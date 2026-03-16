@@ -4,11 +4,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,14 +31,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.model.UserSettings
-import com.inversioncoach.app.motion.DrillCatalog
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
-import com.inversioncoach.app.ui.common.formatSessionDuration
-import com.inversioncoach.app.ui.common.formatLimiterText
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
-import kotlin.time.Duration.Companion.days
 
 @Composable
 fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
@@ -49,21 +43,9 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     val repository = remember { ServiceLocator.repository(context) }
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
     val settings by repository.observeSettings().collectAsState(initial = UserSettings())
-    val topIssue = sessions
-        .flatMap { it.issues.split(",").map(String::trim).filter(String::isNotBlank) }
-        .groupingBy { it }
-        .eachCount()
-        .maxByOrNull { it.value }
-        ?.key
-        ?: "No consistent issue yet"
-
     val sessionSizes = remember { mutableStateMapOf<Long, Long>() }
-    val categoryOptions = remember(sessions) {
-        sessions.map { DrillCatalog.byType(it.drillType).category }
-            .distinct()
-            .sorted()
-    }
-    var selectedSort by remember { mutableStateOf(HistorySort.NEWEST) }
+    var selectedSort by remember { mutableStateOf(HistorySort.RECENCY) }
+    var sortAscending by remember { mutableStateOf(false) }
     var totalStorageBytes by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(sessions) {
@@ -74,16 +56,23 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     }
 
     val maxStorageBytes = settings.maxStorageMb.toLong() * 1024L * 1024L
-    val sortedSessions = remember(sessions, selectedSort) {
-        when (selectedSort) {
-            HistorySort.NEWEST -> sessions.sortedByDescending { it.startedAtMs }
-            HistorySort.CATEGORY -> sessions.sortedWith(
-                compareBy(
-                    { DrillCatalog.byType(it.drillType).category },
-                    { it.drillType.displayName },
-                    { -it.startedAtMs },
-                ),
-            )
+    val sortedSessions = remember(sessions, selectedSort, sortAscending, sessionSizes.toMap()) {
+        val sorted = when (selectedSort) {
+            HistorySort.RECENCY -> sessions.sortedBy { it.startedAtMs }
+            HistorySort.STORAGE_SIZE -> sessions.sortedBy { sessionSizes[it.id] ?: 0L }
+            HistorySort.SESSION_DURATION -> sessions.sortedBy {
+                computeSessionDurationMs(it.startedAtMs, it.completedAtMs)
+            }
+        }
+        if (sortAscending) sorted else sorted.reversed()
+    }
+
+    fun onSortSelected(sort: HistorySort) {
+        if (selectedSort == sort) {
+            sortAscending = !sortAscending
+        } else {
+            selectedSort = sort
+            sortAscending = false
         }
     }
 
@@ -98,34 +87,29 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
             Text("Session insights", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 MetricCard("Total sessions", "${sessions.size}", Modifier.weight(1f))
-                MetricCard("With logged issues", "${sessions.count { it.issues.isNotBlank() }}", Modifier.weight(1f))
+                MetricCard(
+                    "Storage",
+                    "${formatMb(totalStorageBytes)} MB used • ${formatMb((maxStorageBytes - totalStorageBytes).coerceAtLeast(0L))} MB left",
+                    Modifier.weight(1f),
+                )
             }
-            MetricCard("Top issue", topIssue, modifier = Modifier.fillMaxWidth())
-            MetricCard(
-                "Storage",
-                "${formatMb(totalStorageBytes)} MB used • ${formatMb((maxStorageBytes - totalStorageBytes).coerceAtLeast(0L))} MB left",
-                modifier = Modifier.fillMaxWidth(),
-            )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
-                    selected = selectedSort == HistorySort.NEWEST,
-                    onClick = { selectedSort = HistorySort.NEWEST },
-                    label = { Text("Newest") },
+                    selected = selectedSort == HistorySort.RECENCY,
+                    onClick = { onSortSelected(HistorySort.RECENCY) },
+                    label = { Text(sortLabel("By recency", selectedSort == HistorySort.RECENCY, sortAscending)) },
                 )
                 FilterChip(
-                    selected = selectedSort == HistorySort.CATEGORY,
-                    onClick = { selectedSort = HistorySort.CATEGORY },
-                    label = { Text("Category") },
+                    selected = selectedSort == HistorySort.STORAGE_SIZE,
+                    onClick = { onSortSelected(HistorySort.STORAGE_SIZE) },
+                    label = { Text(sortLabel("By storage", selectedSort == HistorySort.STORAGE_SIZE, sortAscending)) },
                 )
-                if (selectedSort == HistorySort.CATEGORY) {
-                    Spacer(Modifier.width(2.dp))
-                    Text(
-                        "${categoryOptions.size} categories",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                FilterChip(
+                    selected = selectedSort == HistorySort.SESSION_DURATION,
+                    onClick = { onSortSelected(HistorySort.SESSION_DURATION) },
+                    label = { Text(sortLabel("By duration", selectedSort == HistorySort.SESSION_DURATION, sortAscending)) },
+                )
             }
 
             LazyColumn(
@@ -136,7 +120,6 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
                     val sizeMb = formatMb(sessionSizes[session.id] ?: 0L)
                     val status = videoStatus(session)
                     val progress = uploadProgress(status)
-                    val retentionText = retentionTimeLeft(session.completedAtMs, settings.retainDays)
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -148,18 +131,9 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
                     ) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(session.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "${session.drillType.displayName} • ${DrillCatalog.byType(session.drillType).category}",
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
                             Text("Time: ${formatSessionDateTime(session.startedAtMs)}", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("Duration: ${formatSessionDuration(computeSessionDurationMs(session.startedAtMs, session.completedAtMs))}")
-                            Text("Limiter: ${formatLimiterText(session)}", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("Updated: ${formatSessionDateTime(session.completedAtMs)}", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("Video: $status", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-                            Text("Storage: $sizeMb MB • Time left: $retentionText", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Storage: $sizeMb MB", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (isDebuggable && session.annotatedExportStatus.name == "FAILED") {
                                 Text("Reason: ${session.annotatedExportFailureReason.orEmpty()}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -171,7 +145,7 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     }
 }
 
-private enum class HistorySort { NEWEST, CATEGORY }
+private enum class HistorySort { RECENCY, STORAGE_SIZE, SESSION_DURATION }
 
 private fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): String = when {
     !session.annotatedVideoUri.isNullOrBlank() -> "Annotated ready"
@@ -187,12 +161,10 @@ private fun uploadProgress(status: String): Float = when (status) {
     else -> 0.25f
 }
 
-private fun retentionTimeLeft(completedAtMs: Long, retainDays: Int): String {
-    val expiresAt = completedAtMs + retainDays.days.inWholeMilliseconds
-    val leftMs = expiresAt - System.currentTimeMillis()
-    if (leftMs <= 0) return "expired"
-    val leftDays = (leftMs / 86_400_000L).coerceAtLeast(0)
-    return "$leftDays days"
+private fun sortLabel(baseLabel: String, isSelected: Boolean, isAscending: Boolean): String = when {
+    !isSelected -> baseLabel
+    isAscending -> "$baseLabel ↑"
+    else -> "$baseLabel ↓"
 }
 
 @Composable
