@@ -232,6 +232,19 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             }
             Text("Time ${formatSessionDuration(sessionDurationMs)}", color = Color.White, fontSize = 14.sp)
             Text("Align ${uiState.smoothedAlignmentScore}% • ${uiState.currentPhase.uppercase()}", color = Color.White, fontSize = 14.sp)
+            if (uiState.sessionMode == SessionMode.FREESTYLE || trackingMode == RepMode.HOLD_BASED) {
+                Text(
+                    "Hold ${formatSessionDuration(uiState.totalAlignedDurationMs)} • Best ${formatSessionDuration(uiState.bestAlignedStreakMs)}",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                )
+            } else {
+                Text(
+                    "Reps ✅${uiState.acceptedReps} ❌${uiState.rejectedReps} • Raw ${uiState.rawRepCount}",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                )
+            }
 
             if (uiState.sessionMode != SessionMode.FREESTYLE) {
                 Text("Camera Side: ${options.drillCameraSide.name.lowercase().replaceFirstChar { it.uppercase() }}", color = Color.White, fontSize = 13.sp)
