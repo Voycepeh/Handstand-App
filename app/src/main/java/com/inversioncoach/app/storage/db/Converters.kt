@@ -2,6 +2,7 @@ package com.inversioncoach.app.storage.db
 
 import androidx.room.TypeConverter
 import com.inversioncoach.app.model.AlignmentStrictness
+import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.CueStyle
 import com.inversioncoach.app.model.DrillType
 
@@ -27,4 +28,13 @@ class Converters {
 
     @TypeConverter
     fun alignmentStrictnessToString(value: AlignmentStrictness): String = value.name
+
+
+    @TypeConverter
+    fun annotatedExportStatusFromString(raw: String): AnnotatedExportStatus =
+        runCatching { AnnotatedExportStatus.valueOf(raw) }.getOrDefault(AnnotatedExportStatus.NOT_STARTED)
+
+    @TypeConverter
+    fun annotatedExportStatusToString(value: AnnotatedExportStatus): String = value.name
+
 }

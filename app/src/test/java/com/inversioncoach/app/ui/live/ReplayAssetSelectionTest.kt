@@ -21,7 +21,7 @@ class ReplayAssetSelectionTest {
 
             val selection = selectReplayAsset(session)
 
-            assertEquals("Play annotated video", selection.label)
+            assertEquals("Annotated replay", selection.label)
             assertEquals(annotatedFile.toURI().toString(), selection.uri)
         } finally {
             rawFile.delete()
@@ -41,7 +41,7 @@ class ReplayAssetSelectionTest {
 
             val selection = selectReplayAsset(session)
 
-            assertEquals("Play raw video", selection.label)
+            assertEquals("Raw replay", selection.label)
             assertEquals(rawFile.toURI().toString(), selection.uri)
         } finally {
             rawFile.delete()

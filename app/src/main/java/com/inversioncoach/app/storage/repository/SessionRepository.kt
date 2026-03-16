@@ -1,5 +1,6 @@
 package com.inversioncoach.app.storage.repository
 
+import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.IssueEvent
@@ -42,6 +43,12 @@ class SessionRepository(
         return persistedUri
     }
 
+
+    suspend fun updateAnnotatedExportStatus(sessionId: Long, status: AnnotatedExportStatus) {
+        val session = sessionDao.getById(sessionId) ?: return
+        sessionDao.upsert(session.copy(annotatedExportStatus = status))
+    }
+
     suspend fun saveSessionNotes(sessionId: Long, notes: String): String {
         val notesUri = sessionBlobStorage.persistNotes(sessionId, notes)
         val session = sessionDao.getById(sessionId)
@@ -79,7 +86,7 @@ class SessionRepository(
     suspend fun clearSessionVideos(sessionId: Long) {
         val session = sessionDao.getById(sessionId) ?: return
         sessionBlobStorage.deleteVideoFiles(sessionId)
-        sessionDao.upsert(session.copy(rawVideoUri = null, annotatedVideoUri = null))
+        sessionDao.upsert(session.copy(rawVideoUri = null, annotatedVideoUri = null, annotatedExportStatus = AnnotatedExportStatus.NOT_STARTED))
     }
 
     suspend fun deleteSession(sessionId: Long) {

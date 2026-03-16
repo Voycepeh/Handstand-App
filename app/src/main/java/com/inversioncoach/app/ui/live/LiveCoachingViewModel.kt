@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.inversioncoach.app.biomechanics.AlignmentMetricsEngine
 import com.inversioncoach.app.biomechanics.DrillConfigs
 import com.inversioncoach.app.coaching.CueEngine
+import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.CoachingCue
 import com.inversioncoach.app.model.DrillScore
 import com.inversioncoach.app.model.DrillType
@@ -24,6 +25,8 @@ import com.inversioncoach.app.motion.QualityThresholds
 import com.inversioncoach.app.motion.UserCalibrationSettings
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.pose.PoseSmoother
+import com.inversioncoach.app.recording.AnnotatedExportPipeline
+import com.inversioncoach.app.recording.OverlayStabilizer
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.summary.SummaryGenerator
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +54,8 @@ class LiveCoachingViewModel(
     private val summaryGenerator: SummaryGenerator = SummaryGenerator(com.inversioncoach.app.summary.RecommendationEngine()),
     private val smoother: PoseSmoother = PoseSmoother(),
     private val motionPipeline: MotionAnalysisPipeline = MotionAnalysisPipeline(drillType),
+    private val overlayStabilizer: OverlayStabilizer = OverlayStabilizer(),
+    private val annotatedExportPipeline: AnnotatedExportPipeline = AnnotatedExportPipeline(repository),
 ) : ViewModel() {
 
     private val sessionMode = drillType.sessionMode()
@@ -81,7 +86,8 @@ class LiveCoachingViewModel(
     private var rawVideoUri: String? = null
     private var annotatedVideoUri: String? = null
     private var rawVideoPersistJob: Job? = null
-    private var annotatedVideoPersistJob: Job? = null
+    private var annotatedExportJob: Job? = null
+    private val overlayFrames = mutableListOf<com.inversioncoach.app.recording.AnnotatedOverlayFrame>()
     private var pendingStopCallback: ((SessionStopResult) -> Unit)? = null
     private var isSessionFinalizing = false
     private var activeSettings: UserSettings = UserSettings()
@@ -129,21 +135,24 @@ class LiveCoachingViewModel(
             rawVideoUri = repository.saveRawVideoBlob(activeSessionId, finalizedUri)
             if (rawVideoUri.isNullOrBlank()) {
                 onAnalyzerWarning("Raw replay could not be saved")
+                repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.FAILED)
+                return@launch
+            }
+            annotatedExportJob = viewModelScope.launch {
+                annotatedVideoUri = annotatedExportPipeline.export(
+                    sessionId = activeSessionId,
+                    rawVideoUri = rawVideoUri!!,
+                    drillType = drillType,
+                    drillCameraSide = options.drillCameraSide,
+                    overlayFrames = overlayFrames.toList(),
+                )
+                if (annotatedVideoUri.isNullOrBlank()) {
+                    onAnalyzerWarning("Annotated replay export failed; raw replay is still available")
+                }
             }
         }
     }
 
-    fun onAnnotatedRecordingFinalized(uri: String?) {
-        val finalizedUri = uri?.takeIf { it.isNotBlank() } ?: return
-        val activeSessionId = sessionId ?: return
-        sessionHadAnyVideo = true
-        annotatedVideoPersistJob = viewModelScope.launch {
-            annotatedVideoUri = repository.saveAnnotatedVideoBlob(activeSessionId, finalizedUri)
-            if (annotatedVideoUri.isNullOrBlank()) {
-                onAnalyzerWarning("Annotated replay screen recording could not be saved")
-            }
-        }
-    }
 
     fun onPoseFrame(frame: PoseFrame, settings: UserSettings) {
         activeSettings = settings
@@ -166,6 +175,7 @@ class LiveCoachingViewModel(
         }
         val motion = if (sessionMode == SessionMode.FREESTYLE) null else motionPipeline.analyze(frameForSession, settings.alignmentStrictness, calibration)
         _smoothedFrame.value = smoothed
+        overlayFrames += overlayStabilizer.stabilize(smoothed, sessionMode)
         val gate = frameGate
         if (gate == null) {
             _uiState.value = _uiState.value.copy(errorMessage = "Unsupported drill: $drillType")
@@ -381,7 +391,7 @@ class LiveCoachingViewModel(
             }
             isSessionFinalizing = true
             try {
-                listOfNotNull(rawVideoPersistJob, annotatedVideoPersistJob).joinAll()
+                listOfNotNull(rawVideoPersistJob, annotatedExportJob).joinAll()
                 val frameMetrics = repository.observeSessionFrameMetrics(activeSessionId).first()
                 val aggregatedIssues = issueAggregator.flushAll(System.currentTimeMillis())
                 val validFrameMetrics = frameMetrics.filter { it.confidence >= 0.45f }
@@ -408,7 +418,7 @@ class LiveCoachingViewModel(
                     elapsedSessionSeconds < activeSettings.minSessionDurationSeconds
                 SessionDiagnostics.log(
                     "session_finalize drill=$drillType validFrames=$validFrameCount invalidFrames=$invalidFrameCount invalidReasons={$invalidReasonSummary} " +
-                        "aggregatedIssues=${aggregatedIssues.size} savedRaw=$rawVideoUri savedAnnotated=$annotatedVideoUri elapsed=${"%.2f".format(elapsedSessionSeconds)}s " +
+                        "aggregatedIssues=${aggregatedIssues.size} savedRaw=$rawVideoUri exportedAnnotated=$annotatedVideoUri elapsed=${"%.2f".format(elapsedSessionSeconds)}s " +
                         "minKeepWithoutVideo=${activeSettings.minSessionDurationSeconds}s shouldDelete=$shouldDeleteSession",
                 )
                 if (shouldDeleteSession) {
@@ -486,6 +496,7 @@ class LiveCoachingViewModel(
                         },
                         annotatedVideoUri = annotatedVideoUri,
                         rawVideoUri = rawVideoUri,
+                        annotatedExportStatus = if (annotatedVideoUri.isNullOrBlank()) AnnotatedExportStatus.FAILED else AnnotatedExportStatus.READY,
                         notesUri = null,
                         bestFrameTimestampMs = bestFrame,
                         worstFrameTimestampMs = worstFrame,
@@ -534,6 +545,7 @@ class LiveCoachingViewModel(
                     metricsJson = "",
                     annotatedVideoUri = null,
                     rawVideoUri = null,
+                    annotatedExportStatus = AnnotatedExportStatus.NOT_STARTED,
                     notesUri = null,
                     bestFrameTimestampMs = null,
                     worstFrameTimestampMs = null,
