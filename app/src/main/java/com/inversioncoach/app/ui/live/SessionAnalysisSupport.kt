@@ -211,11 +211,11 @@ fun mediaAssetExists(uri: String?): Boolean {
 fun selectReplayAsset(session: SessionRecord?): ReplayAssetSelection {
     val annotatedUri = session?.annotatedVideoUri?.takeIf(::mediaAssetExists)
     if (annotatedUri != null) {
-        return ReplayAssetSelection(uri = annotatedUri, label = "Play annotated video")
+        return ReplayAssetSelection(uri = annotatedUri, label = "Annotated replay")
     }
     val rawUri = session?.rawVideoUri?.takeIf(::mediaAssetExists)
     if (rawUri != null) {
-        return ReplayAssetSelection(uri = rawUri, label = "Play raw video")
+        return ReplayAssetSelection(uri = rawUri, label = "Raw replay")
     }
     return ReplayAssetSelection(uri = null, label = "Replay unavailable")
 }

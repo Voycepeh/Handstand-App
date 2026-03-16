@@ -1,13 +1,10 @@
 package com.inversioncoach.app.ui.live
 
 import android.Manifest
-import android.app.Activity
 import android.content.pm.PackageManager
-import android.media.projection.MediaProjectionManager
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.camera.view.PreviewView.ScaleType
@@ -51,7 +48,6 @@ import com.inversioncoach.app.motion.DrillCatalog
 import com.inversioncoach.app.motion.RepMode
 import com.inversioncoach.app.overlay.OverlayRenderer
 import com.inversioncoach.app.pose.PoseAnalyzer
-import com.inversioncoach.app.recording.AnnotatedSessionRecorder
 import com.inversioncoach.app.recording.SessionRecorder
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
@@ -85,17 +81,12 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val voiceCoach = remember(context) { VoiceCoach(context) }
     val sessionRecorder = remember(context) { SessionRecorder(context) }
-    val annotatedRecorder = remember(context) { AnnotatedSessionRecorder(context) }
-    val projectionManager = remember(context) { context.getSystemService(MediaProjectionManager::class.java) }
-    val hostActivity = context as? Activity
     val currentSessionTitle by rememberUpdatedState(newValue = vm.sessionTitle)
-    val isRecordingNow by rememberUpdatedState(newValue = uiState.isRecording)
     val showDetailedStats = rememberSaveable { mutableStateOf(false) }
 
     fun stopRecordingsAndPersist() {
         sessionRecorder.stopRecording()
         vm.onRecordingFinalized(sessionRecorder.fallbackOutputUri())
-        annotatedRecorder.stopRecording()?.let(vm::onAnnotatedRecordingFinalized)
     }
 
     val cameraManager = remember { CameraSessionManager(context) }
@@ -128,23 +119,6 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         vm.onCameraPermissionChanged(granted)
     }
-    val screenCaptureLauncher = rememberLauncherForActivityResult(StartActivityForResult()) { result ->
-        if (result.resultCode != Activity.RESULT_OK || result.data == null) {
-            vm.onAnalyzerWarning("Screen recording permission denied; annotated replay disabled")
-            return@rememberLauncherForActivityResult
-        }
-        if (!isRecordingNow) return@rememberLauncherForActivityResult
-        val started = annotatedRecorder.startRecording(
-            resultCode = result.resultCode,
-            resultData = result.data!!,
-            title = currentSessionTitle,
-            onError = vm::onAnalyzerWarning,
-        )
-        if (!started) {
-            vm.onAnalyzerWarning("Annotated replay screen recording could not start")
-        }
-    }
-
     LaunchedEffect(Unit) {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         vm.onCameraPermissionChanged(granted)
@@ -153,7 +127,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
 
     DisposableEffect(Unit) {
         onDispose {
-            if (isRecordingNow) {
+            if (uiState.isRecording) {
                 stopRecordingsAndPersist()
                 vm.setRecording(false)
             }
@@ -199,17 +173,6 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             },
         )
         vm.setRecording(true)
-
-        if (hostActivity == null) {
-            vm.onAnalyzerWarning("Annotated replay unavailable outside an Activity context")
-        } else {
-            val captureIntent = projectionManager?.createScreenCaptureIntent()
-            if (captureIntent != null) {
-                screenCaptureLauncher.launch(captureIntent)
-            } else {
-                vm.onAnalyzerWarning("Screen capture service unavailable on this device")
-            }
-        }
     }
 
     Box(Modifier.fillMaxSize()) {

@@ -83,6 +83,13 @@ data class DrillScore(
     val limitingFactor: String,
 )
 
+enum class AnnotatedExportStatus {
+    NOT_STARTED,
+    PROCESSING,
+    READY,
+    FAILED,
+}
+
 enum class CueStyle { CONCISE, TECHNICAL, ENCOURAGING }
 
 enum class AlignmentStrictness { BEGINNER, STANDARD, ADVANCED, CUSTOM }
@@ -115,6 +122,7 @@ data class SessionRecord(
     val metricsJson: String,
     val annotatedVideoUri: String?,
     val rawVideoUri: String?,
+    val annotatedExportStatus: AnnotatedExportStatus = AnnotatedExportStatus.NOT_STARTED,
     val notesUri: String?,
     val bestFrameTimestampMs: Long?,
     val worstFrameTimestampMs: Long?,
