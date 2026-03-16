@@ -256,7 +256,7 @@ class LiveCoachingViewModel(
                 rawUri = persisted,
                 annotatedUri = null,
                 overlayFrameCount = overlayFrames.size,
-                failureReason = "legacy_annotated_export_not_invoked",
+                failureReason = "raw_recording_persisted",
             )
         }
     }
