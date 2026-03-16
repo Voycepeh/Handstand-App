@@ -50,6 +50,11 @@ enum class SessionMode {
     FREESTYLE,
 }
 
+enum class SessionSource {
+    LIVE_COACHING,
+    UPLOADED_VIDEO,
+}
+
 fun DrillType.sessionMode(): SessionMode = if (this == DrillType.FREESTYLE) SessionMode.FREESTYLE else SessionMode.DRILL
 
 fun DrillType.isFreestyle(): Boolean = sessionMode() == SessionMode.FREESTYLE
@@ -190,6 +195,7 @@ data class SessionRecord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
     val drillType: DrillType,
+    val sessionSource: SessionSource = SessionSource.LIVE_COACHING,
     val startedAtMs: Long,
     val completedAtMs: Long,
     val overallScore: Int,

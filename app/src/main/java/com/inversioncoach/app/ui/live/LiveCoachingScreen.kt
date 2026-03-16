@@ -50,8 +50,6 @@ import com.inversioncoach.app.motion.RepMode
 import com.inversioncoach.app.overlay.FreestyleViewMode
 import com.inversioncoach.app.overlay.OverlayRenderer
 import com.inversioncoach.app.pose.PoseAnalyzer
-import com.inversioncoach.app.recording.AnnotatedExportPipeline
-import com.inversioncoach.app.recording.AnnotatedVideoCompositor
 import com.inversioncoach.app.recording.SessionRecorder
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
@@ -79,11 +77,6 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             cueEngine = ServiceLocator.cueEngine(),
             repository = repository,
             options = options,
-            annotatedExportPipeline = AnnotatedExportPipeline(
-                repository = repository,
-                compositor = AnnotatedVideoCompositor(context),
-                debugValidationEnabled = isDebuggableApp,
-            ),
         )
     }
     val uiState by vm.uiState.collectAsState()

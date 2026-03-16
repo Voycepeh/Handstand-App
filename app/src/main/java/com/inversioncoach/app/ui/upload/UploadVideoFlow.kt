@@ -31,6 +31,7 @@ import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.SessionMode
+import com.inversioncoach.app.model.SessionSource
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.movementprofile.ExistingDrillToProfileAdapter
 import com.inversioncoach.app.movementprofile.MlKitVideoPoseFrameSource
@@ -104,6 +105,7 @@ class DefaultUploadVideoAnalysisRunner(
             SessionRecord(
                 title = "Uploaded Video Analysis",
                 drillType = drillType,
+                sessionSource = SessionSource.UPLOADED_VIDEO,
                 startedAtMs = startedAt,
                 completedAtMs = startedAt,
                 overallScore = 0,
@@ -248,6 +250,7 @@ class UploadVideoViewModel(
     private var activeJob: Job? = null
 
     fun onPickStarted() {
+        Log.i(TAG, "picker_launch")
         _state.update {
             it.copy(
                 stage = UploadStage.PICKING,
@@ -335,7 +338,10 @@ fun UploadVideoScreen(
     val state by viewModel.state.collectAsState()
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
+        if (uri == null) {
+            Log.w(TAG, "picker_failure reason=no_selection")
+            return@rememberLauncherForActivityResult
+        }
         val type = context.contentResolver.getType(uri).orEmpty()
         if (!type.startsWith("video/")) {
             Log.w(TAG, "picker_failure reason=invalid_mime uri=$uri mime=$type")
@@ -347,6 +353,8 @@ fun UploadVideoScreen(
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION,
             )
+        }.onFailure { error ->
+            Log.w(TAG, "picker_permission_persist_failed uri=$uri", error)
         }
         Log.i(TAG, "picker_success uri=$uri type=$type")
         viewModel.analyze(uri)
@@ -373,7 +381,7 @@ fun UploadVideoScreen(
 
             state.errorMessage?.let { message ->
                 Text(message, color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = { picker.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { viewModel.onPickStarted(); picker.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth()) {
                     Text("Retry")
                 }
             }

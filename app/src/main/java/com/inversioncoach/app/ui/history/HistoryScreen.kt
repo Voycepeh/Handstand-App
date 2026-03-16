@@ -30,7 +30,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
@@ -40,7 +39,6 @@ import com.inversioncoach.app.ui.components.ScaffoldedScreen
 @Composable
 fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     val context = LocalContext.current
-    val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
     val repository = remember { ServiceLocator.repository(context) }
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
     val settings by repository.observeSettings().collectAsState(initial = UserSettings())
@@ -121,6 +119,7 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
                     val sizeMb = formatMb(sessionSizes[session.id] ?: 0L)
                     val status = videoStatus(session)
                     val progress = uploadProgress(session)
+                    val sourceLabel = if (session.sessionSource.name == "UPLOADED_VIDEO") "Uploaded video" else "Live coaching"
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -132,18 +131,11 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
                     ) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(session.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                            Text(sourceLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("Time: ${formatSessionDateTime(session.startedAtMs)}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                             LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                             Text(status, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if ((session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING || session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW) && session.annotatedExportEtaSeconds != null) {
-                                val etaMin = session.annotatedExportEtaSeconds / 60
-                                val etaSec = session.annotatedExportEtaSeconds % 60
-                                Text("Estimated time left: ${etaMin}m ${etaSec}s", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
                             Text("Storage: $sizeMb MB", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (isDebuggable && session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED) {
-                                Text("Reason: ${session.annotatedExportFailureReason.orEmpty()}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
                         }
                     }
                 }
@@ -155,19 +147,15 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
 private enum class HistorySort { RECENCY, STORAGE_SIZE, SESSION_DURATION }
 
 private fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): String = when {
-    !session.annotatedVideoUri.isNullOrBlank() -> "Annotated replay ready"
-    session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING || session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW -> "Annotated video processing · ${session.annotatedExportPercent}%"
+    !session.bestPlayableUri.isNullOrBlank() -> "Replay ready"
     !session.rawVideoUri.isNullOrBlank() -> "Raw replay ready"
-    session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> "Annotated replay failed"
-    else -> "Replay processing"
+    else -> "Replay unavailable"
 }
 
 private fun uploadProgress(session: com.inversioncoach.app.model.SessionRecord): Float = when {
-    !session.annotatedVideoUri.isNullOrBlank() -> 1f
-    session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING || session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW -> (session.annotatedExportPercent / 100f).coerceIn(0.05f, 0.95f)
-    !session.rawVideoUri.isNullOrBlank() -> 0.6f
-    session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> 0.35f
-    else -> 0.15f
+    !session.bestPlayableUri.isNullOrBlank() -> 1f
+    !session.rawVideoUri.isNullOrBlank() -> 0.7f
+    else -> 0.2f
 }
 
 private fun sortLabel(baseLabel: String, isSelected: Boolean, isAscending: Boolean): String = when {

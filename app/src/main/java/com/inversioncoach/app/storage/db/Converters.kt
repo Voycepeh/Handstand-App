@@ -10,6 +10,7 @@ import com.inversioncoach.app.model.CueStyle
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.RetainedAssetType
+import com.inversioncoach.app.model.SessionSource
 
 class Converters {
     @TypeConverter
@@ -84,5 +85,12 @@ class Converters {
 
     @TypeConverter
     fun retainedAssetTypeToString(value: RetainedAssetType): String = value.name
+
+    @TypeConverter
+    fun sessionSourceFromString(raw: String): SessionSource =
+        runCatching { SessionSource.valueOf(raw) }.getOrDefault(SessionSource.LIVE_COACHING)
+
+    @TypeConverter
+    fun sessionSourceToString(value: SessionSource): String = value.name
 
 }
