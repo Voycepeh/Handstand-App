@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.delay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AnnotatedExportPipelineTest {
@@ -44,6 +45,7 @@ class AnnotatedExportPipelineTest {
             persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
             updateExportStatus = { _, status -> statuses += status },
             renderAnnotatedVideo = { _, _, _, _, _ -> "file:///rendered_annotated.mp4" },
+            verifyOutputAsset = { null },
         )
 
         val exported = runBlocking {
@@ -72,6 +74,7 @@ class AnnotatedExportPipelineTest {
                 delay(100L)
                 "file:///rendered_annotated.mp4"
             },
+            verifyOutputAsset = { null },
         )
 
         val exported = runBlocking {
@@ -93,6 +96,7 @@ class AnnotatedExportPipelineTest {
             persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
             updateExportStatus = { _, _ -> },
             renderAnnotatedVideo = { _, _, _, _, _ -> throw IllegalStateException("boom") },
+            verifyOutputAsset = { null },
         )
 
         val exported = runBlocking {
@@ -108,6 +112,30 @@ class AnnotatedExportPipelineTest {
         assertEquals("EXCEPTION_IllegalStateException", exported.failureReason)
     }
 
+
+    @Test
+    fun verificationFailurePropagatesZeroByteReason() {
+        val statuses = mutableListOf<AnnotatedExportStatus>()
+        val pipeline = AnnotatedExportPipeline(
+            persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
+            updateExportStatus = { _, status -> statuses += status },
+            renderAnnotatedVideo = { _, _, _, _, _ -> "file:///rendered_annotated.mp4" },
+            verifyOutputAsset = { AnnotatedExportFailureReason.OUTPUT_FILE_ZERO_BYTES.name },
+        )
+
+        val exported = runBlocking {
+            pipeline.export(
+                sessionId = 7L,
+                rawVideoUri = "file:///raw.mp4",
+                drillType = DrillType.CHEST_TO_WALL_HANDSTAND,
+                drillCameraSide = DrillCameraSide.LEFT,
+                overlayFrames = listOf(testFrame(1000L)),
+            )
+        }
+
+        assertEquals(AnnotatedExportFailureReason.OUTPUT_FILE_ZERO_BYTES.name, exported.failureReason)
+        assertTrue(statuses.contains(AnnotatedExportStatus.FAILED))
+    }
     private fun testFrame(timestampMs: Long) = AnnotatedOverlayFrame(
         timestampMs = timestampMs,
         landmarks = emptyList(),

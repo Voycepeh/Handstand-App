@@ -391,7 +391,7 @@ fun resolvePreferredReplayUri(
     isReadable: (String?) -> Boolean = ::mediaAssetExists,
 ): PreferredReplayUri {
     val annotatedUri = session?.annotatedVideoUri
-    if (isReadable(annotatedUri)) {
+    if (session?.annotatedExportStatus == com.inversioncoach.app.model.AnnotatedExportStatus.READY && isReadable(annotatedUri)) {
         return PreferredReplayUri(uri = annotatedUri, source = "annotated")
     }
     val rawUri = session?.rawVideoUri

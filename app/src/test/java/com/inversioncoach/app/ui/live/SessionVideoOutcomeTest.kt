@@ -4,19 +4,35 @@ import com.inversioncoach.app.model.AnnotatedExportStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.io.File
 
 class SessionVideoOutcomeTest {
 
     @Test
     fun failedAnnotatedExportKeepsRawAndMarksFailed() {
+        val rawFile = File.createTempFile("raw_outcome", ".mp4")
+        try {
+            rawFile.writeText("raw")
+            val outcome = resolveSessionVideoOutcome(
+                rawVideoUri = rawFile.toURI().toString(),
+                annotatedVideoUri = null,
+            )
+
+            assertEquals(rawFile.toURI().toString(), outcome.rawVideoUri)
+            assertNull(outcome.annotatedVideoUri)
+            assertEquals(AnnotatedExportStatus.FAILED, outcome.annotatedExportStatus)
+        } finally {
+            rawFile.delete()
+        }
+    }
+
+    @Test
+    fun processingStateNeverPersistsAsFinalOutcome() {
         val outcome = resolveSessionVideoOutcome(
-            rawVideoUri = "file:///raw.mp4",
+            rawVideoUri = null,
             annotatedVideoUri = null,
-            exportStatus = AnnotatedExportStatus.FAILED,
         )
 
-        assertEquals("file:///raw.mp4", outcome.rawVideoUri)
-        assertNull(outcome.annotatedVideoUri)
         assertEquals(AnnotatedExportStatus.FAILED, outcome.annotatedExportStatus)
     }
 }

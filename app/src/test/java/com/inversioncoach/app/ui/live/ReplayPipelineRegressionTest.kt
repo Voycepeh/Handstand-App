@@ -34,7 +34,7 @@ class ReplayPipelineRegressionTest {
                 rawPersistStatus = RawPersistStatus.SUCCEEDED,
                 rawPersistFailureReason = null,
                 annotatedExportStatus = AnnotatedExportStatus.FAILED,
-                annotatedExportFailureReason = "ANNOTATED_EXPORT_FAILED:OUTPUT_METADATA_UNREADABLE",
+                annotatedExportFailureReason = "METADATA_UNREADABLE",
                 overlayFrameCount = 120,
                 notesUri = null,
                 bestFrameTimestampMs = null,
@@ -49,7 +49,7 @@ class ReplayPipelineRegressionTest {
             assertEquals(rawFile.toURI().toString(), preferred.uri)
             assertEquals("Raw replay", selection.label)
             assertEquals("Raw Only", replayAvailabilityBadge(selection.label))
-            assertEquals("ANNOTATED_EXPORT_FAILED:OUTPUT_METADATA_UNREADABLE", session.annotatedExportFailureReason)
+            assertEquals("METADATA_UNREADABLE", session.annotatedExportFailureReason)
         } finally {
             rawFile.delete()
         }

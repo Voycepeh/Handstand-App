@@ -1,5 +1,6 @@
 package com.inversioncoach.app.ui.live
 
+import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.SessionRecord
 import org.junit.Assert.assertEquals
@@ -17,6 +18,7 @@ class ReplayAssetSelectionTest {
             val session = sessionRecord(
                 rawUri = rawFile.toURI().toString(),
                 annotatedUri = annotatedFile.toURI().toString(),
+                annotatedStatus = AnnotatedExportStatus.READY,
             )
 
             val selection = selectReplayAsset(session)
@@ -37,6 +39,7 @@ class ReplayAssetSelectionTest {
             val session = sessionRecord(
                 rawUri = rawFile.toURI().toString(),
                 annotatedUri = missingAnnotated.toURI().toString(),
+                annotatedStatus = AnnotatedExportStatus.READY,
             )
 
             val selection = selectReplayAsset(session)
@@ -61,14 +64,26 @@ class ReplayAssetSelectionTest {
     @Test
     fun resolverPrefersAnnotatedThenRaw() {
         val result = resolvePreferredReplayUri(
-            sessionRecord(rawUri = "raw", annotatedUri = "annotated"),
+            sessionRecord(rawUri = "raw", annotatedUri = "annotated", annotatedStatus = AnnotatedExportStatus.READY),
             isReadable = { it == "annotated" || it == "raw" },
         )
         assertEquals("annotated", result.source)
         assertEquals("annotated", result.uri)
     }
 
-    private fun sessionRecord(rawUri: String?, annotatedUri: String?) = SessionRecord(
+
+    @Test
+    fun ignoresAnnotatedAssetUntilStatusIsReady() {
+        val result = resolvePreferredReplayUri(
+            sessionRecord(rawUri = "raw", annotatedUri = "annotated", annotatedStatus = AnnotatedExportStatus.PROCESSING),
+            isReadable = { it == "annotated" || it == "raw" },
+        )
+
+        assertEquals("raw", result.source)
+        assertEquals("raw", result.uri)
+    }
+
+    private fun sessionRecord(rawUri: String?, annotatedUri: String?, annotatedStatus: AnnotatedExportStatus = AnnotatedExportStatus.NOT_STARTED) = SessionRecord(
         id = 99,
         title = "Test session",
         drillType = DrillType.CHEST_TO_WALL_HANDSTAND,
@@ -82,6 +97,7 @@ class ReplayAssetSelectionTest {
         metricsJson = "",
         annotatedVideoUri = annotatedUri,
         rawVideoUri = rawUri,
+        annotatedExportStatus = annotatedStatus,
         notesUri = null,
         bestFrameTimestampMs = null,
         worstFrameTimestampMs = null,
