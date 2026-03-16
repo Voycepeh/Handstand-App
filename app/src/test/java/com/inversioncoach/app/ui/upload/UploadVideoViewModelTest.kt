@@ -1,0 +1,70 @@
+package com.inversioncoach.app.ui.upload
+
+import android.net.Uri
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class UploadVideoViewModelTest {
+    private val dispatcher = StandardTestDispatcher()
+
+    @Test
+    fun successPathTransitionsToSuccessAndStoresResult() = runTest(dispatcher) {
+        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+        val runner = object : UploadVideoAnalysisRunner {
+            override suspend fun run(uri: Uri, onStage: (UploadStage) -> Unit): UploadFlowResult {
+                onStage(UploadStage.ANALYZING)
+                onStage(UploadStage.BUILDING_OVERLAY)
+                onStage(UploadStage.PREPARING_REPLAY)
+                return UploadFlowResult(sessionId = 42L, replayUri = "file:///annotated.mp4")
+            }
+        }
+        val viewModel = UploadVideoViewModel(runner)
+
+        viewModel.analyze(Uri.parse("content://video"))
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertEquals(UploadStage.SUCCESS, state.stage)
+        assertEquals(42L, state.sessionId)
+        assertEquals("file:///annotated.mp4", state.replayUri)
+        kotlinx.coroutines.Dispatchers.resetMain()
+    }
+
+    @Test
+    fun invalidUriShowsFailureMessage() = runTest(dispatcher) {
+        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+        val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
+            override suspend fun run(uri: Uri, onStage: (UploadStage) -> Unit): UploadFlowResult =
+                throw IllegalStateException("Unreadable media")
+        })
+
+        viewModel.analyze(Uri.parse("content://broken"))
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertEquals(UploadStage.FAILURE, state.stage)
+        assertTrue(state.errorMessage?.contains("Unreadable") == true)
+        kotlinx.coroutines.Dispatchers.resetMain()
+    }
+
+    @Test
+    fun pickerInvalidSelectionMovesToFailure() {
+        val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
+            override suspend fun run(uri: Uri, onStage: (UploadStage) -> Unit): UploadFlowResult =
+                UploadFlowResult(1L, null)
+        })
+
+        viewModel.onInvalidSelection("not a video")
+
+        assertEquals(UploadStage.FAILURE, viewModel.state.value.stage)
+        assertEquals("not a video", viewModel.state.value.errorMessage)
+    }
+}
