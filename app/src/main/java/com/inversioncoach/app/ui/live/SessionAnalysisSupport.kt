@@ -9,6 +9,7 @@ import com.inversioncoach.app.model.PoseFrame
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.overlay.DrillCameraSide
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
 data class AggregatedIssueEvent(
@@ -424,4 +425,18 @@ object SessionDiagnostics {
                 "failureReason=${failureReason.orEmpty()}",
         )
     }
+}
+
+object AnnotatedExportJobTracker {
+    private val activeSessionIds = ConcurrentHashMap.newKeySet<Long>()
+
+    fun markStarted(sessionId: Long) {
+        activeSessionIds += sessionId
+    }
+
+    fun markFinished(sessionId: Long) {
+        activeSessionIds -= sessionId
+    }
+
+    fun isActive(sessionId: Long): Boolean = activeSessionIds.contains(sessionId)
 }

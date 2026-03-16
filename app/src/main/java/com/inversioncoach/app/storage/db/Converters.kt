@@ -37,9 +37,11 @@ class Converters {
     @TypeConverter
     fun annotatedExportStatusFromString(raw: String): AnnotatedExportStatus =
         when (raw) {
-            "PROCESSING" -> AnnotatedExportStatus.EXPORTING
-            "READY" -> AnnotatedExportStatus.ANNOTATED_FINAL_READY
+            "PROCESSING" -> AnnotatedExportStatus.PROCESSING
+            "READY" -> AnnotatedExportStatus.ANNOTATED_READY
             "FAILED" -> AnnotatedExportStatus.ANNOTATED_FAILED
+            "EXPORTING", "EXPORTED_MASTER", "COMPRESSING_FINAL" -> AnnotatedExportStatus.PROCESSING
+            "ANNOTATED_FINAL_READY", "FALLBACK_RAW_FINAL_READY" -> AnnotatedExportStatus.ANNOTATED_READY
             else -> runCatching { AnnotatedExportStatus.valueOf(raw) }.getOrDefault(AnnotatedExportStatus.NOT_STARTED)
         }
 

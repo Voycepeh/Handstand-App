@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.model.IssueEvent
+import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.sessionMode
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.storage.ServiceLocator
@@ -45,6 +46,7 @@ import com.inversioncoach.app.ui.common.buildSessionSummaryDisplay
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.mediaAssetExists
 import com.inversioncoach.app.ui.live.selectReplayAsset
+import com.inversioncoach.app.ui.live.AnnotatedExportJobTracker
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -70,8 +72,16 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val sessionSummaryDisplay = remember(session) { buildSessionSummaryDisplay(session) }
     val sessionMode = session?.sessionMode()
 
-    LaunchedEffect(sessionId) {
+    LaunchedEffect(sessionId, session?.annotatedExportStatus, session?.annotatedVideoUri) {
         notes = repository.readSessionNotes(sessionId).orEmpty()
+        if (shouldReconcileStaleProcessing(
+                status = session?.annotatedExportStatus,
+                annotatedVideoUri = session?.annotatedVideoUri,
+                hasActiveExportJob = AnnotatedExportJobTracker.isActive(sessionId),
+            )
+        ) {
+            repository.reconcileStaleProcessingState(sessionId, hasActiveExportJob = false)
+        }
     }
 
     ScaffoldedScreen(title = "Results") { padding ->
@@ -162,7 +172,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 Text("No replay asset is available for this session.")
             }
             val currentSession = session
-            if (currentSession?.annotatedExportStatus == com.inversioncoach.app.model.AnnotatedExportStatus.FAILED && !rawUri.isNullOrBlank()) {
+            if (currentSession?.annotatedExportStatus == com.inversioncoach.app.model.AnnotatedExportStatus.ANNOTATED_FAILED && !rawUri.isNullOrBlank()) {
                 Text("Annotated replay unavailable, showing raw replay")
                 if (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
                     Text("Reason: ${currentSession.annotatedExportFailureReason.orEmpty()}")
@@ -242,6 +252,13 @@ internal fun shouldShowRawVideoButton(replayUri: String?, rawUri: String?): Bool
 
 internal fun replayAvailabilityBadge(replayLabel: String): String =
     if (replayLabel == "Annotated replay") "Annotated Replay Ready" else "Raw Only"
+
+internal fun shouldReconcileStaleProcessing(
+    status: AnnotatedExportStatus?,
+    annotatedVideoUri: String?,
+    hasActiveExportJob: Boolean,
+): Boolean =
+    status == AnnotatedExportStatus.PROCESSING && annotatedVideoUri.isNullOrBlank() && !hasActiveExportJob
 
 
 private data class CollapsedIssueRange(

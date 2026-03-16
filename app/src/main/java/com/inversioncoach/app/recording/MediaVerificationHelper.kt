@@ -15,7 +15,7 @@ data class MediaVerificationResult(
 object MediaVerificationHelper {
     fun verify(uri: String?, minDurationMs: Long = 1L): MediaVerificationResult {
         if (uri.isNullOrBlank()) {
-            return MediaVerificationResult(false, AnnotatedExportFailureReason.OUTPUT_FILE_MISSING)
+            return MediaVerificationResult(false, AnnotatedExportFailureReason.OUTPUT_URI_NULL)
         }
         val file = runCatching { Uri.parse(uri).path }.getOrNull()?.let(::File)
             ?: return MediaVerificationResult(false, AnnotatedExportFailureReason.OUTPUT_FILE_MISSING)
@@ -25,14 +25,14 @@ object MediaVerificationHelper {
         return try {
             retriever.setDataSource(file.absolutePath)
             val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
-                ?: return MediaVerificationResult(false, AnnotatedExportFailureReason.OUTPUT_DURATION_UNREADABLE)
+                ?: return MediaVerificationResult(false, AnnotatedExportFailureReason.METADATA_UNREADABLE)
             if (duration < minDurationMs) {
-                MediaVerificationResult(false, AnnotatedExportFailureReason.OUTPUT_DURATION_UNREADABLE, file.length(), duration)
+                MediaVerificationResult(false, AnnotatedExportFailureReason.METADATA_UNREADABLE, file.length(), duration)
             } else {
                 MediaVerificationResult(true, null, file.length(), duration)
             }
         } catch (_: Throwable) {
-            MediaVerificationResult(false, AnnotatedExportFailureReason.OUTPUT_DURATION_UNREADABLE, file.length(), null)
+            MediaVerificationResult(false, AnnotatedExportFailureReason.METADATA_UNREADABLE, file.length(), null)
         } finally {
             runCatching { retriever.release() }
         }

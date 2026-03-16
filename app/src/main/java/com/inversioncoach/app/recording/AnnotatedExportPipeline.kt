@@ -146,7 +146,7 @@ class AnnotatedExportPipeline(
                 verificationStatus = VerificationStatus.FAILED,
             )
         }
-        updateExportStatus(sessionId, AnnotatedExportStatus.EXPORTING)
+        updateExportStatus(sessionId, AnnotatedExportStatus.PROCESSING)
         Log.d(
             TAG,
             "export_start sessionId=$sessionId rawVideoUri=$rawVideoUri overlayFrames=${overlayFrames.size} " +
@@ -164,11 +164,13 @@ class AnnotatedExportPipeline(
             }
         } catch (t: Throwable) {
             updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
+            Log.e(TAG, "export_failure sessionId=$sessionId reason=exception_${t::class.simpleName}", t)
             return ExportResult(failureReason = "EXCEPTION_${t::class.simpleName ?: "UNKNOWN"}", verificationStatus = VerificationStatus.FAILED)
         }
         if (renderedUri == null) {
             updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-            return ExportResult(failureReason = AnnotatedExportFailureReason.ANNOTATED_EXPORT_TIMED_OUT.name, verificationStatus = VerificationStatus.FAILED)
+            Log.w(TAG, "export_failure sessionId=$sessionId reason=timeout")
+            return ExportResult(failureReason = AnnotatedExportFailureReason.EXPORT_TIMED_OUT.name, verificationStatus = VerificationStatus.FAILED)
         }
         if (renderedUri.isNullOrBlank()) {
             updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
@@ -177,7 +179,7 @@ class AnnotatedExportPipeline(
         }
         val persisted = persistAnnotatedVideo(sessionId, renderedUri)
         val verification = MediaVerificationHelper.verify(persisted)
-        val status = if (verification.isValid) AnnotatedExportStatus.EXPORTED_MASTER else AnnotatedExportStatus.ANNOTATED_FAILED
+        val status = if (verification.isValid) AnnotatedExportStatus.ANNOTATED_READY else AnnotatedExportStatus.ANNOTATED_FAILED
         updateExportStatus(sessionId, status)
         if (!verification.isValid) {
             val failure = verification.failureReason?.name ?: AnnotatedExportFailureReason.UNKNOWN.name
