@@ -1,6 +1,7 @@
 package com.inversioncoach.app.ui.live
 
 import android.Manifest
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -38,7 +39,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.inversioncoach.app.BuildConfig
 import com.inversioncoach.app.camera.CameraSessionManager
 import com.inversioncoach.app.coaching.VoiceCoach
 import com.inversioncoach.app.model.DrillType
@@ -63,6 +63,9 @@ private const val TAG = "LiveCoachingScreen"
 @Composable
 fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop: (SessionStopResult) -> Unit) {
     val context = LocalContext.current
+    val isDebuggableApp = remember(context) {
+        context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+    }
     val hostView = LocalView.current
     val repository = remember { ServiceLocator.repository(context) }
 
@@ -78,7 +81,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             annotatedExportPipeline = AnnotatedExportPipeline(
                 repository = repository,
                 compositor = AnnotatedVideoCompositor(context),
-                debugValidationEnabled = BuildConfig.DEBUG,
+                debugValidationEnabled = isDebuggableApp,
             ),
         )
     }
