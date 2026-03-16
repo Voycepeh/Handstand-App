@@ -1,6 +1,7 @@
 package com.inversioncoach.app.ui.live
 
 import com.inversioncoach.app.model.DrillType
+import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.SessionRecord
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -61,14 +62,28 @@ class ReplayAssetSelectionTest {
     @Test
     fun resolverPrefersAnnotatedThenRaw() {
         val result = resolvePreferredReplayUri(
-            sessionRecord(rawUri = "raw", annotatedUri = "annotated"),
+            sessionRecord(rawUri = "raw", annotatedUri = "annotated", annotatedStatus = AnnotatedExportStatus.ANNOTATED_READY),
             isReadable = { it == "annotated" || it == "raw" },
         )
         assertEquals("annotated", result.source)
         assertEquals("annotated", result.uri)
     }
 
-    private fun sessionRecord(rawUri: String?, annotatedUri: String?) = SessionRecord(
+    @Test
+    fun resolverIgnoresAnnotatedWhenStatusNotReady() {
+        val result = resolvePreferredReplayUri(
+            sessionRecord(rawUri = "raw", annotatedUri = "annotated", annotatedStatus = AnnotatedExportStatus.PROCESSING),
+            isReadable = { it == "annotated" || it == "raw" },
+        )
+        assertEquals("raw", result.source)
+        assertEquals("raw", result.uri)
+    }
+
+    private fun sessionRecord(
+        rawUri: String?,
+        annotatedUri: String?,
+        annotatedStatus: AnnotatedExportStatus = if (annotatedUri == null) AnnotatedExportStatus.NOT_STARTED else AnnotatedExportStatus.ANNOTATED_READY,
+    ) = SessionRecord(
         id = 99,
         title = "Test session",
         drillType = DrillType.WALL_HANDSTAND,
@@ -82,6 +97,7 @@ class ReplayAssetSelectionTest {
         metricsJson = "",
         annotatedVideoUri = annotatedUri,
         rawVideoUri = rawUri,
+        annotatedExportStatus = annotatedStatus,
         notesUri = null,
         bestFrameTimestampMs = null,
         worstFrameTimestampMs = null,

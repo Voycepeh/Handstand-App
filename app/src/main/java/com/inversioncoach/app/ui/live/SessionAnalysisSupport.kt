@@ -3,6 +3,7 @@ package com.inversioncoach.app.ui.live
 import android.net.Uri
 import android.util.Log
 import com.inversioncoach.app.biomechanics.DrillModeConfig
+import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.DrillScore
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.PoseFrame
@@ -391,8 +392,9 @@ fun resolvePreferredReplayUri(
     session: SessionRecord?,
     isReadable: (String?) -> Boolean = ::mediaAssetExists,
 ): PreferredReplayUri {
+    val annotatedReady = session?.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY
     val annotatedUri = session?.annotatedFinalUri ?: session?.annotatedVideoUri
-    if (isReadable(annotatedUri)) {
+    if (annotatedReady && isReadable(annotatedUri)) {
         return PreferredReplayUri(uri = annotatedUri, source = "annotated")
     }
     val rawUri = session?.rawFinalUri ?: session?.rawVideoUri ?: session?.rawMasterUri

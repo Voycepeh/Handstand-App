@@ -9,6 +9,7 @@ import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.storage.repository.SessionRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 
@@ -87,6 +88,7 @@ class AnnotatedExportPipeline(
     private val debugValidationEnabled: Boolean = false,
     private val persistAnnotatedVideo: suspend (Long, String) -> String?,
     private val updateExportStatus: suspend (Long, AnnotatedExportStatus) -> Unit,
+    private val verifyMedia: (String?) -> MediaVerificationResult = MediaVerificationHelper::verify,
     private val exportTimeoutMs: Long = EXPORT_TIMEOUT_MS,
     private val renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, List<AnnotatedOverlayFrame>, Boolean) -> String? =
         { rawUri, drill, side, frames, debug ->
@@ -120,6 +122,7 @@ class AnnotatedExportPipeline(
     internal constructor(
         persistAnnotatedVideo: suspend (Long, String) -> String?,
         updateExportStatus: suspend (Long, AnnotatedExportStatus) -> Unit,
+        verifyMedia: (String?) -> MediaVerificationResult = MediaVerificationHelper::verify,
         exportTimeoutMs: Long = EXPORT_TIMEOUT_MS,
         renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, List<AnnotatedOverlayFrame>, Boolean) -> String?,
     ) : this(
@@ -127,6 +130,7 @@ class AnnotatedExportPipeline(
         debugValidationEnabled = false,
         persistAnnotatedVideo = persistAnnotatedVideo,
         updateExportStatus = updateExportStatus,
+        verifyMedia = verifyMedia,
         exportTimeoutMs = exportTimeoutMs,
         renderAnnotatedVideo = renderAnnotatedVideo,
     )
@@ -162,6 +166,10 @@ class AnnotatedExportPipeline(
                     debugValidationEnabled,
                 )
             }
+        } catch (_: CancellationException) {
+            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
+            Log.w(TAG, "export_failure sessionId=$sessionId reason=cancelled")
+            return ExportResult(failureReason = AnnotatedExportFailureReason.EXPORT_CANCELLED.name, verificationStatus = VerificationStatus.FAILED)
         } catch (t: Throwable) {
             updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
             Log.e(TAG, "export_failure sessionId=$sessionId reason=exception_${t::class.simpleName}", t)
@@ -178,7 +186,7 @@ class AnnotatedExportPipeline(
             return ExportResult(failureReason = AnnotatedExportFailureReason.EXPORT_RETURNED_EMPTY.name, verificationStatus = VerificationStatus.FAILED)
         }
         val persisted = persistAnnotatedVideo(sessionId, renderedUri)
-        val verification = MediaVerificationHelper.verify(persisted)
+        val verification = verifyMedia(persisted)
         val status = if (verification.isValid) AnnotatedExportStatus.ANNOTATED_READY else AnnotatedExportStatus.ANNOTATED_FAILED
         updateExportStatus(sessionId, status)
         if (!verification.isValid) {

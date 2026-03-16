@@ -522,10 +522,15 @@ class LiveCoachingViewModel(
                     )
                     return@launch
                 }
+                val terminalExportStatus = resolveTerminalAnnotatedExportStatus()
+                if (terminalExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED && !annotatedExportFailureReason.isNullOrBlank()) {
+                    repository.updateAnnotatedExportStatus(activeSessionId, terminalExportStatus)
+                    repository.updateAnnotatedExportFailureReason(activeSessionId, annotatedExportFailureReason)
+                }
                 val finalVideos = resolveSessionVideoOutcome(
                     rawVideoUri = rawVideoUri,
                     annotatedVideoUri = annotatedVideoUri,
-                    exportStatus = annotatedExportStatus,
+                    exportStatus = terminalExportStatus,
                 )
                 SessionDiagnostics.logStructured(
                     event = "replay_uri_selected",
@@ -780,7 +785,7 @@ class LiveCoachingViewModel(
         } catch (_: TimeoutCancellationException) {
             persistAnnotatedExportFailed(activeSessionId, AnnotatedExportFailureReason.EXPORT_TIMED_OUT.name)
         } catch (_: CancellationException) {
-            persistAnnotatedExportFailed(activeSessionId, "EXPORT_CANCELLED")
+            persistAnnotatedExportFailed(activeSessionId, AnnotatedExportFailureReason.EXPORT_CANCELLED.name)
         } catch (t: Throwable) {
             persistAnnotatedExportFailed(activeSessionId, "EXCEPTION_${t::class.simpleName ?: "UNKNOWN"}")
         } finally {
@@ -812,6 +817,16 @@ class LiveCoachingViewModel(
         exportLifecycleState = ExportLifecycleState.FAILED
         repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
         repository.updateAnnotatedExportFailureReason(activeSessionId, reason)
+    }
+
+    private fun resolveTerminalAnnotatedExportStatus(): AnnotatedExportStatus {
+        if (annotatedExportStatus != AnnotatedExportStatus.PROCESSING) return annotatedExportStatus
+        annotatedExportStatus = AnnotatedExportStatus.ANNOTATED_FAILED
+        if (annotatedExportFailureReason.isNullOrBlank()) {
+            annotatedExportFailureReason = AnnotatedExportFailureReason.STALE_PROCESSING_STATE.name
+        }
+        exportLifecycleState = ExportLifecycleState.FAILED
+        return annotatedExportStatus
     }
 
     private suspend fun compressAnnotatedThenCleanup(activeSessionId: Long) {

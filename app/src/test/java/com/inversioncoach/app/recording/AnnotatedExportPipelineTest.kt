@@ -7,6 +7,7 @@ import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.overlay.DrillCameraSide
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -108,6 +109,27 @@ class AnnotatedExportPipelineTest {
         }
 
         assertEquals("EXCEPTION_IllegalStateException", exported.failureReason)
+    }
+
+    @Test
+    fun cancellationMapsToExportCancelledReason() {
+        val pipeline = AnnotatedExportPipeline(
+            persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
+            updateExportStatus = { _, _ -> },
+            renderAnnotatedVideo = { _, _, _, _, _ -> throw CancellationException("cancel") },
+        )
+
+        val exported = runBlocking {
+            pipeline.export(
+                sessionId = 7L,
+                rawVideoUri = "file:///raw.mp4",
+                drillType = DrillType.WALL_HANDSTAND,
+                drillCameraSide = DrillCameraSide.LEFT,
+                overlayFrames = listOf(testFrame(1000L)),
+            )
+        }
+
+        assertEquals(AnnotatedExportFailureReason.EXPORT_CANCELLED.name, exported.failureReason)
     }
 
     @Test
