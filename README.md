@@ -174,14 +174,19 @@ sequenceDiagram
 ## Annotated export pipeline (updated)
 
 - Live preview overlays are still rendered on top of CameraX preview.
-- Recorded source media remains a **raw** camera file (`raw.mp4`).
-- On finalize, the app now runs a dedicated compositor that decodes raw frames, redraws overlays using recorded timestamped pose data, and re-encodes a true annotated MP4.
+- Recording and export are separate stages:
+  1. capture + finalize raw camera replay (`raw.mp4`)
+  2. post-process raw video with saved overlay frames into `annotated.mp4`
+- Recorded source media always remains a **raw** camera file first.
+- Annotated replay is a deterministic post-processing pipeline (not screen recording / MediaProjection).
+- On finalize, the app runs a compositor that decodes raw frames, redraws overlays from timestamped pose data, and re-encodes a true annotated MP4.
 - Exported `annotated.mp4` includes:
   - skeleton / limb lines
   - head and hip dots
   - ideal vertical alignment line
   - drill-aware overlay geometry (camera-side and orientation logic)
-- Replay prefers annotated asset when available; falls back to raw if export fails.
+- Replay selection prefers annotated asset when available and readable.
+- Raw replay remains the fallback whenever annotated export fails.
 
 Debug builds also perform a lightweight validation pass that compares raw vs annotated frames to verify the overlay appears in the generated file.
 
