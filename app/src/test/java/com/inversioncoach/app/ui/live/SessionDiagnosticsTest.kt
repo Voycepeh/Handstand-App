@@ -3,6 +3,7 @@ package com.inversioncoach.app.ui.live
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.SessionRecord
+import com.inversioncoach.app.model.SessionSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -96,6 +97,78 @@ class SessionDiagnosticsTest {
         )
 
         assertTrue(summary.contains("annotatedVideoUri was null"))
+    }
+
+
+    @Test
+    fun uploadRootCauseFlagsAnalysisNeverStarted() {
+        val sessionId = 99006L
+        SessionDiagnostics.clearSession(sessionId)
+        SessionDiagnostics.record(
+            sessionId,
+            SessionDiagnostics.Stage.SESSION_START,
+            SessionDiagnostics.Status.STARTED,
+            "upload session started",
+        )
+
+        val summary = SessionDiagnostics.rootCauseSummary(
+            sampleSession(sessionId, AnnotatedExportStatus.NOT_STARTED, null, "file:///raw.mp4", null).copy(sessionSource = SessionSource.UPLOADED_VIDEO),
+            SessionDiagnostics.eventsForSession(sessionId),
+        )
+
+        assertTrue(summary.contains("never started"))
+    }
+
+    @Test
+    fun uploadRootCauseFlagsExportNeverLaunched() {
+        val sessionId = 99007L
+        SessionDiagnostics.clearSession(sessionId)
+        SessionDiagnostics.record(
+            sessionId,
+            SessionDiagnostics.Stage.TIMESTAMP_ALIGNMENT,
+            SessionDiagnostics.Status.SUCCEEDED,
+            "overlay timeline extracted",
+        )
+
+        val summary = SessionDiagnostics.rootCauseSummary(
+            sampleSession(sessionId, AnnotatedExportStatus.NOT_STARTED, null, "file:///raw.mp4", null).copy(sessionSource = SessionSource.UPLOADED_VIDEO),
+            SessionDiagnostics.eventsForSession(sessionId),
+        )
+
+        assertTrue(summary.contains("never launched"))
+    }
+
+    @Test
+    fun uploadRootCauseMarksAnnotatedReadySuccess() {
+        val sessionId = 99008L
+        SessionDiagnostics.clearSession(sessionId)
+        val summary = SessionDiagnostics.rootCauseSummary(
+            sampleSession(sessionId, AnnotatedExportStatus.ANNOTATED_READY, "file:///annotated.mp4", "file:///raw.mp4", null)
+                .copy(sessionSource = SessionSource.UPLOADED_VIDEO),
+            emptyList(),
+        )
+
+        assertTrue(summary.contains("ready"))
+    }
+
+    @Test
+    fun uploadRootCauseShowsInProgressWithEvidence() {
+        val sessionId = 99009L
+        SessionDiagnostics.clearSession(sessionId)
+        SessionDiagnostics.record(
+            sessionId,
+            SessionDiagnostics.Stage.RAW_PERSIST,
+            SessionDiagnostics.Status.SUCCEEDED,
+            "raw persisted",
+        )
+
+        val summary = SessionDiagnostics.rootCauseSummary(
+            sampleSession(sessionId, AnnotatedExportStatus.PROCESSING, null, "file:///raw.mp4", null)
+                .copy(sessionSource = SessionSource.UPLOADED_VIDEO),
+            SessionDiagnostics.eventsForSession(sessionId),
+        )
+
+        assertTrue(summary.contains("in progress"))
     }
 
     private fun sampleSession(

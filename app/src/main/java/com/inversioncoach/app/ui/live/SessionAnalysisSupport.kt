@@ -560,6 +560,39 @@ object SessionDiagnostics {
     fun rootCauseSummary(session: SessionRecord?, events: List<Event>): String {
         val failed = events.lastOrNull { it.status == Status.FAILED }
         if (failed != null) return "${failed.stage.name}: ${failed.errorCode ?: failed.message}"
+        if (session?.sessionSource == com.inversioncoach.app.model.SessionSource.UPLOADED_VIDEO) {
+            if (session.rawPersistStatus == com.inversioncoach.app.model.RawPersistStatus.FAILED) {
+                return "Upload raw import failed."
+            }
+            val isInProgress = session.rawPersistStatus == com.inversioncoach.app.model.RawPersistStatus.PROCESSING ||
+                session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING ||
+                session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW
+            val hasProgressEvidence = events.any {
+                it.stage in setOf(Stage.RAW_PERSIST, Stage.TIMESTAMP_ALIGNMENT, Stage.OVERLAY_CAPTURE, Stage.ANNOTATED_EXPORT_START, Stage.ANNOTATED_EXPORT_VERIFY) &&
+                    it.status in setOf(Status.STARTED, Status.PROGRESS, Status.SUCCEEDED)
+            }
+            if (isInProgress && hasProgressEvidence) {
+                return "Upload processing is in progress (stage=${session.annotatedExportStage})."
+            }
+            if (session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && !session.annotatedVideoUri.isNullOrBlank()) {
+                return "Upload annotated replay is ready."
+            }
+        }
+        val hasAnalysisStart = events.any {
+            it.stage == Stage.TIMESTAMP_ALIGNMENT &&
+                (it.status == Status.STARTED || it.status == Status.PROGRESS || it.status == Status.SUCCEEDED)
+        }
+        if (session?.sessionSource == com.inversioncoach.app.model.SessionSource.UPLOADED_VIDEO && !hasAnalysisStart) {
+            return "Upload analysis never started."
+        }
+        val hasOverlayTimeline = events.any { it.stage == Stage.TIMESTAMP_ALIGNMENT && it.status == Status.SUCCEEDED }
+        if (session?.sessionSource == com.inversioncoach.app.model.SessionSource.UPLOADED_VIDEO && !hasOverlayTimeline) {
+            return "Upload timeline/overlay generation never completed."
+        }
+        val hasExportStarted = events.any { it.stage == Stage.ANNOTATED_EXPORT_START && it.status == Status.STARTED }
+        if (session?.sessionSource == com.inversioncoach.app.model.SessionSource.UPLOADED_VIDEO && !hasExportStarted) {
+            return "Annotated export never launched for upload session."
+        }
         if (session?.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && session.annotatedVideoUri.isNullOrBlank()) {
             return "Replay fell back to raw because annotatedVideoUri was null despite export READY."
         }

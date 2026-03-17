@@ -1050,12 +1050,15 @@ class LiveCoachingViewModel(
                     },
                 )
             }
+            if (!exportResult.started) {
+                annotatedExportPercent = 0
+                annotatedExportEtaSeconds = null
+            }
             val persistedUri = exportResult.persistedUri
-            val verification = MediaVerificationHelper.verify(persistedUri)
-            if (persistedUri.isNullOrBlank() || !verification.isValid) {
+            if (persistedUri.isNullOrBlank() || exportResult.verificationStatus != AnnotatedExportPipeline.VerificationStatus.PASSED) {
                 persistAnnotatedExportFailed(
                     activeSessionId,
-                    exportResult.failureReason ?: verification.failureReason?.name ?: AnnotatedExportFailureReason.ANNOTATED_EXPORT_FAILED.name,
+                    exportResult.failureReason ?: AnnotatedExportFailureReason.ANNOTATED_EXPORT_FAILED.name,
                 )
                 return
             }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -22,7 +23,7 @@ class AnnotatedExportPipelineTest {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> "file:///annotated.mp4" },
             updateExportStatus = { _, status -> statuses += status },
-            renderAnnotatedVideo = { _, _, _, _, _, _ -> ComposerResult("file:///rendered.mp4", null) },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> ComposerResult("file:///rendered.mp4", null) },
         )
 
         val exported = runBlocking {
@@ -38,6 +39,31 @@ class AnnotatedExportPipelineTest {
         assertNull(exported.persistedUri)
         assertEquals(AnnotatedExportFailureReason.OVERLAY_TIMELINE_EMPTY.name, exported.failureReason)
         assertEquals(listOf(AnnotatedExportStatus.ANNOTATED_FAILED), statuses)
+        assertFalse(exported.started)
+    }
+
+    @Test
+    fun rawVideoMissingFailsBeforeExportStart() {
+        val statuses = mutableListOf<AnnotatedExportStatus>()
+        val pipeline = AnnotatedExportPipeline(
+            persistAnnotatedVideo = { _, _ -> "file:///annotated.mp4" },
+            updateExportStatus = { _, status -> statuses += status },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> ComposerResult("file:///rendered.mp4", null) },
+        )
+
+        val exported = runBlocking {
+            pipeline.export(
+                sessionId = 7L,
+                rawVideoUri = "",
+                drillType = DrillType.WALL_HANDSTAND,
+                drillCameraSide = DrillCameraSide.LEFT,
+                overlayTimeline = testTimeline(listOf(testFrame(1000L))),
+            )
+        }
+
+        assertEquals(AnnotatedExportFailureReason.EXPORT_NOT_STARTED.name, exported.failureReason)
+        assertFalse(exported.started)
+        assertEquals(listOf(AnnotatedExportStatus.ANNOTATED_FAILED), statuses)
     }
 
     @Test
@@ -46,7 +72,7 @@ class AnnotatedExportPipelineTest {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
             updateExportStatus = { _, status -> statuses += status },
-            renderAnnotatedVideo = { _, _, _, _, _, _ -> ComposerResult("file:///rendered_annotated.mp4", null) },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> ComposerResult("file:///rendered_annotated.mp4", null) },
         )
 
         val exported = runBlocking {
@@ -71,7 +97,7 @@ class AnnotatedExportPipelineTest {
             persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
             updateExportStatus = { _, _ -> },
             exportTimeoutMs = 25L,
-            renderAnnotatedVideo = { _, _, _, _, _, _ ->
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ ->
                 delay(100L)
                 ComposerResult("file:///rendered_annotated.mp4", null)
             },
@@ -88,6 +114,46 @@ class AnnotatedExportPipelineTest {
         }
 
         assertEquals(AnnotatedExportFailureReason.EXPORT_TIMEOUT.name, exported.failureReason)
+        assertFalse(exported.started)
+    }
+
+    @Test
+    fun reportsExportStartedAndOverlayConsumedViaTelemetry() {
+        val pipeline = AnnotatedExportPipeline(
+            persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
+            updateExportStatus = { _, _ -> },
+            renderAnnotatedVideo = { _, _, _, _, _, _, onTelemetry ->
+                onTelemetry(
+                    AnnotatedExportTelemetry(
+                        exportStartedAtMs = 10L,
+                        decoderInitializedAtMs = 11L,
+                        firstFrameDecodedAtMs = 12L,
+                        decodedFrameCount = 15,
+                        renderedFrameCount = 15,
+                        encodedFrameCount = 15,
+                        overlayFramesAvailable = 6,
+                        overlayFramesConsumed = 6,
+                        outputBytesWritten = 1024L,
+                        exportCompletedAtMs = 20L,
+                    ),
+                )
+                ComposerResult("file:///rendered_annotated.mp4", null)
+            },
+        )
+
+        val exported = runBlocking {
+            pipeline.export(
+                sessionId = 7L,
+                rawVideoUri = "file:///raw.mp4",
+                drillType = DrillType.WALL_HANDSTAND,
+                drillCameraSide = DrillCameraSide.LEFT,
+                overlayTimeline = testTimeline(listOf(testFrame(1000L))),
+            )
+        }
+
+        assertTrue(exported.started)
+        assertEquals(6, exported.telemetry?.overlayFramesConsumed)
+        assertEquals(15, exported.telemetry?.encodedFrameCount)
     }
 
     @Test
@@ -95,7 +161,7 @@ class AnnotatedExportPipelineTest {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
             updateExportStatus = { _, _ -> },
-            renderAnnotatedVideo = { _, _, _, _, _, _ -> throw IllegalStateException("boom") },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> throw IllegalStateException("boom") },
         )
 
         val exported = runBlocking {
@@ -116,7 +182,7 @@ class AnnotatedExportPipelineTest {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
             updateExportStatus = { _, _ -> },
-            renderAnnotatedVideo = { _, _, _, _, _, _ -> throw CancellationException("cancel") },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> throw CancellationException("cancel") },
         )
 
         val exported = runBlocking {
@@ -137,7 +203,7 @@ class AnnotatedExportPipelineTest {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> null },
             updateExportStatus = { _, _ -> },
-            renderAnnotatedVideo = { _, _, _, _, _, _ -> ComposerResult("file:///rendered_annotated.mp4", null) },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> ComposerResult("file:///rendered_annotated.mp4", null) },
         )
 
         val exported = runBlocking {
@@ -160,7 +226,7 @@ class AnnotatedExportPipelineTest {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> zeroByte.toURI().toString() },
             updateExportStatus = { _, _ -> },
-            renderAnnotatedVideo = { _, _, _, _, _, _ -> ComposerResult("file:///rendered_annotated.mp4", null) },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> ComposerResult("file:///rendered_annotated.mp4", null) },
         )
 
         val exported = runBlocking {

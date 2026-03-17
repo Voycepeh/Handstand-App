@@ -42,8 +42,11 @@ class AnnotatedVideoCompositor(
         preset: ExportPreset = ExportPreset.BALANCED,
         debugValidation: Boolean = false,
         onProgress: (Int, Int) -> Unit = { _, _ -> },
+        onTelemetry: (AnnotatedExportTelemetry) -> Unit = {},
     ): String? = withContext(Dispatchers.IO) {
         if (overlayFrames.isEmpty()) return@withContext null
+        val telemetry = AnnotatedExportTelemetry(exportStartedAtMs = System.currentTimeMillis(), overlayFramesAvailable = overlayFrames.size)
+        onTelemetry(telemetry)
         val retriever = MediaMetadataRetriever()
         val output = File(context.cacheDir, "recordings/annotated_${System.currentTimeMillis()}.mp4").apply {
             parentFile?.mkdirs()
@@ -74,6 +77,8 @@ class AnnotatedVideoCompositor(
                     "width=$width height=$height durationMs=$durationMs overlaySamples=${overlayFrames.size}",
             )
 
+            telemetry.decoderInitializedAtMs = System.currentTimeMillis()
+            onTelemetry(telemetry)
             val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
@@ -126,13 +131,15 @@ class AnnotatedVideoCompositor(
             val renderElapsedMs = AtomicLong(0L)
             val maxPendingFrames = AtomicInteger(0)
             val decodedCount = AtomicInteger(0)
+            val overlayConsumedCount = AtomicInteger(0)
+            val encodedCount = AtomicInteger(0)
 
             coroutineScope {
                 val decodeJob = launch {
                     val decodeStart = System.currentTimeMillis()
                     for (idx in 0 until totalFrames) {
                         val frameTimeUs = (idx * 1_000_000L) / preset.outputFps
-                        val bitmap = retriever.getFrameAtTime(frameTimeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                        val bitmap = retriever.getFrameAtTime(frameTimeUs, MediaMetadataRetriever.OPTION_CLOSEST)
                             ?: Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                         val scaled = if (bitmap.width != width || bitmap.height != height) {
                             Bitmap.createScaledBitmap(bitmap, width, height, true).also { bitmap.recycle() }
@@ -140,7 +147,10 @@ class AnnotatedVideoCompositor(
                             bitmap
                         }
                         decodeChannel.send(DecodedFrame(index = idx, frameTimeUs = frameTimeUs, bitmap = scaled))
-                        decodedCount.incrementAndGet()
+                        val decodedNow = decodedCount.incrementAndGet()
+                        telemetry.decodedFrameCount = decodedNow
+                        if (decodedNow == 1) telemetry.firstFrameDecodedAtMs = System.currentTimeMillis()
+                        onTelemetry(telemetry)
                         if (idx % 30 == 0) {
                             Log.d(TAG, "stage=decode progress=${idx + 1}/$totalFrames")
                         }
@@ -154,6 +164,9 @@ class AnnotatedVideoCompositor(
                         for (decoded in decodeChannel) {
                             val resolveStart = System.nanoTime()
                             val overlay = resolver.overlayAt(decoded.frameTimeUs / 1000L)
+                            if (overlay != null) {
+                                telemetry.overlayFramesConsumed = overlayConsumedCount.incrementAndGet()
+                            }
                             resolveElapsedMs.addAndGet(((System.nanoTime() - resolveStart) / 1_000_000L))
                             val instructionStart = System.nanoTime()
                             val instruction = buildRenderInstruction(overlay, drillType, drillCameraSide)
@@ -190,6 +203,9 @@ class AnnotatedVideoCompositor(
                             renderElapsedMs.addAndGet((System.nanoTime() - renderStart) / 1_000_000L)
                             drain(endOfStream = false)
                             rendered++
+                            telemetry.renderedFrameCount = rendered
+                            telemetry.encodedFrameCount = encodedCount.incrementAndGet()
+                            onTelemetry(telemetry)
                             if (rendered % 30 == 0 || rendered == totalFrames) {
                                 Log.d(TAG, "stage=encode progress=$rendered/$totalFrames")
                             }
@@ -216,6 +232,13 @@ class AnnotatedVideoCompositor(
             val verifyStart = System.currentTimeMillis()
             val readable = verifyReadableOutput(outputUri)
             val verifyElapsedMs = System.currentTimeMillis() - verifyStart
+            telemetry.decodeElapsedMs = decodeElapsedMs.get()
+            telemetry.overlayResolveElapsedMs = resolveElapsedMs.get() + instructionElapsedMs.get()
+            telemetry.renderElapsedMs = renderElapsedMs.get()
+            telemetry.verifyElapsedMs = verifyElapsedMs
+            telemetry.outputBytesWritten = output.length()
+            telemetry.exportCompletedAtMs = System.currentTimeMillis()
+            onTelemetry(telemetry)
             val totalElapsedMs = decodeElapsedMs.get() + resolveElapsedMs.get() + instructionElapsedMs.get() + renderElapsedMs.get() + verifyElapsedMs
             Log.d(
                 TAG,
@@ -226,6 +249,8 @@ class AnnotatedVideoCompositor(
             )
 
             if (!output.exists() || output.length() <= 0L || !readable) {
+                telemetry.failureReason = "VERIFICATION_FAILED"
+                onTelemetry(telemetry)
                 Log.w(TAG, "export_failure reason=verification_failed uri=$outputUri")
                 output.delete()
                 return@withContext null
@@ -236,6 +261,9 @@ class AnnotatedVideoCompositor(
             }
             outputUri
         } catch (t: Throwable) {
+            telemetry.failureReason = "EXCEPTION_${t::class.simpleName ?: "UNKNOWN"}"
+            telemetry.exportCompletedAtMs = System.currentTimeMillis()
+            onTelemetry(telemetry)
             Log.e(TAG, "export_failure", t)
             output.delete()
             null

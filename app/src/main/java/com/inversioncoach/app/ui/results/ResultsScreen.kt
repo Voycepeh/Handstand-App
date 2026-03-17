@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.IssueEvent
+import com.inversioncoach.app.model.SessionSource
 import com.inversioncoach.app.model.sessionMode
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.storage.ServiceLocator
@@ -153,6 +154,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 ) || activeSession.rawPersistStatus == com.inversioncoach.app.model.RawPersistStatus.PROCESSING
                 if (isProcessing || activeSession.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED) {
                     val isFailed = activeSession.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED
+                    val rawFallbackAvailable = !activeSession.rawFinalUri.isNullOrBlank() || !activeSession.rawVideoUri.isNullOrBlank()
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
@@ -170,6 +172,9 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                                 Text("ETA: ${activeSession.annotatedExportEtaSeconds?.let { "${it}s" } ?: "-"}")
                             } else {
                                 Text("Stage: ${AnnotatedExportStage.FAILED}")
+                                if (rawFallbackAvailable) {
+                                    Text("Annotated export failed, raw replay available")
+                                }
                             }
                             Text("Raw: ${activeSession.rawPersistStatus}")
                             Text("Annotated: ${activeSession.annotatedExportStatus}")
@@ -203,7 +208,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Session ID: $sessionId")
-                    Text("Type: ${session?.drillType?.displayName ?: "-"}")
+                    Text("Type: ${sessionTypeLabel(session)}")
                     Text("Started: ${formatSessionDateTime(session?.startedAtMs ?: 0L)}")
                     Text("Duration: ${formatSessionDuration(computeSessionDurationMs(session?.startedAtMs ?: 0L, session?.completedAtMs ?: 0L))}")
                     session?.let { Text(formatPrimaryPerformance(it)) }
@@ -296,8 +301,8 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 Text("overlayTimelineUri: ${session?.overlayTimelineUri.orEmpty()}")
                 Text("export started at: ${session?.annotatedExportLastUpdatedAt ?: 0L}")
                 Text("export completed at: ${session?.annotatedExportedAtMs ?: 0L}")
-                Text("raw duration ms: ${mediaDurationMs(session?.rawVideoUri)}")
-                Text("annotated duration ms: ${mediaDurationMs(session?.annotatedVideoUri)}")
+                Text("raw duration: ${formatDurationWithMs(mediaDurationMs(session?.rawVideoUri))}")
+                Text("annotated duration: ${formatDurationWithMs(mediaDurationMs(session?.annotatedVideoUri))}")
             }
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -391,6 +396,17 @@ private fun mediaDurationMs(uri: String?): Long {
         runCatching { retriever.release() }
     }
 }
+
+
+private fun sessionTypeLabel(session: com.inversioncoach.app.model.SessionRecord?): String {
+    val active = session ?: return "-"
+    return when (active.sessionSource) {
+        SessionSource.UPLOADED_VIDEO -> "Uploaded video analysis"
+        SessionSource.LIVE_COACHING -> active.drillType.displayName
+    }
+}
+
+private fun formatDurationWithMs(durationMs: Long): String = "${formatSessionDuration(durationMs)} (${durationMs} ms)"
 
 internal fun shouldShowRawVideoButton(replayUri: String?, rawUri: String?): Boolean =
     !rawUri.isNullOrBlank() && replayUri != rawUri

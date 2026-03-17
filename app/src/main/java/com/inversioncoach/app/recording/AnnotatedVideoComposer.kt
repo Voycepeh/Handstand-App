@@ -17,6 +17,7 @@ class AnnotatedVideoComposer(
         drillCameraSide: DrillCameraSide,
         preset: ExportPreset,
         onProgress: (Int, Int) -> Unit,
+        onTelemetry: (AnnotatedExportTelemetry) -> Unit,
     ): ComposerResult {
         if (rawVideoUri.isBlank()) {
             return ComposerResult(null, AnnotatedExportFailureReason.RAW_VIDEO_MISSING.name)
@@ -32,6 +33,7 @@ class AnnotatedVideoComposer(
             overlayFrames = timeline.frames.map { it.toAnnotatedOverlayFrame() },
             preset = preset,
             onProgress = onProgress,
+            onTelemetry = onTelemetry,
         )
         if (rendered.isNullOrBlank()) {
             return ComposerResult(null, AnnotatedExportFailureReason.ENCODE_FAILED.name)
