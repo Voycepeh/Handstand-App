@@ -104,10 +104,12 @@ data class DrillScore(
 
 enum class AnnotatedExportStatus {
     NOT_STARTED,
+    VALIDATING_INPUT,
     PROCESSING,
     PROCESSING_SLOW,
     ANNOTATED_READY,
     ANNOTATED_FAILED,
+    SKIPPED,
 }
 
 enum class CompressionStatus {
@@ -151,6 +153,10 @@ enum class AnnotatedExportStage {
 }
 
 enum class AnnotatedExportFailureReason {
+    EXPORT_INPUT_INVALID,
+    EXPORT_INPUT_CORRUPTED_AFTER_FREEZE,
+    RAW_VIDEO_INVALID,
+    RAW_VIDEO_BLACK_FRAME,
     OVERLAY_CAPTURE_EMPTY,
     OVERLAY_TIMESTAMPS_NON_MONOTONIC,
     OVERLAY_FLUSH_NOT_COMPLETED,

@@ -69,14 +69,73 @@ class ReplayAssetSelectionTest {
         assertEquals("annotated", result.uri)
     }
 
+
+    @Test
+    fun resolverSelectsRawWhenAnnotatedNeverStartedAndRawReadable() {
+        val result = resolvePreferredReplayUri(
+            sessionRecord(rawUri = "raw", annotatedUri = null, annotatedStatus = AnnotatedExportStatus.NOT_STARTED),
+            isReadable = { it == "raw" },
+        )
+
+        assertEquals("raw", result.source)
+        assertEquals("raw", result.uri)
+    }
+
     @Test
     fun resolverIgnoresAnnotatedWhenStatusNotReady() {
         val result = resolvePreferredReplayUri(
             sessionRecord(rawUri = "raw", annotatedUri = "annotated", annotatedStatus = AnnotatedExportStatus.PROCESSING),
             isReadable = { it == "annotated" || it == "raw" },
         )
-        assertEquals("raw", result.source)
-        assertEquals("raw", result.uri)
+        assertEquals("none", result.source)
+        assertEquals(null, result.uri)
+    }
+
+    
+
+    @Test
+    fun replayResolutionSelectsRawWhenNotStartedAndRawReadable() {
+        val resolution = resolveReplaySourceState(
+            session = sessionRecord(
+                rawUri = "file:///raw.mp4",
+                annotatedUri = null,
+                annotatedStatus = AnnotatedExportStatus.NOT_STARTED,
+            ),
+            isReadable = { it == "file:///raw.mp4" },
+        )
+
+        assertEquals(ReplaySourceState.RAW_READY, resolution.state)
+        assertEquals("file:///raw.mp4", resolution.uri)
+    }
+
+    @Test
+    fun replayResolutionWaitsForDecisionPointEvenWhenRawExists() {
+        val resolution = resolveReplaySourceState(
+            session = sessionRecord(
+                rawUri = "file:///raw.mp4",
+                annotatedUri = null,
+                annotatedStatus = AnnotatedExportStatus.PROCESSING,
+            ),
+            isReadable = { it == "file:///raw.mp4" },
+        )
+
+        assertEquals(ReplaySourceState.UNRESOLVED, resolution.state)
+        assertEquals(null, resolution.uri)
+    }
+
+    @Test
+    fun replayResolutionFallsBackToRawAfterAnnotatedDecision() {
+        val resolution = resolveReplaySourceState(
+            session = sessionRecord(
+                rawUri = "file:///raw.mp4",
+                annotatedUri = null,
+                annotatedStatus = AnnotatedExportStatus.ANNOTATED_FAILED,
+            ),
+            isReadable = { it == "file:///raw.mp4" },
+        )
+
+        assertEquals(ReplaySourceState.RAW_READY, resolution.state)
+        assertEquals("file:///raw.mp4", resolution.uri)
     }
 
     private fun sessionRecord(

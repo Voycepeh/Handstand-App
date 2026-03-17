@@ -149,11 +149,13 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
 
             session?.let { activeSession ->
                 val isProcessing = activeSession.annotatedExportStatus in setOf(
+                    AnnotatedExportStatus.VALIDATING_INPUT,
                     AnnotatedExportStatus.PROCESSING,
                     AnnotatedExportStatus.PROCESSING_SLOW,
                 ) || activeSession.rawPersistStatus == com.inversioncoach.app.model.RawPersistStatus.PROCESSING
-                if (isProcessing || activeSession.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED) {
+                if (isProcessing || activeSession.annotatedExportStatus in setOf(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportStatus.SKIPPED)) {
                     val isFailed = activeSession.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED
+                    val isSkipped = activeSession.annotatedExportStatus == AnnotatedExportStatus.SKIPPED
                     val rawFallbackAvailable = !activeSession.rawFinalUri.isNullOrBlank() || !activeSession.rawVideoUri.isNullOrBlank()
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -161,7 +163,14 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
                     ) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(if (isFailed) "Processing failed" else "Processing status", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                when {
+                                    isSkipped -> "Annotated export skipped"
+                                    isFailed -> "Processing failed"
+                                    else -> "Processing status"
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                            )
                             if (isProcessing) {
                                 LinearProgressIndicator(
                                     progress = { (activeSession.annotatedExportPercent.coerceIn(0, 100) / 100f).coerceAtLeast(0.05f) },
@@ -170,6 +179,11 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                                 Text("Stage: ${activeSession.annotatedExportStage}")
                                 Text("Progress: ${activeSession.annotatedExportPercent}%")
                                 Text("ETA: ${activeSession.annotatedExportEtaSeconds?.let { "${it}s" } ?: "-"}")
+                            } else if (isSkipped) {
+                                Text("Stage: ${AnnotatedExportStage.COMPLETED}")
+                                if (rawFallbackAvailable) {
+                                    Text("Annotated export was skipped, raw replay available")
+                                }
                             } else {
                                 Text("Stage: ${AnnotatedExportStage.FAILED}")
                                 if (rawFallbackAvailable) {

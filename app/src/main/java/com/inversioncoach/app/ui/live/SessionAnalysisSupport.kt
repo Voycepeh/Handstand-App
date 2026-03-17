@@ -337,6 +337,45 @@ data class ReplayAssetSelection(
     val label: String,
 )
 
+
+enum class ReplaySourceState {
+    UNRESOLVED,
+    ANNOTATED_READY,
+    RAW_READY,
+    UNAVAILABLE,
+}
+
+data class ReplayResolution(
+    val state: ReplaySourceState,
+    val uri: String?,
+    val reason: String,
+)
+
+fun resolveReplaySourceState(
+    session: SessionRecord?,
+    isReadable: (String?) -> Boolean = ::mediaAssetExists,
+): ReplayResolution {
+    if (session == null) return ReplayResolution(ReplaySourceState.UNAVAILABLE, null, "SESSION_NULL")
+    val annotatedUri = session.annotatedFinalUri ?: session.annotatedVideoUri
+    val rawUri = session.rawFinalUri ?: session.rawVideoUri ?: session.rawMasterUri
+    val annotatedReadable = isReadable(annotatedUri)
+    val rawReadable = isReadable(rawUri)
+    val decisionPending = session.annotatedExportStatus in setOf(
+        AnnotatedExportStatus.VALIDATING_INPUT,
+        AnnotatedExportStatus.PROCESSING,
+        AnnotatedExportStatus.PROCESSING_SLOW,
+    )
+    if (session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && annotatedReadable) {
+        return ReplayResolution(ReplaySourceState.ANNOTATED_READY, annotatedUri, "ANNOTATED_READY")
+    }
+    if (decisionPending) {
+        return ReplayResolution(ReplaySourceState.UNRESOLVED, null, "ANNOTATED_DECISION_PENDING")
+    }
+    if (rawReadable) {
+        return ReplayResolution(ReplaySourceState.RAW_READY, rawUri, "RAW_FALLBACK_${session.annotatedExportStatus.name}")
+    }
+    return ReplayResolution(ReplaySourceState.UNAVAILABLE, null, "NO_READABLE_REPLAY")
+}
 data class PreferredReplayUri(
     val uri: String?,
     val source: String,
@@ -439,16 +478,14 @@ fun resolvePreferredReplayUri(
     session: SessionRecord?,
     isReadable: (String?) -> Boolean = ::mediaAssetExists,
 ): PreferredReplayUri {
-    val annotatedReady = session?.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY
-    val annotatedUri = session?.annotatedFinalUri ?: session?.annotatedVideoUri
-    if (annotatedReady && isReadable(annotatedUri)) {
-        return PreferredReplayUri(uri = annotatedUri, source = "annotated")
+    val resolution = resolveReplaySourceState(session, isReadable)
+    return when (resolution.state) {
+        ReplaySourceState.ANNOTATED_READY -> PreferredReplayUri(uri = resolution.uri, source = "annotated")
+        ReplaySourceState.RAW_READY -> PreferredReplayUri(uri = resolution.uri, source = "raw")
+        ReplaySourceState.UNAVAILABLE,
+        ReplaySourceState.UNRESOLVED,
+        -> PreferredReplayUri(uri = null, source = "none")
     }
-    val rawUri = session?.rawFinalUri ?: session?.rawVideoUri ?: session?.rawMasterUri
-    if (isReadable(rawUri)) {
-        return PreferredReplayUri(uri = rawUri, source = "raw")
-    }
-    return PreferredReplayUri(uri = null, source = "none")
 }
 
 fun deriveReplayDisplayState(session: SessionRecord?, hasActiveExportJob: Boolean): ReplayDisplayState {
@@ -458,18 +495,22 @@ fun deriveReplayDisplayState(session: SessionRecord?, hasActiveExportJob: Boolea
     val annotatedReadable = mediaAssetExists(annotatedUri)
     val rawReadable = mediaAssetExists(rawUri)
     val hasInconsistentValues =
-        ((session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING ||
+        ((session.annotatedExportStatus == AnnotatedExportStatus.VALIDATING_INPUT ||
+            session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING ||
             session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW) &&
             !session.annotatedExportFailureReason.isNullOrBlank()) ||
             (session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && !annotatedReadable)
     if (hasInconsistentValues) return ReplayDisplayState.INCONSISTENT_STATE
 
     return when {
+        session.annotatedExportStatus == AnnotatedExportStatus.VALIDATING_INPUT -> ReplayDisplayState.ANNOTATED_PROCESSING
         session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING -> ReplayDisplayState.ANNOTATED_PROCESSING
         session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW -> ReplayDisplayState.ANNOTATED_PROCESSING_SLOW
         session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && annotatedReadable -> ReplayDisplayState.ANNOTATED_READY
         session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && !annotatedReadable && rawReadable -> ReplayDisplayState.RAW_ONLY
+        session.annotatedExportStatus == AnnotatedExportStatus.SKIPPED && rawReadable -> ReplayDisplayState.RAW_ONLY
         session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED && rawReadable -> ReplayDisplayState.RAW_ONLY
+        session.annotatedExportStatus == AnnotatedExportStatus.SKIPPED -> ReplayDisplayState.RAW_ONLY
         session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> ReplayDisplayState.ANNOTATED_FAILED
         rawReadable -> ReplayDisplayState.RAW_ONLY
         else -> ReplayDisplayState.INCONSISTENT_STATE

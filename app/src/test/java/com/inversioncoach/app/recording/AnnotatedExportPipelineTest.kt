@@ -38,7 +38,7 @@ class AnnotatedExportPipelineTest {
 
         assertNull(exported.persistedUri)
         assertEquals(AnnotatedExportFailureReason.OVERLAY_TIMELINE_EMPTY.name, exported.failureReason)
-        assertEquals(listOf(AnnotatedExportStatus.ANNOTATED_FAILED), statuses)
+        assertEquals(listOf(AnnotatedExportStatus.VALIDATING_INPUT, AnnotatedExportStatus.ANNOTATED_FAILED), statuses)
         assertFalse(exported.started)
     }
 
@@ -63,7 +63,7 @@ class AnnotatedExportPipelineTest {
 
         assertEquals(AnnotatedExportFailureReason.EXPORT_NOT_STARTED.name, exported.failureReason)
         assertFalse(exported.started)
-        assertEquals(listOf(AnnotatedExportStatus.ANNOTATED_FAILED), statuses)
+        assertEquals(listOf(AnnotatedExportStatus.VALIDATING_INPUT, AnnotatedExportStatus.ANNOTATED_FAILED), statuses)
     }
 
     @Test
@@ -88,7 +88,7 @@ class AnnotatedExportPipelineTest {
         assertEquals("file:///persisted_annotated.mp4", exported.persistedUri)
         assertNull(exported.failureReason)
         assertEquals(AnnotatedExportPipeline.VerificationStatus.PASSED, exported.verificationStatus)
-        assertEquals(listOf(AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.ANNOTATED_READY), statuses)
+        assertEquals(listOf(AnnotatedExportStatus.VALIDATING_INPUT, AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.ANNOTATED_READY), statuses)
     }
 
     @Test

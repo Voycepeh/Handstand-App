@@ -123,7 +123,8 @@ class SessionRepository(
         val lastUpdatedAt = session.annotatedExportLastUpdatedAt ?: 0L
         val ageMs = (System.currentTimeMillis() - lastUpdatedAt).coerceAtLeast(0L)
         val isStale =
-            (session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING ||
+            (session.annotatedExportStatus == AnnotatedExportStatus.VALIDATING_INPUT ||
+                session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING ||
                 session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW) &&
                 session.annotatedVideoUri.isNullOrBlank() &&
                 !hasActiveExportJob &&

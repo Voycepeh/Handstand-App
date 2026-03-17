@@ -87,8 +87,8 @@ class ReplayPipelineRegressionTest {
             )
 
             val processingSelection = selectReplayAsset(processingSession)
-            assertEquals("Raw replay", processingSelection.label)
-            assertEquals(rawFile.toURI().toString(), processingSelection.uri)
+            assertEquals("Replay unavailable", processingSelection.label)
+            assertEquals(null, processingSelection.uri)
 
             val readySession = processingSession.copy(
                 annotatedExportStatus = AnnotatedExportStatus.ANNOTATED_READY,

@@ -1071,15 +1071,15 @@ class LiveCoachingViewModel(
             )
 
             if (snapshot.overlayTimeline.frames.isEmpty()) {
-                setAnnotatedExportState(AnnotatedExportStatus.NOT_STARTED, null)
+                setAnnotatedExportState(AnnotatedExportStatus.SKIPPED, AnnotatedExportFailureReason.OVERLAY_CAPTURE_EMPTY.name)
                 exportLifecycleState = ExportLifecycleState.IDLE
-                annotatedExportStage = AnnotatedExportStage.QUEUED
-                annotatedExportPercent = 0
+                annotatedExportStage = AnnotatedExportStage.COMPLETED
+                annotatedExportPercent = 100
                 annotatedExportEtaSeconds = null
                 annotatedExportElapsedMs = 0L
                 annotatedExportLastUpdatedAt = System.currentTimeMillis()
-                repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.NOT_STARTED)
-                repository.updateAnnotatedExportFailureReason(activeSessionId, null)
+                repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.SKIPPED)
+                repository.updateAnnotatedExportFailureReason(activeSessionId, AnnotatedExportFailureReason.OVERLAY_CAPTURE_EMPTY.name)
                 SessionDiagnostics.logStructured(
                     event = "annotated_export_skipped_no_overlay",
                     sessionId = activeSessionId,
@@ -1087,10 +1087,13 @@ class LiveCoachingViewModel(
                     rawUri = rawVideoUri,
                     annotatedUri = null,
                     overlayFrameCount = 0,
+                    failureReason = AnnotatedExportFailureReason.OVERLAY_CAPTURE_EMPTY.name,
                 )
                 return
             }
 
+            setAnnotatedExportState(AnnotatedExportStatus.VALIDATING_INPUT, null)
+            repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.VALIDATING_INPUT)
             val preflight = validateExportSnapshot(snapshot)
             if (preflight.fatalReason != null) {
                 persistAnnotatedExportFailed(activeSessionId, preflight.fatalReason)
@@ -1098,15 +1101,12 @@ class LiveCoachingViewModel(
             }
             val exportSnapshot = preflight.snapshot
             if (exportSnapshot.overlayTimeline.frames.isEmpty()) {
-                setAnnotatedExportState(AnnotatedExportStatus.NOT_STARTED, null)
-                exportLifecycleState = ExportLifecycleState.IDLE
-                annotatedExportStage = AnnotatedExportStage.QUEUED
-                annotatedExportPercent = 0
-                annotatedExportEtaSeconds = null
-                annotatedExportElapsedMs = 0L
-                annotatedExportLastUpdatedAt = System.currentTimeMillis()
-                repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.NOT_STARTED)
-                repository.updateAnnotatedExportFailureReason(activeSessionId, null)
+                val reason = if (snapshot.overlayFrameCount > 0) {
+                    AnnotatedExportFailureReason.EXPORT_INPUT_CORRUPTED_AFTER_FREEZE.name
+                } else {
+                    AnnotatedExportFailureReason.OVERLAY_TIMELINE_EMPTY.name
+                }
+                persistAnnotatedExportFailed(activeSessionId, reason)
                 SessionDiagnostics.logStructured(
                     event = "annotated_export_skipped_empty_overlay_after_preflight",
                     sessionId = activeSessionId,
@@ -1114,6 +1114,7 @@ class LiveCoachingViewModel(
                     rawUri = exportSnapshot.rawUri,
                     annotatedUri = null,
                     overlayFrameCount = 0,
+                    failureReason = reason,
                 )
                 return
             }

@@ -732,9 +732,9 @@ internal fun deriveUploadStage(session: SessionRecord): UploadStage = when {
     session.rawPersistStatus == RawPersistStatus.PROCESSING -> UploadStage.IMPORTING_RAW_VIDEO
     session.rawPersistStatus == RawPersistStatus.FAILED -> UploadStage.FAILED
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> UploadStage.COMPLETED_ANNOTATED
-    session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED && session.rawPersistStatus == RawPersistStatus.SUCCEEDED -> UploadStage.COMPLETED_RAW_ONLY
+    session.annotatedExportStatus in setOf(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportStatus.SKIPPED) && session.rawPersistStatus == RawPersistStatus.SUCCEEDED -> UploadStage.COMPLETED_RAW_ONLY
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> UploadStage.FAILED
-    session.annotatedExportStatus in setOf(AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) -> when (session.annotatedExportStage) {
+    session.annotatedExportStatus in setOf(AnnotatedExportStatus.VALIDATING_INPUT, AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) -> when (session.annotatedExportStage) {
         AnnotatedExportStage.PREPARING -> UploadStage.PREPARING_ANALYSIS
         AnnotatedExportStage.DECODING_SOURCE -> UploadStage.ANALYZING_VIDEO
         AnnotatedExportStage.LOADING_OVERLAYS,
@@ -746,7 +746,7 @@ internal fun deriveUploadStage(session: SessionRecord): UploadStage = when {
         else -> UploadStage.PREPARING_ANALYSIS
     }
 
-    session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus == AnnotatedExportStatus.NOT_STARTED -> UploadStage.RAW_IMPORT_COMPLETE
+    session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus in setOf(AnnotatedExportStatus.NOT_STARTED, AnnotatedExportStatus.SKIPPED) -> UploadStage.RAW_IMPORT_COMPLETE
     else -> UploadStage.IDLE
 }
 

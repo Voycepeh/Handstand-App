@@ -153,6 +153,7 @@ class AnnotatedExportPipeline(
         preset: ExportPreset = ExportPreset.BALANCED,
         onRenderProgress: (Int, Int) -> Unit = { _, _ -> },
     ): ExportResult {
+        updateExportStatus(sessionId, AnnotatedExportStatus.VALIDATING_INPUT)
         if (rawVideoUri.isBlank()) {
             updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
             Log.w(TAG, "export_failure sessionId=$sessionId reason=raw_video_missing_pre_export")

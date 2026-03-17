@@ -185,9 +185,9 @@ internal fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): S
     session.rawPersistStatus == RawPersistStatus.PROCESSING -> "Copying raw video"
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> "Ready"
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> "Failed"
-    session.annotatedExportStatus in setOf(AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) -> {
+    session.annotatedExportStatus in setOf(AnnotatedExportStatus.VALIDATING_INPUT, AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) -> {
         val stageLabel = when (session.annotatedExportStage) {
-            AnnotatedExportStage.QUEUED -> "Queued"
+            AnnotatedExportStage.QUEUED -> if (session.annotatedExportStatus == AnnotatedExportStatus.VALIDATING_INPUT) "Validating input" else "Queued"
             AnnotatedExportStage.PREPARING -> "Preparing"
             AnnotatedExportStage.LOADING_OVERLAYS -> "Building overlay timeline"
             AnnotatedExportStage.DECODING_SOURCE -> "Analyzing frames"
@@ -199,6 +199,7 @@ internal fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): S
         }
         "${stageLabel} ${session.annotatedExportPercent}%"
     }
+    session.annotatedExportStatus == AnnotatedExportStatus.SKIPPED && session.rawPersistStatus == RawPersistStatus.SUCCEEDED -> "Raw replay ready (annotated skipped)"
     session.rawPersistStatus == RawPersistStatus.SUCCEEDED -> "Raw replay ready"
     else -> "Replay unavailable"
 }
@@ -206,10 +207,10 @@ internal fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): S
 internal fun uploadProgress(session: com.inversioncoach.app.model.SessionRecord): Float = when {
     session.rawPersistStatus == RawPersistStatus.FAILED -> 1f
     session.rawPersistStatus == RawPersistStatus.PROCESSING -> 0.2f
-    session.annotatedExportStatus in setOf(AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) ->
+    session.annotatedExportStatus in setOf(AnnotatedExportStatus.VALIDATING_INPUT, AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) ->
         (session.annotatedExportPercent.coerceIn(0, 100) / 100f).coerceAtLeast(0.2f)
     session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> 1f
-    session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> 1f
+    session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus in setOf(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportStatus.SKIPPED) -> 1f
     session.rawPersistStatus == RawPersistStatus.SUCCEEDED -> 0.7f
     else -> 0f
 }

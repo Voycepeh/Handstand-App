@@ -311,7 +311,34 @@ class ExportDurationResolutionTest {
         )
     }
 
-    private fun timelineOf(vararg timestamps: Long): OverlayTimeline {
+    
+
+    @Test
+    fun preflightCanSurfaceFrozenNonEmptyBecomingEmpty() {
+        val snapshot = ExportSnapshot(
+            sessionId = 23L,
+            stopTimestampMs = 1000L,
+            rawUri = "file:///raw.mp4",
+            rawDurationMs = 100L,
+            rawDurationSource = "metadata_retriever",
+            overlayTimeline = timelineOf(200L, 300L),
+            overlayTimelineUri = null,
+            overlayFrameCount = 2,
+        )
+
+        val preflight = prepareExportSnapshotInputs(
+            snapshot = snapshot,
+            overlayCaptureFrozen = true,
+            hasReadableRaw = true,
+            toleranceMs = 0L,
+            liveOverlayFrameCountAtFreeze = 2,
+        )
+
+        assertNull(preflight.fatalReason)
+        assertEquals(0, preflight.snapshot.overlayTimeline.frames.size)
+        assertEquals(2, preflight.overlayFramesIgnoredAfterFreeze)
+    }
+private fun timelineOf(vararg timestamps: Long): OverlayTimeline {
         return OverlayTimeline(
             startedAtMs = 0L,
             sampleIntervalMs = 80L,
