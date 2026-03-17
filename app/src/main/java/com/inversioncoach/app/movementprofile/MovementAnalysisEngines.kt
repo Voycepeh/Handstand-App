@@ -46,7 +46,9 @@ class JointAngleEngine {
     private val angleEngine = AngleEngine()
 
     fun compute(frame: PoseFrame): AngleFrame {
-        val asMap = frame.joints.associateBy({ toJointId(it.name) }, { com.inversioncoach.app.motion.Landmark2D(it.x, it.y) })
+        val asMap = frame.joints.mapNotNull { joint ->
+            toJointIdOrNull(joint.name)?.let { it to com.inversioncoach.app.motion.Landmark2D(joint.x, joint.y) }
+        }.toMap()
         return angleEngine.compute(
             com.inversioncoach.app.motion.SmoothedPoseFrame(
                 timestampMs = frame.timestampMs,
@@ -56,8 +58,23 @@ class JointAngleEngine {
         )
     }
 
-    private fun toJointId(name: String): com.inversioncoach.app.motion.JointId =
-        com.inversioncoach.app.motion.JointId.valueOf(name.uppercase())
+    private fun toJointIdOrNull(name: String): com.inversioncoach.app.motion.JointId? =
+        when (name.lowercase()) {
+            "nose" -> com.inversioncoach.app.motion.JointId.NOSE
+            "left_shoulder" -> com.inversioncoach.app.motion.JointId.LEFT_SHOULDER
+            "right_shoulder" -> com.inversioncoach.app.motion.JointId.RIGHT_SHOULDER
+            "left_elbow" -> com.inversioncoach.app.motion.JointId.LEFT_ELBOW
+            "right_elbow" -> com.inversioncoach.app.motion.JointId.RIGHT_ELBOW
+            "left_wrist" -> com.inversioncoach.app.motion.JointId.LEFT_WRIST
+            "right_wrist" -> com.inversioncoach.app.motion.JointId.RIGHT_WRIST
+            "left_hip" -> com.inversioncoach.app.motion.JointId.LEFT_HIP
+            "right_hip" -> com.inversioncoach.app.motion.JointId.RIGHT_HIP
+            "left_knee" -> com.inversioncoach.app.motion.JointId.LEFT_KNEE
+            "right_knee" -> com.inversioncoach.app.motion.JointId.RIGHT_KNEE
+            "left_ankle" -> com.inversioncoach.app.motion.JointId.LEFT_ANKLE
+            "right_ankle" -> com.inversioncoach.app.motion.JointId.RIGHT_ANKLE
+            else -> null
+        }
 }
 
 class MotionPhaseDetector(profile: MovementProfile) {

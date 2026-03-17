@@ -194,6 +194,7 @@ class DefaultUploadVideoAnalysisRunner(
         )
 
         var persistedRawUri: String? = null
+        var sourceDurationMs: Long = 0L
         var currentStage = UploadStage.IMPORTING_RAW_VIDEO
 
         fun log(message: String) {
@@ -227,6 +228,7 @@ class DefaultUploadVideoAnalysisRunner(
             )
 
             val metadata = extractMetadata(Uri.parse(persistedRawUri))
+            sourceDurationMs = metadata.durationMs.coerceAtLeast(0L)
             SessionDiagnostics.record(
                 sessionId = sessionId,
                 stage = SessionDiagnostics.Stage.TIMESTAMP_ALIGNMENT,
@@ -429,7 +431,7 @@ class DefaultUploadVideoAnalysisRunner(
 
             repository.updateMediaPipelineState(sessionId) { session ->
                 session.copy(
-                    completedAtMs = now,
+                    completedAtMs = startedAt + sourceDurationMs,
                     overallScore = ((analysis.overlayTimeline.map { it.metrics["alignment_score"] ?: 0f }.average()) * 100f).toInt().coerceIn(0, 100),
                     strongestArea = "Alignment",
                     limitingFactor = if (isAnnotatedReady) "Consistency" else "Annotated export unavailable",
@@ -503,19 +505,24 @@ class DefaultUploadVideoAnalysisRunner(
             )
             repository.updateRawPersistStatus(sessionId, if (persistedRawUri.isNullOrBlank()) RawPersistStatus.FAILED else RawPersistStatus.SUCCEEDED)
             repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-            repository.updateAnnotatedExportFailureReason(sessionId, error.message ?: "UPLOAD_ANALYSIS_FAILED")
+            val mappedFailure = when {
+                error.message?.contains("No enum constant", ignoreCase = true) == true -> "INPUT_SCHEMA_MISMATCH"
+                error.message?.contains("LEFT_EYE_INNER", ignoreCase = true) == true -> "UNSUPPORTED_LANDMARK_ID"
+                else -> "UPLOAD_OVERLAY_GENERATION_FAILED"
+            }
+            repository.updateAnnotatedExportFailureReason(sessionId, mappedFailure)
             repository.updateAnnotatedExportProgress(
                 sessionId = sessionId,
                 stage = AnnotatedExportStage.FAILED,
                 percent = 100,
                 etaSeconds = null,
                 elapsedMs = System.currentTimeMillis() - startedAt,
-                failureReason = error.message ?: "UPLOAD_ANALYSIS_FAILED",
+                failureReason = mappedFailure,
                 failureDetail = "Upload workflow failed during ${currentStage.name}",
             )
             repository.updateMediaPipelineState(sessionId) { session ->
                 session.copy(
-                    completedAtMs = System.currentTimeMillis(),
+                    completedAtMs = startedAt + sourceDurationMs,
                     bestPlayableUri = persistedRawUri,
                     rawVideoUri = persistedRawUri ?: session.rawVideoUri,
                     annotatedVideoUri = null,

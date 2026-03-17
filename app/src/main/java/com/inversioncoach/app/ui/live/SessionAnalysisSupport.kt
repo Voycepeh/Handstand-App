@@ -602,7 +602,7 @@ object SessionDiagnostics {
         if (events.any { it.stage == Stage.FALLBACK_DECISION && it.status == Status.FALLBACK }) {
             return "Replay fell back to raw due to annotated replay unavailability."
         }
-        return "No critical pipeline failures detected."
+        return "Pipeline state unresolved: no terminal root-cause event found."
     }
 
     fun buildReport(session: SessionRecord?, sessionId: Long, appVersion: String = "unknown"): String {

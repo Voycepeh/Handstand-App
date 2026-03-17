@@ -19,6 +19,8 @@ import com.inversioncoach.app.storage.db.UserSettingsDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+private const val STALE_EXPORT_RECONCILIATION_MS = 2 * 60 * 1000L
+
 class SessionRepository(
     private val sessionDao: SessionDao,
     private val userSettingsDao: UserSettingsDao,
@@ -118,17 +120,23 @@ class SessionRepository(
 
     suspend fun reconcileStaleProcessingState(sessionId: Long, hasActiveExportJob: Boolean): Boolean {
         val session = sessionDao.getById(sessionId) ?: return false
+        val lastUpdatedAt = session.annotatedExportLastUpdatedAt ?: 0L
+        val ageMs = (System.currentTimeMillis() - lastUpdatedAt).coerceAtLeast(0L)
         val isStale =
             (session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING ||
                 session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW) &&
                 session.annotatedVideoUri.isNullOrBlank() &&
-                !hasActiveExportJob
+                !hasActiveExportJob &&
+                lastUpdatedAt > 0L &&
+                ageMs >= STALE_EXPORT_RECONCILIATION_MS
         if (!isStale) return false
         sessionDao.upsert(
             session.copy(
-                annotatedExportStatus = AnnotatedExportStatus.PROCESSING_SLOW,
-                annotatedExportFailureReason = null,
-                annotatedExportFailureDetail = null,
+                annotatedExportStatus = AnnotatedExportStatus.ANNOTATED_FAILED,
+                annotatedExportFailureReason = "EXPORT_JOB_LOST",
+                annotatedExportFailureDetail = "Stale processing reconciled with no active export owner",
+                annotatedExportStage = AnnotatedExportStage.FAILED,
+                annotatedExportPercent = 100,
                 annotatedExportLastUpdatedAt = System.currentTimeMillis(),
             ),
         )
