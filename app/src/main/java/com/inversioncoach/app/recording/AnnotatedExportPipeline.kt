@@ -11,7 +11,9 @@ import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.overlay.FreestyleViewMode
 import com.inversioncoach.app.storage.repository.SessionRepository
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 
 private const val TAG = "AnnotatedExportPipeline"
@@ -175,11 +177,28 @@ class AnnotatedExportPipeline(
                 "firstFrameTs=${overlayTimeline.frames.first().timestampMs} lastFrameTs=${overlayTimeline.frames.last().timestampMs}",
         )
         val composeResult = try {
-            withTimeoutOrNull(exportTimeoutMs) {
-                renderAnnotatedVideo(rawVideoUri, drillType, drillCameraSide, overlayTimeline, preset, onRenderProgress) {
-                    telemetry = it
-                    Log.d(TAG, it.structuredLogLine(event = "export_progress"))
+            coroutineScope {
+                var exportWorkStartedAtMs: Long? = null
+                val renderJob = async {
+                    renderAnnotatedVideo(rawVideoUri, drillType, drillCameraSide, overlayTimeline, preset, onRenderProgress) {
+                        telemetry = it
+                        if (it.decoderInitializedAtMs != null && exportWorkStartedAtMs == null) {
+                            exportWorkStartedAtMs = System.currentTimeMillis()
+                        }
+                        Log.d(TAG, it.structuredLogLine(event = "export_progress"))
+                    }
                 }
+                var timedOut = false
+                while (!renderJob.isCompleted) {
+                    val startedAt = exportWorkStartedAtMs
+                    if (startedAt != null && System.currentTimeMillis() - startedAt >= exportTimeoutMs) {
+                        timedOut = true
+                        renderJob.cancel(CancellationException("export_timeout_after_work_started"))
+                        break
+                    }
+                    delay(25)
+                }
+                if (timedOut) null else renderJob.await()
             }
         } catch (_: CancellationException) {
             updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)

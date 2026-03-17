@@ -30,6 +30,24 @@ class OverlayTimelineResolverTest {
         assertEquals(0f, resolved!!.smoothedLandmarks.first().x, 0.01f)
     }
 
+    @Test
+    fun resolvesWithIrregularDecoderTimestamps() {
+        val resolver = OverlayTimelineResolver(
+            listOf(
+                frame(0L, x = 0.0f),
+                frame(87L, x = 0.87f),
+                frame(191L, x = 1.91f),
+            ),
+        )
+
+        val decodedAt92 = resolver.overlayAt(92L)
+        val decodedAt185 = resolver.overlayAt(185L)
+        assertNotNull(decodedAt92)
+        assertNotNull(decodedAt185)
+        assertEquals(0.92f, decodedAt92!!.smoothedLandmarks.first().x, 0.03f)
+        assertEquals(1.85f, decodedAt185!!.smoothedLandmarks.first().x, 0.03f)
+    }
+
     private fun frame(ts: Long, x: Float) = AnnotatedOverlayFrame(
         timestampMs = ts,
         landmarks = listOf(joint(x)),

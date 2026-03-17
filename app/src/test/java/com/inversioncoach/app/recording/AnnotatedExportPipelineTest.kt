@@ -92,7 +92,34 @@ class AnnotatedExportPipelineTest {
     }
 
     @Test
-    fun timeoutMapsToExportTimedOutReason() {
+    fun timeoutMapsToExportTimedOutReasonAfterWorkStarts() {
+        val pipeline = AnnotatedExportPipeline(
+            persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
+            updateExportStatus = { _, _ -> },
+            exportTimeoutMs = 25L,
+            renderAnnotatedVideo = { _, _, _, _, _, _, onTelemetry ->
+                onTelemetry(AnnotatedExportTelemetry(exportStartedAtMs = 1L, decoderInitializedAtMs = 2L))
+                delay(100L)
+                ComposerResult("file:///rendered_annotated.mp4", null)
+            },
+        )
+
+        val exported = runBlocking {
+            pipeline.export(
+                sessionId = 7L,
+                rawVideoUri = "file:///raw.mp4",
+                drillType = DrillType.WALL_HANDSTAND,
+                drillCameraSide = DrillCameraSide.LEFT,
+                overlayTimeline = testTimeline(listOf(testFrame(1000L))),
+            )
+        }
+
+        assertEquals(AnnotatedExportFailureReason.EXPORT_TIMEOUT.name, exported.failureReason)
+        assertTrue(exported.started)
+    }
+
+    @Test
+    fun timeoutDoesNotStartBeforeExportWorkActuallyStarts() {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
             updateExportStatus = { _, _ -> },
@@ -113,8 +140,59 @@ class AnnotatedExportPipelineTest {
             )
         }
 
-        assertEquals(AnnotatedExportFailureReason.EXPORT_TIMEOUT.name, exported.failureReason)
+        assertEquals("file:///persisted_annotated.mp4", exported.persistedUri)
+        assertNull(exported.failureReason)
         assertFalse(exported.started)
+    }
+
+
+    @Test
+    fun failureBeforeDecoderInitIsNotStarted() {
+        val pipeline = AnnotatedExportPipeline(
+            persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
+            updateExportStatus = { _, _ -> },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ ->
+                ComposerResult(null, AnnotatedExportFailureReason.DECODER_INIT_FAILED.name)
+            },
+        )
+
+        val exported = runBlocking {
+            pipeline.export(
+                sessionId = 7L,
+                rawVideoUri = "file:///raw.mp4",
+                drillType = DrillType.WALL_HANDSTAND,
+                drillCameraSide = DrillCameraSide.LEFT,
+                overlayTimeline = testTimeline(listOf(testFrame(1000L))),
+            )
+        }
+
+        assertEquals(AnnotatedExportFailureReason.DECODER_INIT_FAILED.name, exported.failureReason)
+        assertFalse(exported.started)
+    }
+
+    @Test
+    fun failureAfterDecoderInitIsMarkedStarted() {
+        val pipeline = AnnotatedExportPipeline(
+            persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },
+            updateExportStatus = { _, _ -> },
+            renderAnnotatedVideo = { _, _, _, _, _, _, onTelemetry ->
+                onTelemetry(AnnotatedExportTelemetry(exportStartedAtMs = 1L, decoderInitializedAtMs = 2L, firstFrameDecodedAtMs = 3L))
+                ComposerResult(null, AnnotatedExportFailureReason.EXPORT_FAILED_AFTER_START.name)
+            },
+        )
+
+        val exported = runBlocking {
+            pipeline.export(
+                sessionId = 7L,
+                rawVideoUri = "file:///raw.mp4",
+                drillType = DrillType.WALL_HANDSTAND,
+                drillCameraSide = DrillCameraSide.LEFT,
+                overlayTimeline = testTimeline(listOf(testFrame(1000L))),
+            )
+        }
+
+        assertEquals(AnnotatedExportFailureReason.EXPORT_FAILED_AFTER_START.name, exported.failureReason)
+        assertTrue(exported.started)
     }
 
     @Test
@@ -130,7 +208,10 @@ class AnnotatedExportPipelineTest {
                         firstFrameDecodedAtMs = 12L,
                         decodedFrameCount = 15,
                         renderedFrameCount = 15,
+                        firstFrameRenderedAtMs = 13L,
+                        firstFrameEncodedAtMs = 14L,
                         encodedFrameCount = 15,
+                        droppedFrameCount = 1,
                         overlayFramesAvailable = 6,
                         overlayFramesConsumed = 6,
                         outputBytesWritten = 1024L,
@@ -154,6 +235,9 @@ class AnnotatedExportPipelineTest {
         assertTrue(exported.started)
         assertEquals(6, exported.telemetry?.overlayFramesConsumed)
         assertEquals(15, exported.telemetry?.encodedFrameCount)
+        assertEquals(13L, exported.telemetry?.firstFrameRenderedAtMs)
+        assertEquals(14L, exported.telemetry?.firstFrameEncodedAtMs)
+        assertEquals(1, exported.telemetry?.droppedFrameCount)
     }
 
     @Test
