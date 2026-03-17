@@ -7,6 +7,42 @@ Inversion Coach is a Kotlin/Jetpack Compose Android app with two primary video f
 
 Both flows persist sessions and converge on a shared **Results / Replay / Export fallback** experience.
 
+
+## Local setup (build-accurate)
+
+### Prerequisites
+
+- **JDK 17** (required). The project currently fails on JDK 25 because Gradle/Kotlin script parsing is not compatible in this repo setup.
+- Android SDK with:
+  - `compileSdk 34`
+  - `targetSdk 34`
+  - `minSdk 28`
+- Android Studio (recommended) or Gradle 8.14.x CLI.
+
+### Quick start
+
+1. Ensure Java 17 is active:
+   ```bash
+   export JAVA_HOME=/path/to/jdk-17
+   export PATH="$JAVA_HOME/bin:$PATH"
+   java -version
+   ```
+2. Run unit tests:
+   ```bash
+   gradle testDebugUnitTest
+   ```
+3. Build debug APK:
+   ```bash
+   gradle :app:assembleDebug
+   ```
+
+### Notes
+
+- This repository does **not** include a checked-in `gradlew` wrapper script right now, so commands above use your locally installed `gradle`.
+- For release signing, provide `RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, and `RELEASE_KEY_PASSWORD` Gradle properties.
+
+---
+
 ## Current feature overview
 
 ### 1) Live coaching overlay flow (real-time)
