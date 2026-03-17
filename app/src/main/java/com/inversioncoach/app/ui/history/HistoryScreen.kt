@@ -31,6 +31,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.model.UserSettings
+import com.inversioncoach.app.model.AnnotatedExportStatus
+import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
@@ -146,16 +148,24 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
 
 private enum class HistorySort { RECENCY, STORAGE_SIZE, SESSION_DURATION }
 
-private fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): String = when {
-    !session.bestPlayableUri.isNullOrBlank() -> "Replay ready"
-    !session.rawVideoUri.isNullOrBlank() -> "Raw replay ready"
+internal fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): String = when {
+    session.rawPersistStatus == RawPersistStatus.FAILED -> "Raw import failed"
+    session.rawPersistStatus == RawPersistStatus.PROCESSING -> "Importing raw replay"
+    session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> "Annotated replay ready"
+    session.rawPersistStatus == RawPersistStatus.SUCCEEDED &&
+        session.annotatedExportStatus in setOf(AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) -> "Raw replay ready • Annotated replay processing"
+    session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> "Raw replay ready • Annotated replay failed"
+    session.rawPersistStatus == RawPersistStatus.SUCCEEDED -> "Raw replay ready"
     else -> "Replay unavailable"
 }
 
-private fun uploadProgress(session: com.inversioncoach.app.model.SessionRecord): Float = when {
-    !session.bestPlayableUri.isNullOrBlank() -> 1f
-    !session.rawVideoUri.isNullOrBlank() -> 0.7f
-    else -> 0.2f
+internal fun uploadProgress(session: com.inversioncoach.app.model.SessionRecord): Float = when {
+    session.rawPersistStatus == RawPersistStatus.FAILED -> 1f
+    session.rawPersistStatus == RawPersistStatus.PROCESSING -> 0.25f
+    session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> 1f
+    session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> 1f
+    session.rawPersistStatus == RawPersistStatus.SUCCEEDED -> 0.7f
+    else -> 0f
 }
 
 private fun sortLabel(baseLabel: String, isSelected: Boolean, isAscending: Boolean): String = when {
