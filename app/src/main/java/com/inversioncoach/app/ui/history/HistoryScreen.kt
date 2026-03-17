@@ -34,6 +34,7 @@ import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
+import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 
 @Composable
@@ -119,7 +120,6 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
                     val sizeMb = formatMb(sessionSizes[session.id] ?: 0L)
                     val status = videoStatus(session)
                     val progress = uploadProgress(session)
-                    val sourceLabel = if (session.sessionSource.name == "UPLOADED_VIDEO") "Uploaded video" else "Live coaching"
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -131,7 +131,7 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
                     ) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(session.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                            Text(sourceLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(historyCardDurationText(session), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("Time: ${formatSessionDateTime(session.startedAtMs)}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                             LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                             Text(status, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -142,6 +142,11 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
             }
         }
     }
+}
+
+internal fun historyCardDurationText(session: com.inversioncoach.app.model.SessionRecord): String {
+    val durationMs = computeSessionDurationMs(session.startedAtMs, session.completedAtMs)
+    return "Duration: ${formatSessionDuration(durationMs)}"
 }
 
 private enum class HistorySort { RECENCY, STORAGE_SIZE, SESSION_DURATION }
