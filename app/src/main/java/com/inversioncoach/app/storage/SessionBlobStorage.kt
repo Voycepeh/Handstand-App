@@ -46,6 +46,19 @@ class SessionBlobStorage(
         return notesFile.readText()
     }
 
+    fun persistDiagnostics(sessionId: Long, diagnostics: String): String {
+        val diagnosticsFile = sessionDir(sessionId).resolve(DIAGNOSTICS_FILE_NAME)
+        diagnosticsFile.parentFile?.mkdirs()
+        diagnosticsFile.writeText(diagnostics)
+        return diagnosticsFile.toURI().toString()
+    }
+
+    fun readDiagnostics(sessionId: Long): String? {
+        val diagnosticsFile = sessionDir(sessionId).resolve(DIAGNOSTICS_FILE_NAME)
+        if (!diagnosticsFile.exists()) return null
+        return diagnosticsFile.readText()
+    }
+
     fun sessionSizeBytes(sessionId: Long): Long = directorySizeBytes(sessionDir(sessionId))
 
     fun totalSizeBytes(): Long = directorySizeBytes(rootDir())
@@ -110,5 +123,6 @@ class SessionBlobStorage(
         const val ANNOTATED_FINAL_FILE_NAME = "annotated_final.mp4"
         private const val NOTES_FILE_NAME = "notes.txt"
         private const val OVERLAY_TIMELINE_FILE_NAME = "overlay_timeline.json"
+        private const val DIAGNOSTICS_FILE_NAME = "diagnostics.txt"
     }
 }

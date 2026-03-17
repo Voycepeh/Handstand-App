@@ -478,9 +478,135 @@ fun deriveReplayDisplayState(session: SessionRecord?, hasActiveExportJob: Boolea
 
 object SessionDiagnostics {
     private const val TAG = "SessionDiagnostics"
+    private const val MAX_EVENTS = 250
+
+    enum class Stage {
+        SESSION_START,
+        RECORDING_START,
+        OVERLAY_CAPTURE,
+        OVERLAY_FLUSH,
+        RAW_PERSIST,
+        TIMESTAMP_ALIGNMENT,
+        ANNOTATED_EXPORT_START,
+        ANNOTATED_EXPORT_RENDER,
+        ANNOTATED_EXPORT_ENCODE,
+        ANNOTATED_EXPORT_VERIFY,
+        SESSION_FINALIZE,
+        REPLAY_SOURCE_SELECT,
+        FALLBACK_DECISION,
+    }
+
+    enum class Status { STARTED, PROGRESS, SUCCEEDED, FAILED, SKIPPED, FALLBACK }
+
+    data class Event(
+        val timestampMs: Long,
+        val sessionId: Long?,
+        val stage: Stage,
+        val status: Status,
+        val message: String,
+        val errorCode: String? = null,
+        val throwableClass: String? = null,
+        val throwableMessage: String? = null,
+        val metrics: Map<String, String> = emptyMap(),
+        val context: String = Thread.currentThread().name,
+    )
+
+    private val eventsBySession = ConcurrentHashMap<Long, MutableList<Event>>()
 
     fun log(message: String) {
         Log.d(TAG, message)
+    }
+
+    fun record(
+        sessionId: Long?,
+        stage: Stage,
+        status: Status,
+        message: String,
+        errorCode: String? = null,
+        throwable: Throwable? = null,
+        metrics: Map<String, String> = emptyMap(),
+    ) {
+        val event = Event(
+            timestampMs = System.currentTimeMillis(),
+            sessionId = sessionId,
+            stage = stage,
+            status = status,
+            message = message,
+            errorCode = errorCode,
+            throwableClass = throwable?.javaClass?.simpleName,
+            throwableMessage = throwable?.message,
+            metrics = metrics.toSortedMap(),
+        )
+        if (sessionId != null) {
+            val list = eventsBySession.getOrPut(sessionId) { mutableListOf() }
+            synchronized(list) {
+                list += event
+                if (list.size > MAX_EVENTS) {
+                    val nonTerminalIndex = list.indexOfFirst { it.status != Status.FAILED && it.status != Status.FALLBACK }
+                    if (nonTerminalIndex >= 0) list.removeAt(nonTerminalIndex)
+                }
+            }
+        }
+        Log.d(TAG, "${event.stage}/${event.status} sessionId=${sessionId ?: -1} msg=${event.message} code=${event.errorCode.orEmpty()} metrics=${event.metrics}")
+        throwable?.let { Log.w(TAG, "exception stage=${event.stage}", it) }
+    }
+
+    fun eventsForSession(sessionId: Long): List<Event> = eventsBySession[sessionId]?.toList().orEmpty().sortedBy { it.timestampMs }
+
+    fun clearSession(sessionId: Long) {
+        eventsBySession.remove(sessionId)
+    }
+
+    fun rootCauseSummary(session: SessionRecord?, events: List<Event>): String {
+        val failed = events.lastOrNull { it.status == Status.FAILED }
+        if (failed != null) return "${failed.stage.name}: ${failed.errorCode ?: failed.message}"
+        if (session?.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && session.annotatedVideoUri.isNullOrBlank()) {
+            return "Replay fell back to raw because annotatedVideoUri was null despite export READY."
+        }
+        if (session?.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED) {
+            return "Annotated export failed with ${session.annotatedExportFailureReason.orEmpty()}."
+        }
+        if (events.any { it.stage == Stage.FALLBACK_DECISION && it.status == Status.FALLBACK }) {
+            return "Replay fell back to raw due to annotated replay unavailability."
+        }
+        return "No critical pipeline failures detected."
+    }
+
+    fun buildReport(session: SessionRecord?, sessionId: Long, appVersion: String = "unknown"): String {
+        val events = eventsForSession(sessionId)
+        val summary = rootCauseSummary(session, events)
+        return buildString {
+            appendLine("# Session metadata")
+            appendLine("sessionId: $sessionId")
+            appendLine("appVersion: $appVersion")
+            appendLine("drillType: ${session?.drillType}")
+            appendLine()
+            appendLine("# Pipeline summary")
+            appendLine("rootCause: $summary")
+            appendLine("replaySource: ${resolvePreferredReplayUri(session).source}")
+            appendLine("rawPersistStatus: ${session?.rawPersistStatus}")
+            appendLine("annotatedExportStatus: ${session?.annotatedExportStatus}")
+            appendLine("annotatedExportFailureReason: ${session?.annotatedExportFailureReason.orEmpty()}")
+            appendLine()
+            appendLine("# Current persisted state")
+            appendLine("rawVideoUri: ${session?.rawVideoUri.orEmpty()}")
+            appendLine("annotatedVideoUri: ${session?.annotatedVideoUri.orEmpty()}")
+            appendLine("overlayFrameCount: ${session?.overlayFrameCount ?: 0}")
+            appendLine()
+            appendLine("# Event timeline")
+            val base = session?.startedAtMs ?: events.firstOrNull()?.timestampMs ?: 0L
+            events.forEach { event ->
+                val elapsed = (event.timestampMs - base).coerceAtLeast(0L)
+                appendLine("+${elapsed}ms ${event.stage} ${event.status} msg=${event.message} code=${event.errorCode.orEmpty()} metrics=${event.metrics}")
+                if (!event.throwableClass.isNullOrBlank()) {
+                    appendLine("  exception=${event.throwableClass}: ${event.throwableMessage.orEmpty()}")
+                }
+            }
+        }
+    }
+
+    suspend fun persistReport(sessionId: Long, session: SessionRecord?, repository: com.inversioncoach.app.storage.repository.SessionRepository) {
+        repository.saveSessionDiagnostics(sessionId, buildReport(session = session, sessionId = sessionId))
     }
 
     fun logStructured(
@@ -492,11 +618,25 @@ object SessionDiagnostics {
         overlayFrameCount: Int,
         failureReason: String? = null,
     ) {
-        Log.d(
-            TAG,
-            "event=$event sessionId=${sessionId ?: -1L} drillType=$drillType rawUri=${rawUri.orEmpty()} " +
-                "annotatedUri=${annotatedUri.orEmpty()} overlayFrames=$overlayFrameCount " +
-                "failureReason=${failureReason.orEmpty()}",
+        val normalized = event.uppercase(java.util.Locale.US)
+        val (stage, status) = when {
+            normalized.contains("FAILED") || normalized.contains("MISSING") || !failureReason.isNullOrBlank() -> Stage.SESSION_FINALIZE to Status.FAILED
+            normalized.contains("START") -> Stage.SESSION_START to Status.STARTED
+            normalized.contains("OVERLAY") -> Stage.OVERLAY_CAPTURE to Status.PROGRESS
+            normalized.contains("REPLAY") -> Stage.REPLAY_SOURCE_SELECT to Status.PROGRESS
+            else -> Stage.SESSION_FINALIZE to Status.PROGRESS
+        }
+        record(
+            sessionId = sessionId,
+            stage = stage,
+            status = status,
+            message = "event=$event drillType=$drillType",
+            errorCode = failureReason,
+            metrics = mapOf(
+                "rawUri" to rawUri.orEmpty(),
+                "annotatedUri" to annotatedUri.orEmpty(),
+                "overlayFrameCount" to overlayFrameCount.toString(),
+            ),
         )
     }
 }

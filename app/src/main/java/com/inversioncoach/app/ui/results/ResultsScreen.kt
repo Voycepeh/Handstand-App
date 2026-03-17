@@ -27,6 +27,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -64,6 +66,9 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     )
     val scope = rememberCoroutineScope()
     var notes by remember { mutableStateOf("") }
+    var diagnosticsExpanded by remember { mutableStateOf(false) }
+    var persistedDiagnostics by remember { mutableStateOf<String?>(null) }
+    val clipboardManager = LocalClipboardManager.current
 
     val collapsedIssueTimeline = remember(issueTimeline, session?.startedAtMs) {
         collapseIssueTimeline(issueTimeline, session?.startedAtMs)
@@ -73,6 +78,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
 
     LaunchedEffect(sessionId) {
         notes = repository.readSessionNotes(sessionId).orEmpty()
+        persistedDiagnostics = repository.readSessionDiagnostics(sessionId)
         repository.reconcileRawPersistState(sessionId)
     }
 
@@ -201,6 +207,37 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 Text("rawVideoUri: ${session?.rawVideoUri.orEmpty()}")
                 Text("annotatedVideoUri: ${session?.annotatedVideoUri.orEmpty()}")
                 Text("overlay frame count: ${session?.overlayFrameCount ?: 0}")
+            }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val inMemoryReport = SessionDiagnostics.buildReport(session, sessionId)
+                    val report = persistedDiagnostics?.takeIf { it.isNotBlank() } ?: inMemoryReport
+                    val events = SessionDiagnostics.eventsForSession(sessionId)
+                    Text("Technical diagnostics", style = MaterialTheme.typography.titleMedium)
+                    Text(SessionDiagnostics.rootCauseSummary(session, events))
+                    Button(onClick = { diagnosticsExpanded = !diagnosticsExpanded }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (diagnosticsExpanded) "Hide diagnostics" else "Show diagnostics")
+                    }
+                    Button(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(report))
+                            Toast.makeText(context, "Diagnostic logs copied", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Export diagnostic logs") }
+                    if (diagnosticsExpanded) {
+                        Text(
+                            report,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 24,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
             Button(
                 onClick = {

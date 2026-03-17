@@ -10,6 +10,8 @@ import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.camera.view.PreviewView.ScaleType
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +36,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -94,6 +99,8 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     val sessionRecorder = remember(context) { SessionRecorder(context) }
     val currentSessionTitle by rememberUpdatedState(newValue = vm.sessionTitle)
     val showDetailedStats = rememberSaveable { mutableStateOf(false) }
+    val diagnosticsExpanded = rememberSaveable { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
 
     val freestyleViewLabel = remember(smoothed, uiState.sessionMode) {
         if (uiState.sessionMode != SessionMode.FREESTYLE) {
@@ -281,6 +288,33 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             }
             uiState.warningMessage?.let { Text(it, color = Color.Yellow, fontSize = 13.sp) }
             uiState.errorMessage?.let { Text(it, color = Color.Red, fontSize = 13.sp) }
+            vm.activeSessionId?.let { sid ->
+                val events = SessionDiagnostics.eventsForSession(sid)
+                val last = events.lastOrNull()
+                Text(
+                    "Diag stage: ${last?.stage?.name ?: "SESSION_START"} • ${last?.status?.name ?: "STARTED"}",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                )
+                Text(last?.message ?: "No diagnostics yet", color = Color.White, fontSize = 12.sp)
+                TextButton(onClick = { diagnosticsExpanded.value = !diagnosticsExpanded.value }) {
+                    Text(if (diagnosticsExpanded.value) "Hide technical log" else "Show technical log", color = Color.White, fontSize = 12.sp)
+                }
+                if (diagnosticsExpanded.value) {
+                    val report = SessionDiagnostics.buildReport(session = null, sessionId = sid)
+                    TextButton(onClick = {
+                        clipboardManager.setText(AnnotatedString(report))
+                    }) { Text("Export diagnostic logs", color = Color.White, fontSize = 12.sp) }
+                    Text(
+                        report,
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        maxLines = 14,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                    )
+                }
+            }
         }
 
 

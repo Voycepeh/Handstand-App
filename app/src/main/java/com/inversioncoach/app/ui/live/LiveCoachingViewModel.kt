@@ -164,8 +164,18 @@ class LiveCoachingViewModel(
     val sessionStartTimestampMs: Long
         get() = sessionStartedAtMs
 
+    val activeSessionId: Long?
+        get() = sessionId
+
     init {
         val movementPattern = runCatching { drillDefinition.movementPattern.name }.getOrDefault("GENERIC")
+        SessionDiagnostics.record(
+            sessionId = sessionId,
+            stage = SessionDiagnostics.Stage.SESSION_START,
+            status = SessionDiagnostics.Status.STARTED,
+            message = "Session initialized",
+            metrics = mapOf("drillType" to drillType.name),
+        )
         SessionDiagnostics.logStructured(
             event = "session_started",
             sessionId = sessionId,
@@ -232,7 +242,14 @@ class LiveCoachingViewModel(
             rawFinalUri = persisted
             rawMasterUri = persisted
             bestPlayableUri = persisted
-            setRawPersistState(RawPersistStatus.SUCCEEDED, null)
+            SessionDiagnostics.record(
+            sessionId = activeSessionId,
+            stage = SessionDiagnostics.Stage.RAW_PERSIST,
+            status = SessionDiagnostics.Status.SUCCEEDED,
+            message = "Raw persist completed",
+            metrics = mapOf("rawUri" to rawMasterUri.orEmpty()),
+        )
+        setRawPersistState(RawPersistStatus.SUCCEEDED, null)
             setAnnotatedExportState(AnnotatedExportStatus.NOT_STARTED, null)
             repository.updateMediaPipelineState(activeSessionId) { session ->
                 session.copy(
@@ -303,6 +320,13 @@ class LiveCoachingViewModel(
             overlayTimelineRecorder?.record(overlayFrame.toTimelineFrame())
             lastOverlayCaptureTsMs = smoothed.timestampMs
             if (overlayFrames.size % OVERLAY_FRAME_LOG_INTERVAL == 0) {
+                SessionDiagnostics.record(
+                    sessionId = sessionId,
+                    stage = SessionDiagnostics.Stage.OVERLAY_CAPTURE,
+                    status = SessionDiagnostics.Status.PROGRESS,
+                    message = "Overlay samples captured",
+                    metrics = mapOf("overlayFrameCount" to overlayFrames.size.toString()),
+                )
                 SessionDiagnostics.logStructured(
                     event = "overlay_frames_count",
                     sessionId = sessionId,
@@ -608,6 +632,22 @@ class LiveCoachingViewModel(
                     annotatedVideoUri = annotatedVideoUri,
                     exportStatus = reconciledStatus,
                 )
+                SessionDiagnostics.record(
+                    sessionId = activeSessionId,
+                    stage = SessionDiagnostics.Stage.REPLAY_SOURCE_SELECT,
+                    status = SessionDiagnostics.Status.PROGRESS,
+                    message = "Replay source selected",
+                    metrics = mapOf("selectedUri" to finalVideos.bestPlayableUri.orEmpty(), "annotatedUri" to finalVideos.annotatedVideoUri.orEmpty()),
+                )
+                if (finalVideos.annotatedVideoUri.isNullOrBlank() && !finalVideos.rawVideoUri.isNullOrBlank()) {
+                    SessionDiagnostics.record(
+                        sessionId = activeSessionId,
+                        stage = SessionDiagnostics.Stage.FALLBACK_DECISION,
+                        status = SessionDiagnostics.Status.FALLBACK,
+                        message = "Replay fell back to raw",
+                        errorCode = AnnotatedExportFailureReason.REPLAY_SELECTION_FELL_BACK_TO_RAW.name,
+                    )
+                }
                 SessionDiagnostics.logStructured(
                     event = "replay_uri_selected",
                     sessionId = activeSessionId,
@@ -617,6 +657,7 @@ class LiveCoachingViewModel(
                     overlayFrameCount = overlayFrames.size,
                     failureReason = annotatedExportFailureReason,
                 )
+                SessionDiagnostics.persistReport(activeSessionId, repository.observeSession(activeSessionId).first(), repository)
                 repository.saveSession(
                     SessionRecord(
                         id = activeSessionId,
@@ -898,11 +939,25 @@ class LiveCoachingViewModel(
         repository.updateRawPersistFailureReason(activeSessionId, null)
         AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.PREPARING, 15, null)
         val rawPersistStartMs = System.currentTimeMillis()
+        SessionDiagnostics.record(
+            sessionId = activeSessionId,
+            stage = SessionDiagnostics.Stage.RAW_PERSIST,
+            status = SessionDiagnostics.Status.STARTED,
+            message = "Persisting raw recording",
+            metrics = mapOf("overlayFrameCount" to overlayFrames.size.toString(), "rawInputUri" to finalizedUri),
+        )
         SessionDiagnostics.logStructured("raw_persist_started", activeSessionId, drillType, finalizedUri, null, overlayFrames.size)
         rawMasterUri = repository.saveRawVideoBlob(activeSessionId, finalizedUri)
         rawVideoUri = rawMasterUri
         SessionDiagnostics.log("raw_persist_duration_ms=${System.currentTimeMillis() - rawPersistStartMs}")
         if (rawMasterUri.isNullOrBlank() || !MediaVerificationHelper.verify(rawMasterUri).isValid) {
+            SessionDiagnostics.record(
+                sessionId = activeSessionId,
+                stage = SessionDiagnostics.Stage.RAW_PERSIST,
+                status = SessionDiagnostics.Status.FAILED,
+                message = "Raw persist failed",
+                errorCode = AnnotatedExportFailureReason.RAW_PERSIST_FAILED.name,
+            )
             setRawPersistState(RawPersistStatus.FAILED, AnnotatedExportFailureReason.RAW_SAVE_FAILED.name)
             repository.updateRawPersistStatus(activeSessionId, RawPersistStatus.FAILED)
             repository.updateRawPersistFailureReason(activeSessionId, rawPersistFailureReason)
@@ -940,6 +995,13 @@ class LiveCoachingViewModel(
         annotatedExportElapsedMs = 0L
         annotatedExportLastUpdatedAt = System.currentTimeMillis()
         repository.updateAnnotatedExportProgress(activeSessionId, AnnotatedExportStage.PREPARING, 20, null, 0L)
+        SessionDiagnostics.record(
+            sessionId = activeSessionId,
+            stage = SessionDiagnostics.Stage.ANNOTATED_EXPORT_START,
+            status = SessionDiagnostics.Status.STARTED,
+            message = "Annotated export started",
+            metrics = mapOf("overlayFrameCount" to overlayFrames.size.toString()),
+        )
         SessionDiagnostics.logStructured("annotated_export_started", activeSessionId, drillType, rawMasterUri, null, overlayFrames.size)
         val exportStartMs = System.currentTimeMillis()
         AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.LOADING_OVERLAYS, 30, null)
@@ -976,10 +1038,24 @@ class LiveCoachingViewModel(
             val verification = MediaVerificationHelper.verify(persistedUri)
             SessionDiagnostics.log("verify_duration_ms=${System.currentTimeMillis() - verifyStartMs}")
             if (persistedUri.isNullOrBlank()) {
+                SessionDiagnostics.record(
+                    sessionId = activeSessionId,
+                    stage = SessionDiagnostics.Stage.ANNOTATED_EXPORT_VERIFY,
+                    status = SessionDiagnostics.Status.FAILED,
+                    message = "Annotated export output URI missing",
+                    errorCode = AnnotatedExportFailureReason.OUTPUT_URI_NULL.name,
+                )
                 persistAnnotatedExportFailed(activeSessionId, AnnotatedExportFailureReason.OUTPUT_URI_NULL.name)
                 return
             }
             if (!verification.isValid) {
+                SessionDiagnostics.record(
+                    sessionId = activeSessionId,
+                    stage = SessionDiagnostics.Stage.ANNOTATED_EXPORT_VERIFY,
+                    status = SessionDiagnostics.Status.FAILED,
+                    message = "Annotated verification failed",
+                    errorCode = verification.failureReason?.name ?: AnnotatedExportFailureReason.VERIFICATION_FAILED.name,
+                )
                 persistAnnotatedExportFailed(
                     activeSessionId,
                     exportResult.failureReason ?: verification.failureReason?.name ?: AnnotatedExportFailureReason.ANNOTATED_EXPORT_FAILED.name,
@@ -1010,6 +1086,13 @@ class LiveCoachingViewModel(
                 elapsedMs = annotatedExportElapsedMs,
                 failureDetail = null,
                 failureReason = null,
+            )
+            SessionDiagnostics.record(
+                sessionId = activeSessionId,
+                stage = SessionDiagnostics.Stage.ANNOTATED_EXPORT_VERIFY,
+                status = SessionDiagnostics.Status.SUCCEEDED,
+                message = "Annotated export verified",
+                metrics = mapOf("annotatedUri" to persistedUri),
             )
             AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.COMPLETED, 100, 0L)
         } catch (_: TimeoutCancellationException) {
@@ -1079,6 +1162,13 @@ class LiveCoachingViewModel(
             elapsedMs = annotatedExportElapsedMs,
             failureDetail = annotatedExportFailureDetail,
             failureReason = reason,
+        )
+        SessionDiagnostics.record(
+            sessionId = activeSessionId,
+            stage = SessionDiagnostics.Stage.SESSION_FINALIZE,
+            status = SessionDiagnostics.Status.FAILED,
+            message = "Annotated export marked failed",
+            errorCode = reason,
         )
         AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.FAILED, 100, 0L)
     }

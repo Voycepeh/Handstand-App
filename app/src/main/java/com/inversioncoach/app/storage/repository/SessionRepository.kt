@@ -175,6 +175,11 @@ class SessionRepository(
 
     fun readSessionNotes(sessionId: Long): String? = sessionBlobStorage.readNotes(sessionId)
 
+    fun saveSessionDiagnostics(sessionId: Long, diagnostics: String): String =
+        sessionBlobStorage.persistDiagnostics(sessionId, diagnostics)
+
+    fun readSessionDiagnostics(sessionId: Long): String? = sessionBlobStorage.readDiagnostics(sessionId)
+
     fun sessionStorageBytes(sessionId: Long): Long = sessionBlobStorage.sessionSizeBytes(sessionId)
 
     fun totalStorageBytes(): Long = sessionBlobStorage.totalSizeBytes()
