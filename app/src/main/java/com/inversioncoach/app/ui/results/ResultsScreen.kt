@@ -13,11 +13,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.model.sessionMode
 import com.inversioncoach.app.model.SessionMode
@@ -110,6 +114,51 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     "Session details are loading or unavailable. Some actions may be disabled.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
+            session?.let { activeSession ->
+                val isProcessing = activeSession.annotatedExportStatus in setOf(
+                    AnnotatedExportStatus.PROCESSING,
+                    AnnotatedExportStatus.PROCESSING_SLOW,
+                ) || activeSession.rawPersistStatus == com.inversioncoach.app.model.RawPersistStatus.PROCESSING
+                if (isProcessing || activeSession.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Processing status", style = MaterialTheme.typography.titleMedium)
+                            LinearProgressIndicator(
+                                progress = { (activeSession.annotatedExportPercent.coerceIn(0, 100) / 100f).coerceAtLeast(0.05f) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Text("Stage: ${activeSession.annotatedExportStage}")
+                            Text("Progress: ${activeSession.annotatedExportPercent}%")
+                            Text("ETA: ${activeSession.annotatedExportEtaSeconds?.let { "${it}s" } ?: "-"}")
+                            Text("Raw: ${activeSession.rawPersistStatus}")
+                            Text("Annotated: ${activeSession.annotatedExportStatus}")
+                            if (!activeSession.annotatedExportFailureReason.isNullOrBlank()) {
+                                Text("Failure: ${activeSession.annotatedExportFailureReason}", color = MaterialTheme.colorScheme.error)
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = {
+                                    val report = repository.readSessionDiagnostics(sessionId).orEmpty().ifBlank { "No log entries yet." }
+                                    clipboardManager.setText(AnnotatedString(report))
+                                    Toast.makeText(context, "Logs copied", Toast.LENGTH_SHORT).show()
+                                }) { Text("Copy log") }
+                                if (isProcessing) {
+                                    OutlinedButton(onClick = {
+                                        scope.launch {
+                                            repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
+                                            repository.updateAnnotatedExportFailureReason(sessionId, "EXPORT_CANCELLED")
+                                        }
+                                    }) { Text("Cancel") }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             Card(

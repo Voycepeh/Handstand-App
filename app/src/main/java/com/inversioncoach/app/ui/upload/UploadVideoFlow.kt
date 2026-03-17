@@ -61,10 +61,13 @@ import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.SessionDiagnostics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -120,7 +123,12 @@ data class UploadFlowResult(
 )
 
 interface UploadVideoAnalysisRunner {
-    suspend fun run(uri: Uri, onProgress: (UploadProgress) -> Unit, onLog: (String) -> Unit): UploadFlowResult
+    suspend fun run(
+        uri: Uri,
+        onSessionCreated: (Long) -> Unit,
+        onProgress: (UploadProgress) -> Unit,
+        onLog: (String) -> Unit,
+    ): UploadFlowResult
 }
 
 class DefaultUploadVideoAnalysisRunner(
@@ -129,7 +137,12 @@ class DefaultUploadVideoAnalysisRunner(
 ) : UploadVideoAnalysisRunner {
     private val preset = ExportPreset.BALANCED
 
-    override suspend fun run(uri: Uri, onProgress: (UploadProgress) -> Unit, onLog: (String) -> Unit): UploadFlowResult = withContext(Dispatchers.IO) {
+    override suspend fun run(
+        uri: Uri,
+        onSessionCreated: (Long) -> Unit,
+        onProgress: (UploadProgress) -> Unit,
+        onLog: (String) -> Unit,
+    ): UploadFlowResult = withContext(Dispatchers.IO) {
         val startedAt = System.currentTimeMillis()
         val drillType = DrillType.FREESTYLE
         val sessionId = repository.saveSession(
@@ -155,6 +168,7 @@ class DefaultUploadVideoAnalysisRunner(
                 annotatedExportStatus = AnnotatedExportStatus.NOT_STARTED,
             ),
         )
+        onSessionCreated(sessionId)
         Log.i(TAG, "analysis_start sessionId=$sessionId uri=$uri")
         SessionDiagnostics.record(
             sessionId = sessionId,
@@ -454,10 +468,41 @@ class DefaultUploadVideoAnalysisRunner(
 
 class UploadVideoViewModel(
     private val runner: UploadVideoAnalysisRunner,
+    private val repository: SessionRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow(UploadVideoUiState())
     val state: StateFlow<UploadVideoUiState> = _state.asStateFlow()
-    private var activeJob: Job? = null
+    companion object {
+        private val uploadScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        private var activeJob: Job? = null
+        private var activeSessionId: Long? = null
+    }
+
+    init {
+        viewModelScope.launch {
+            repository.observeSessions().collectLatest { sessions ->
+                val sessionId = activeSessionId ?: return@collectLatest
+                val session = sessions.firstOrNull { it.id == sessionId } ?: return@collectLatest
+                val stage = when {
+                    session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> UploadStage.COMPLETED_ANNOTATED
+                    session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> UploadStage.FAILED
+                    session.rawPersistStatus == RawPersistStatus.PROCESSING -> UploadStage.IMPORTING_RAW_VIDEO
+                    else -> UploadStage.EXPORTING_ANNOTATED_VIDEO
+                }
+                _state.update { current ->
+                    current.copy(
+                        sessionId = sessionId,
+                        stage = stage,
+                        currentProcessingStage = stage,
+                        progressPercent = (session.annotatedExportPercent.coerceIn(0, 100) / 100f).coerceAtLeast(current.progressPercent),
+                        rawVideoStatus = session.rawPersistStatus,
+                        annotatedVideoStatus = session.annotatedExportStatus,
+                        etaMs = session.annotatedExportEtaSeconds?.times(1000L),
+                    )
+                }
+            }
+        }
+    }
 
     fun onPickStarted() {
         _state.update {
@@ -472,7 +517,7 @@ class UploadVideoViewModel(
 
     fun analyze(uri: Uri) {
         if (activeJob?.isActive == true) return
-        activeJob = viewModelScope.launch {
+        activeJob = uploadScope.launch {
             _state.update {
                 it.copy(
                     selectedVideoUri = uri,
@@ -491,6 +536,10 @@ class UploadVideoViewModel(
             runCatching {
                 runner.run(
                     uri = uri,
+                    onSessionCreated = { sessionId ->
+                        activeSessionId = sessionId
+                        _state.update { current -> current.copy(sessionId = sessionId) }
+                    },
                     onProgress = { progress ->
                         _state.update { current ->
                             val rawStatus = if (progress.stage.ordinal >= UploadStage.RAW_IMPORT_COMPLETE.ordinal) {
@@ -525,6 +574,9 @@ class UploadVideoViewModel(
                         }
                     },
                     onLog = { line ->
+                        _state.value.sessionId?.let { sessionId ->
+                            repository.saveSessionDiagnostics(sessionId, (_state.value.technicalLog + "\n" + line).trim())
+                        }
                         _state.update { current ->
                             current.copy(
                                 technicalLog = if (current.technicalLog.isBlank()) line else "${current.technicalLog}\n$line",
@@ -577,6 +629,12 @@ class UploadVideoViewModel(
 
     fun cancel() {
         activeJob?.cancel()
+        _state.value.sessionId?.let { sessionId ->
+            viewModelScope.launch {
+                repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
+                repository.updateAnnotatedExportFailureReason(sessionId, "EXPORT_CANCELLED")
+            }
+        }
         _state.update {
             it.copy(stage = UploadStage.CANCELLED, currentProcessingStage = UploadStage.CANCELLED, stageText = "Analysis cancelled", canCancel = false)
         }
@@ -591,7 +649,7 @@ fun UploadVideoScreen(
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
     val viewModel = remember {
-        UploadVideoViewModel(DefaultUploadVideoAnalysisRunner(context.applicationContext, repository))
+        UploadVideoViewModel(DefaultUploadVideoAnalysisRunner(context.applicationContext, repository), repository)
     }
     val state by viewModel.state.collectAsState()
     var showTechLog by remember { mutableStateOf(false) }
@@ -696,7 +754,11 @@ fun UploadVideoScreen(
             val resultSessionId = state.sessionId
             if (state.stage in setOf(UploadStage.COMPLETED_ANNOTATED, UploadStage.COMPLETED_RAW_ONLY) && resultSessionId != null) {
                 Button(onClick = { onOpenResults(resultSessionId) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Open Results")
+                    Text("View session")
+                }
+            } else if (resultSessionId != null) {
+                OutlinedButton(onClick = { onOpenResults(resultSessionId) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("View session")
                 }
             }
         }
