@@ -72,6 +72,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     var notes by remember { mutableStateOf("") }
     var diagnosticsExpanded by remember { mutableStateOf(false) }
     var persistedDiagnostics by remember { mutableStateOf<String?>(null) }
+    var lastRefreshSignature by remember(sessionId) { mutableStateOf<String?>(null) }
     val clipboardManager = LocalClipboardManager.current
 
     val collapsedIssueTimeline = remember(issueTimeline, session?.startedAtMs) {
@@ -96,6 +97,34 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             annotatedUri = session?.annotatedVideoUri,
             overlayFrameCount = session?.overlayFrameCount ?: 0,
             failureReason = "selection=${replaySelection.label}",
+        )
+    }
+
+    LaunchedEffect(
+        session?.rawPersistStatus,
+        session?.annotatedExportStatus,
+        session?.annotatedVideoUri,
+        replaySelection.uri,
+    ) {
+        val activeSession = session ?: return@LaunchedEffect
+        val signature = listOf(
+            activeSession.rawPersistStatus,
+            activeSession.annotatedExportStatus,
+            activeSession.annotatedExportFailureReason.orEmpty(),
+            activeSession.annotatedVideoUri.orEmpty(),
+            activeSession.bestPlayableUri.orEmpty(),
+            replaySelection.uri.orEmpty(),
+        ).joinToString("|")
+        if (lastRefreshSignature == signature) return@LaunchedEffect
+        lastRefreshSignature = signature
+        SessionDiagnostics.logStructured(
+            event = "results_screen_state_refresh",
+            sessionId = activeSession.id,
+            drillType = activeSession.drillType,
+            rawUri = activeSession.rawVideoUri,
+            annotatedUri = activeSession.annotatedVideoUri,
+            overlayFrameCount = activeSession.overlayFrameCount,
+            failureReason = "rawPersistStatus=${activeSession.rawPersistStatus};annotatedExportStatus=${activeSession.annotatedExportStatus};selectedReplaySource=${replaySelection.label};selectedReplayUri=${replaySelection.uri.orEmpty()};terminalStateReached=${activeSession.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY || activeSession.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED}",
         )
     }
 

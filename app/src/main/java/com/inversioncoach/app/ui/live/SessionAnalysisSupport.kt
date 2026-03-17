@@ -620,7 +620,8 @@ object SessionDiagnostics {
     ) {
         val normalized = event.uppercase(java.util.Locale.US)
         val (stage, status) = when {
-            normalized.contains("FAILED") || normalized.contains("MISSING") || !failureReason.isNullOrBlank() -> Stage.SESSION_FINALIZE to Status.FAILED
+            normalized.contains("FAILED") || normalized.contains("TIMEOUT") || normalized.contains("CANCELLED") -> Stage.SESSION_FINALIZE to Status.FAILED
+            normalized.contains("MISSING") -> Stage.SESSION_FINALIZE to Status.FAILED
             normalized.contains("START") -> Stage.SESSION_START to Status.STARTED
             normalized.contains("OVERLAY") -> Stage.OVERLAY_CAPTURE to Status.PROGRESS
             normalized.contains("REPLAY") -> Stage.REPLAY_SOURCE_SELECT to Status.PROGRESS

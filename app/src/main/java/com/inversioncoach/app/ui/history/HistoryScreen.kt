@@ -39,6 +39,7 @@ import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import com.inversioncoach.app.ui.live.SessionDiagnostics
 
 @Composable
 fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
@@ -47,6 +48,7 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
     val settings by repository.observeSettings().collectAsState(initial = UserSettings())
     val sessionSizes = remember { mutableStateMapOf<Long, Long>() }
+    val lastRefreshSignatures = remember { mutableStateMapOf<Long, String>() }
     var selectedSort by remember { mutableStateOf(HistorySort.RECENCY) }
     var sortAscending by remember { mutableStateOf(false) }
     var totalStorageBytes by remember { mutableLongStateOf(0L) }
@@ -56,6 +58,30 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
         sessionSizes.clear()
         sessionSizes.putAll(sizes)
         totalStorageBytes = repository.totalStorageBytes()
+
+        sessions.forEach { session ->
+            val signature = listOf(
+                session.rawPersistStatus,
+                session.annotatedExportStatus,
+                session.annotatedExportFailureReason.orEmpty(),
+                session.rawVideoUri.orEmpty(),
+                session.annotatedVideoUri.orEmpty(),
+                session.bestPlayableUri.orEmpty(),
+            ).joinToString("|")
+            val previous = lastRefreshSignatures[session.id]
+            if (previous != signature) {
+                lastRefreshSignatures[session.id] = signature
+                SessionDiagnostics.logStructured(
+                    event = "history_screen_session_refresh",
+                    sessionId = session.id,
+                    drillType = session.drillType,
+                    rawUri = session.rawVideoUri,
+                    annotatedUri = session.annotatedVideoUri,
+                    overlayFrameCount = session.overlayFrameCount,
+                    failureReason = "rawPersistStatus=${session.rawPersistStatus};annotatedExportStatus=${session.annotatedExportStatus};selectedReplayUri=${session.bestPlayableUri.orEmpty()};terminalStateReached=${session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY || session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED}",
+                )
+            }
+        }
     }
 
     val maxStorageBytes = settings.maxStorageMb.toLong() * 1024L * 1024L

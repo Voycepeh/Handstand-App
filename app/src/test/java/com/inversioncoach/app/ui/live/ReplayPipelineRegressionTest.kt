@@ -54,4 +54,56 @@ class ReplayPipelineRegressionTest {
             rawFile.delete()
         }
     }
+
+    @Test
+    fun postSaveExportCompletionSwitchesVisibleReplayFromRawToAnnotated() {
+        val rawFile = File.createTempFile("raw_post_save", ".mp4")
+        val annotatedFile = File.createTempFile("annotated_post_save", ".mp4")
+        try {
+            rawFile.writeText("raw")
+            annotatedFile.writeText("annotated")
+
+            val processingSession = SessionRecord(
+                id = 88,
+                title = "processing",
+                drillType = DrillType.WALL_HANDSTAND,
+                startedAtMs = 1L,
+                completedAtMs = 2L,
+                overallScore = 0,
+                strongestArea = "-",
+                limitingFactor = "-",
+                issues = "",
+                wins = "",
+                metricsJson = "",
+                rawVideoUri = rawFile.toURI().toString(),
+                bestPlayableUri = rawFile.toURI().toString(),
+                rawPersistStatus = RawPersistStatus.SUCCEEDED,
+                annotatedExportStatus = AnnotatedExportStatus.PROCESSING,
+                overlayFrameCount = 93,
+                notesUri = null,
+                bestFrameTimestampMs = null,
+                worstFrameTimestampMs = null,
+                topImprovementFocus = "",
+            )
+
+            val processingSelection = selectReplayAsset(processingSession)
+            assertEquals("Raw replay", processingSelection.label)
+            assertEquals(rawFile.toURI().toString(), processingSelection.uri)
+
+            val readySession = processingSession.copy(
+                annotatedExportStatus = AnnotatedExportStatus.ANNOTATED_READY,
+                annotatedVideoUri = annotatedFile.toURI().toString(),
+                annotatedFinalUri = annotatedFile.toURI().toString(),
+                bestPlayableUri = annotatedFile.toURI().toString(),
+            )
+
+            val readySelection = selectReplayAsset(readySession)
+            assertEquals("Annotated replay", readySelection.label)
+            assertEquals(annotatedFile.toURI().toString(), readySelection.uri)
+        } finally {
+            rawFile.delete()
+            annotatedFile.delete()
+        }
+    }
+
 }

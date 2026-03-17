@@ -65,6 +65,27 @@ class SessionDiagnosticsTest {
         assertTrue(summary.contains("REPLAY_SELECTION_FELL_BACK_TO_RAW") || summary.contains("fell back to raw"))
     }
 
+
+    @Test
+    fun structuredProgressEventWithReasonDoesNotBecomeFinalizeFailure() {
+        val sessionId = 99005L
+        SessionDiagnostics.clearSession(sessionId)
+
+        SessionDiagnostics.logStructured(
+            event = "replay_source_select_temp_raw_while_processing",
+            sessionId = sessionId,
+            drillType = DrillType.WALL_HANDSTAND,
+            rawUri = "file:///raw.mp4",
+            annotatedUri = null,
+            overlayFrameCount = 93,
+            failureReason = "annotatedExportStatus=PROCESSING",
+        )
+
+        val event = SessionDiagnostics.eventsForSession(sessionId).single()
+        assertEquals(SessionDiagnostics.Stage.REPLAY_SOURCE_SELECT, event.stage)
+        assertEquals(SessionDiagnostics.Status.PROGRESS, event.status)
+    }
+
     @Test
     fun rootCauseSummaryExposesNullAnnotatedUriWhenReady() {
         val sessionId = 99004L
