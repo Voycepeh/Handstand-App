@@ -59,6 +59,7 @@ import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.SessionDiagnostics
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -163,7 +164,7 @@ class DefaultUploadVideoAnalysisRunner(
             metrics = mapOf("sourceUri" to uri.toString(), "workflow" to "upload"),
         )
         var persistedRawUri: String? = null
-        var sessionId = -1L
+        var currentStage = UploadStage.IMPORTING_RAW_VIDEO
 
         fun log(message: String) {
             val line = "${System.currentTimeMillis()} | session=$sessionId | stage=${currentStage.name} | $message"
@@ -182,6 +183,7 @@ class DefaultUploadVideoAnalysisRunner(
             persistedRawUri = repository.saveRawVideoBlob(sessionId, uri.toString())
                 ?: error("Unable to import selected video")
             repository.updateRawPersistStatus(sessionId, RawPersistStatus.SUCCEEDED)
+            onProgress(UploadProgress(UploadStage.RAW_IMPORT_COMPLETE, 0.15f, detail = "Raw video imported"))
             SessionDiagnostics.record(
                 sessionId = sessionId,
                 stage = SessionDiagnostics.Stage.RAW_PERSIST,
@@ -191,10 +193,13 @@ class DefaultUploadVideoAnalysisRunner(
             )
 
             val profile = ExistingDrillToProfileAdapter().fromDrill(drillType)
+            currentStage = UploadStage.PREPARING_ANALYSIS
+            val prepareStart = System.currentTimeMillis()
             val prepareDurationMs = System.currentTimeMillis() - prepareStart
             val frameSource = MlKitVideoPoseFrameSource(context.applicationContext, sampleFps = preset.analysisFps)
             val analyzer = UploadedVideoAnalyzer(frameSource)
-            onProgress(UploadProgress(UploadStage.ANALYZING, 0.25f))
+            currentStage = UploadStage.ANALYZING_VIDEO
+            onProgress(UploadProgress(currentStage, 0.25f))
             val analysisStart = System.currentTimeMillis()
             val analysis = analyzer.analyze(Uri.parse(persistedRawUri), profile)
             val analysisDurationMs = System.currentTimeMillis() - analysisStart
@@ -283,7 +288,7 @@ class DefaultUploadVideoAnalysisRunner(
                 elapsedMs = System.currentTimeMillis() - startedAt,
             )
 
-            onProgress(UploadProgress(UploadStage.RENDERING, 0.7f))
+            onProgress(UploadProgress(UploadStage.RENDERING_OVERLAY, 0.7f))
             SessionDiagnostics.record(
                 sessionId = sessionId,
                 stage = SessionDiagnostics.Stage.ANNOTATED_EXPORT_START,
@@ -332,6 +337,7 @@ class DefaultUploadVideoAnalysisRunner(
 
             val now = System.currentTimeMillis()
             val replayUri = export.persistedUri ?: persistedRawUri
+            val isAnnotatedReady = !export.persistedUri.isNullOrBlank()
             if (!export.persistedUri.isNullOrBlank()) {
                 SessionDiagnostics.record(
                     sessionId = sessionId,
