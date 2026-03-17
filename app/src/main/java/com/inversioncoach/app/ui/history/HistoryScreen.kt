@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.model.UserSettings
+import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.storage.ServiceLocator
@@ -154,19 +155,33 @@ internal fun historyCardDurationText(session: com.inversioncoach.app.model.Sessi
 private enum class HistorySort { RECENCY, STORAGE_SIZE, SESSION_DURATION }
 
 internal fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): String = when {
-    session.rawPersistStatus == RawPersistStatus.FAILED -> "Raw import failed"
-    session.rawPersistStatus == RawPersistStatus.PROCESSING -> "Importing raw replay"
-    session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> "Annotated replay ready"
-    session.rawPersistStatus == RawPersistStatus.SUCCEEDED &&
-        session.annotatedExportStatus in setOf(AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) -> "Raw replay ready • Annotated replay processing"
-    session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> "Raw replay ready • Annotated replay failed"
+    session.rawPersistStatus == RawPersistStatus.FAILED -> "Failed"
+    session.rawPersistStatus == RawPersistStatus.PROCESSING -> "Copying raw video"
+    session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> "Ready"
+    session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> "Failed"
+    session.annotatedExportStatus in setOf(AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) -> {
+        val stageLabel = when (session.annotatedExportStage) {
+            AnnotatedExportStage.QUEUED -> "Queued"
+            AnnotatedExportStage.PREPARING -> "Preparing"
+            AnnotatedExportStage.LOADING_OVERLAYS -> "Building overlay timeline"
+            AnnotatedExportStage.DECODING_SOURCE -> "Analyzing frames"
+            AnnotatedExportStage.RENDERING -> "Building overlay timeline"
+            AnnotatedExportStage.ENCODING -> "Exporting annotated video"
+            AnnotatedExportStage.VERIFYING -> "Verifying output"
+            AnnotatedExportStage.COMPLETED -> "Completed"
+            AnnotatedExportStage.FAILED -> "Failed"
+        }
+        "${stageLabel} ${session.annotatedExportPercent}%"
+    }
     session.rawPersistStatus == RawPersistStatus.SUCCEEDED -> "Raw replay ready"
     else -> "Replay unavailable"
 }
 
 internal fun uploadProgress(session: com.inversioncoach.app.model.SessionRecord): Float = when {
     session.rawPersistStatus == RawPersistStatus.FAILED -> 1f
-    session.rawPersistStatus == RawPersistStatus.PROCESSING -> 0.25f
+    session.rawPersistStatus == RawPersistStatus.PROCESSING -> 0.2f
+    session.annotatedExportStatus in setOf(AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) ->
+        (session.annotatedExportPercent.coerceIn(0, 100) / 100f).coerceAtLeast(0.2f)
     session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> 1f
     session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> 1f
     session.rawPersistStatus == RawPersistStatus.SUCCEEDED -> 0.7f
