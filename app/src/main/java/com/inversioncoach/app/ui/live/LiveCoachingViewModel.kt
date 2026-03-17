@@ -911,9 +911,11 @@ class LiveCoachingViewModel(
     private fun setAnnotatedExportState(status: AnnotatedExportStatus, failureReason: String?) {
         annotatedExportStatus = status
         annotatedExportFailureReason = when (status) {
+            AnnotatedExportStatus.VALIDATING_INPUT,
             AnnotatedExportStatus.PROCESSING,
             AnnotatedExportStatus.PROCESSING_SLOW,
             AnnotatedExportStatus.ANNOTATED_READY,
+            AnnotatedExportStatus.SKIPPED,
             AnnotatedExportStatus.NOT_STARTED -> null
             AnnotatedExportStatus.ANNOTATED_FAILED -> failureReason
         }
