@@ -4,7 +4,6 @@ import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.overlay.DrillCameraSide
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 class OverlayTimelineResolverTest {
@@ -24,12 +23,11 @@ class OverlayTimelineResolverTest {
     }
 
     @Test
-    fun returnsNullWhenNearestSampleTooFar() {
-        val resolver = OverlayTimelineResolver(
-            listOf(frame(0L, x = 0f)),
-            maxSampleDeltaMs = 10L,
-        )
-        assertNull(resolver.overlayAt(100L))
+    fun holdsLastSampleWhenTimelineIsSparse() {
+        val resolver = OverlayTimelineResolver(listOf(frame(0L, x = 0f)))
+        val resolved = resolver.overlayAt(100L)
+        assertNotNull(resolved)
+        assertEquals(0f, resolved!!.smoothedLandmarks.first().x, 0.01f)
     }
 
     private fun frame(ts: Long, x: Float) = AnnotatedOverlayFrame(

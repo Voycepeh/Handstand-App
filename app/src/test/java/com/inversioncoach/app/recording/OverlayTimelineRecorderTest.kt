@@ -15,11 +15,15 @@ class OverlayTimelineRecorderTest {
 
         val snapshot = recorder.snapshot()
         assertEquals(2, snapshot.frames.size)
+        assertEquals(0L, snapshot.frames.first().relativeTimestampMs)
+        assertEquals(120L, snapshot.frames.last().relativeTimestampMs)
         assertEquals(1_000L, snapshot.frames.first().timestampMs)
-        assertEquals(1_120L, snapshot.frames.last().timestampMs)
     }
 
     private fun frame(ts: Long) = OverlayTimelineFrame(
+        sessionId = 7L,
+        relativeTimestampMs = ts - 1_000L,
+        absoluteVideoPtsUs = (ts - 1_000L) * 1_000L,
         timestampMs = ts,
         landmarks = emptyList(),
         smoothedLandmarks = emptyList(),

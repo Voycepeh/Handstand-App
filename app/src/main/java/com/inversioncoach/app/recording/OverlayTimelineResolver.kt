@@ -1,11 +1,9 @@
 package com.inversioncoach.app.recording
 
 import com.inversioncoach.app.model.JointPoint
-import kotlin.math.abs
 
 class OverlayTimelineResolver(
     frames: List<AnnotatedOverlayFrame>,
-    private val maxSampleDeltaMs: Long = MAX_SAMPLE_DELTA_MS,
 ) {
     private val samples = frames.sortedBy { it.timestampMs }
     private var lowerIndex = 0
@@ -20,13 +18,7 @@ class OverlayTimelineResolver(
         }
         val previous = samples[lowerIndex]
         val next = samples.getOrNull(lowerIndex + 1)
-        val nearest = when {
-            next == null -> previous
-            abs(previous.timestampMs - targetTimestampMs) <= abs(next.timestampMs - targetTimestampMs) -> previous
-            else -> next
-        }
-        if (abs(nearest.timestampMs - targetTimestampMs) > maxSampleDeltaMs) return null
-        if (next == null || previous.timestampMs == next.timestampMs) return nearest
+        if (next == null || previous.timestampMs == next.timestampMs) return previous
         if (targetTimestampMs <= previous.timestampMs) return previous
         if (targetTimestampMs >= next.timestampMs) return next
         val span = (next.timestampMs - previous.timestampMs).toFloat().coerceAtLeast(1f)
@@ -84,7 +76,4 @@ class OverlayTimelineResolver(
 
     private fun lerp(a: Float, b: Float, t: Float): Float = a + ((b - a) * t)
 
-    companion object {
-        const val MAX_SAMPLE_DELTA_MS = 200L
-    }
 }

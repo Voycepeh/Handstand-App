@@ -9,6 +9,9 @@ import com.inversioncoach.app.overlay.FreestyleViewMode
  * Lightweight timeline payload used to reconstruct overlays for post-session video rendering.
  */
 data class OverlayTimelineFrame(
+    val sessionId: Long,
+    val relativeTimestampMs: Long,
+    val absoluteVideoPtsUs: Long? = null,
     val timestampMs: Long,
     val landmarks: List<JointPoint>,
     val skeletonLines: List<Pair<String, String>>,
@@ -20,6 +23,9 @@ data class OverlayTimelineFrame(
     val drillMetadata: OverlayDrillMetadata,
     val smoothedLandmarks: List<JointPoint> = landmarks,
     val confidence: Float = 0f,
+    val captureWidth: Int? = null,
+    val captureHeight: Int? = null,
+    val sourceFrameIndex: Long? = null,
 )
 
 data class OverlayDrillMetadata(
@@ -39,9 +45,13 @@ data class OverlayTimeline(
     val frames: List<OverlayTimelineFrame>,
 )
 
-fun AnnotatedOverlayFrame.toTimelineFrame(): OverlayTimelineFrame {
+fun AnnotatedOverlayFrame.toTimelineFrame(sessionId: Long, sessionStartedAtMs: Long): OverlayTimelineFrame {
     val byName = smoothedLandmarks.ifEmpty { landmarks }.associateBy { it.name }
+    val relativeTimestampMs = (timestampMs - sessionStartedAtMs).coerceAtLeast(0L)
     return OverlayTimelineFrame(
+        sessionId = sessionId,
+        relativeTimestampMs = relativeTimestampMs,
+        absoluteVideoPtsUs = relativeTimestampMs * 1_000L,
         timestampMs = timestampMs,
         landmarks = landmarks,
         smoothedLandmarks = smoothedLandmarks,
@@ -65,7 +75,7 @@ fun AnnotatedOverlayFrame.toTimelineFrame(): OverlayTimelineFrame {
 }
 
 fun OverlayTimelineFrame.toAnnotatedOverlayFrame(): AnnotatedOverlayFrame = AnnotatedOverlayFrame(
-    timestampMs = timestampMs,
+    timestampMs = relativeTimestampMs,
     landmarks = landmarks,
     smoothedLandmarks = smoothedLandmarks,
     confidence = confidence,

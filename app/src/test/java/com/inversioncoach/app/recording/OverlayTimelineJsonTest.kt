@@ -13,6 +13,9 @@ class OverlayTimelineJsonTest {
             sampleIntervalMs = 80L,
             frames = listOf(
                 OverlayTimelineFrame(
+                    sessionId = 77L,
+                    relativeTimestampMs = 20L,
+                    absoluteVideoPtsUs = 20_000L,
                     timestampMs = 120L,
                     landmarks = emptyList(),
                     smoothedLandmarks = emptyList(),
@@ -37,6 +40,8 @@ class OverlayTimelineJsonTest {
 
         val decoded = OverlayTimelineJson.decode(OverlayTimelineJson.encode(timeline))
         assertEquals(1, decoded.frames.size)
+        assertEquals(77L, decoded.frames.first().sessionId)
+        assertEquals(20L, decoded.frames.first().relativeTimestampMs)
         assertEquals(120L, decoded.frames.first().timestampMs)
         assertEquals(12.5f, decoded.frames.first().alignmentAngles["hip"])
     }

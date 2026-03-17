@@ -180,7 +180,7 @@ class AnnotatedExportPipelineTest {
     private fun testTimeline(frames: List<AnnotatedOverlayFrame>) = OverlayTimeline(
         startedAtMs = 0L,
         sampleIntervalMs = 80L,
-        frames = frames.map { it.toTimelineFrame() },
+        frames = frames.map { it.toTimelineFrame(sessionId = 7L, sessionStartedAtMs = 0L) },
     )
 
     private fun testFrame(timestampMs: Long) = AnnotatedOverlayFrame(

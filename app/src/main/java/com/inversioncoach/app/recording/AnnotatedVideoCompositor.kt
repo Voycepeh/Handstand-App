@@ -66,7 +66,6 @@ class AnnotatedVideoCompositor(
             val workerCount = computeWorkerCount()
             val queueCapacity = (workerCount * 3).coerceAtLeast(6)
             val totalFrames = ((durationMs / 1000f) * preset.outputFps).roundToInt().coerceAtLeast(1)
-            val timestampStart = overlayFrames.first().timestampMs
             val resolver = OverlayTimelineResolver(overlayFrames)
 
             Log.d(
@@ -154,7 +153,7 @@ class AnnotatedVideoCompositor(
                     async {
                         for (decoded in decodeChannel) {
                             val resolveStart = System.nanoTime()
-                            val overlay = resolver.overlayAt(timestampStart + (decoded.frameTimeUs / 1000L))
+                            val overlay = resolver.overlayAt(decoded.frameTimeUs / 1000L)
                             resolveElapsedMs.addAndGet(((System.nanoTime() - resolveStart) / 1_000_000L))
                             val instructionStart = System.nanoTime()
                             val instruction = buildRenderInstruction(overlay, drillType, drillCameraSide)

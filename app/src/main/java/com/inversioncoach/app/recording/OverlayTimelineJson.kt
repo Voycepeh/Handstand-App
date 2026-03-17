@@ -15,7 +15,13 @@ object OverlayTimelineJson {
         put("frames", JSONArray().apply {
             timeline.frames.forEach { frame ->
                 put(JSONObject().apply {
+                    put("sessionId", frame.sessionId)
+                    put("relativeTimestampMs", frame.relativeTimestampMs)
+                    put("absoluteVideoPtsUs", frame.absoluteVideoPtsUs)
                     put("timestampMs", frame.timestampMs)
+                    put("captureWidth", frame.captureWidth)
+                    put("captureHeight", frame.captureHeight)
+                    put("sourceFrameIndex", frame.sourceFrameIndex)
                     put("confidence", frame.confidence)
                     put("landmarks", encodeJoints(frame.landmarks))
                     put("smoothedLandmarks", encodeJoints(frame.smoothedLandmarks))
@@ -42,9 +48,16 @@ object OverlayTimelineJson {
             for (i in 0 until frames.length()) {
                 val frame = frames.getJSONObject(i)
                 val metadata = frame.optJSONObject("drillMetadata") ?: JSONObject()
+                val relativeTimestampMs = frame.optLong("relativeTimestampMs", frame.optLong("timestampMs").coerceAtLeast(0L))
                 add(
                     OverlayTimelineFrame(
-                        timestampMs = frame.optLong("timestampMs"),
+                        sessionId = frame.optLong("sessionId", 0L),
+                        relativeTimestampMs = relativeTimestampMs,
+                        absoluteVideoPtsUs = if (frame.has("absoluteVideoPtsUs") && !frame.isNull("absoluteVideoPtsUs")) frame.optLong("absoluteVideoPtsUs") else null,
+                        timestampMs = frame.optLong("timestampMs", obj.optLong("startedAtMs") + relativeTimestampMs),
+                        captureWidth = if (frame.has("captureWidth") && !frame.isNull("captureWidth")) frame.optInt("captureWidth") else null,
+                        captureHeight = if (frame.has("captureHeight") && !frame.isNull("captureHeight")) frame.optInt("captureHeight") else null,
+                        sourceFrameIndex = if (frame.has("sourceFrameIndex") && !frame.isNull("sourceFrameIndex")) frame.optLong("sourceFrameIndex") else null,
                         confidence = frame.optDouble("confidence", 0.0).toFloat(),
                         landmarks = decodeJoints(frame.optJSONArray("landmarks")),
                         smoothedLandmarks = decodeJoints(frame.optJSONArray("smoothedLandmarks")),

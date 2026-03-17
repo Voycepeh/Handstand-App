@@ -199,8 +199,15 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 Text("replay source selected: ${if (replaySelection.label == "Annotated replay") "annotated" else if (replaySelection.label == "Raw replay") "raw" else "none"}")
                 Text("rawPersistStatus: ${session?.rawPersistStatus}")
                 Text("rawVideoUri: ${session?.rawVideoUri.orEmpty()}")
+                Text("annotatedExportStatus: ${session?.annotatedExportStatus}")
+                Text("annotatedExportFailureReason: ${session?.annotatedExportFailureReason.orEmpty()}")
                 Text("annotatedVideoUri: ${session?.annotatedVideoUri.orEmpty()}")
                 Text("overlay frame count: ${session?.overlayFrameCount ?: 0}")
+                Text("overlayTimelineUri: ${session?.overlayTimelineUri.orEmpty()}")
+                Text("export started at: ${session?.annotatedExportLastUpdatedAt ?: 0L}")
+                Text("export completed at: ${session?.annotatedExportedAtMs ?: 0L}")
+                Text("raw duration ms: ${mediaDurationMs(session?.rawVideoUri)}")
+                Text("annotated duration ms: ${mediaDurationMs(session?.annotatedVideoUri)}")
             }
             Button(
                 onClick = {
@@ -246,6 +253,21 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             }
             Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Done") }
         }
+    }
+}
+
+
+private fun mediaDurationMs(uri: String?): Long {
+    val target = uri?.takeIf(::mediaAssetExists) ?: return 0L
+    val retriever = android.media.MediaMetadataRetriever()
+    return try {
+        val path = android.net.Uri.parse(target).path ?: return 0L
+        retriever.setDataSource(path)
+        retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+    } catch (_: Throwable) {
+        0L
+    } finally {
+        runCatching { retriever.release() }
     }
 }
 

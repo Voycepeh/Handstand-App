@@ -250,7 +250,7 @@ class DefaultUploadVideoAnalysisRunner(
             val overlayTimeline = OverlayTimeline(
                 startedAtMs = 0L,
                 sampleIntervalMs = 80L,
-                frames = overlayFrames.map { it.toTimelineFrame() },
+                frames = overlayFrames.map { it.toTimelineFrame(sessionId = sessionId, sessionStartedAtMs = 0L) },
             )
 
             repository.updateAnnotatedExportProgress(

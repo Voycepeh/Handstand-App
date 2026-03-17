@@ -181,8 +181,6 @@ class LiveCoachingViewModel(
             failureReason = "analyzer=${metricsEngine::class.simpleName};movementPattern=$movementPattern",
         )
         startSession()
-        overlayTimelineRecorder = OverlayTimelineRecorder(startedAtMs = sessionStartedAtMs, sampleIntervalMs = OVERLAY_TIMELINE_SAMPLE_INTERVAL_MS)
-        SessionDiagnostics.log("overlay_timeline_recorder_start sampleIntervalMs=$OVERLAY_TIMELINE_SAMPLE_INTERVAL_MS")
     }
 
     fun onCameraPermissionChanged(granted: Boolean) {
@@ -218,53 +216,9 @@ class LiveCoachingViewModel(
             )
             return
         }
-        rawVideoPersistJob = viewModelScope.launch {
-            val persisted = repository.saveRawVideoBlob(activeSessionId, finalizedUri)
-            if (persisted.isNullOrBlank()) {
-                setRawPersistState(RawPersistStatus.FAILED, AnnotatedExportFailureReason.RAW_SAVE_FAILED.name)
-                SessionDiagnostics.logStructured(
-                    event = "live_raw_save_failed",
-                    sessionId = activeSessionId,
-                    drillType = drillType,
-                    rawUri = finalizedUri,
-                    annotatedUri = null,
-                    overlayFrameCount = overlayFrames.size,
-                    failureReason = "save_raw_blob_failed",
-                )
-                return@launch
-            }
-            rawVideoUri = persisted
-            rawFinalUri = persisted
-            rawMasterUri = persisted
-            bestPlayableUri = persisted
-            setRawPersistState(RawPersistStatus.SUCCEEDED, null)
-            setAnnotatedExportState(AnnotatedExportStatus.NOT_STARTED, null)
-            repository.updateMediaPipelineState(activeSessionId) { session ->
-                session.copy(
-                    rawVideoUri = persisted,
-                    rawFinalUri = persisted,
-                    rawMasterUri = persisted,
-                    bestPlayableUri = persisted,
-                    annotatedVideoUri = null,
-                    annotatedFinalUri = null,
-                    annotatedMasterUri = null,
-                    annotatedExportStatus = AnnotatedExportStatus.NOT_STARTED,
-                    annotatedExportFailureReason = null,
-                    annotatedExportFailureDetail = null,
-                    annotatedExportPercent = 0,
-                    annotatedExportEtaSeconds = null,
-                    overlayFrameCount = overlayFrames.size,
-                )
-            }
-            SessionDiagnostics.logStructured(
-                event = "live_raw_saved",
-                sessionId = activeSessionId,
-                drillType = drillType,
-                rawUri = persisted,
-                annotatedUri = null,
-                overlayFrameCount = overlayFrames.size,
-                failureReason = "raw_recording_persisted",
-            )
+        annotatedExportJob?.cancel()
+        annotatedExportJob = viewModelScope.launch {
+            runFinalizationPipeline(activeSessionId, finalizedUri)
         }
     }
 
@@ -305,7 +259,13 @@ class LiveCoachingViewModel(
                 freestyleViewMode = freestyleViewMode,
             )
             overlayFrames += overlayFrame
-            overlayTimelineRecorder?.record(overlayFrame.toTimelineFrame())
+            if (overlayTimelineRecorder == null && sessionStartedAtMs > 0L) {
+                overlayTimelineRecorder = OverlayTimelineRecorder(startedAtMs = sessionStartedAtMs, sampleIntervalMs = OVERLAY_TIMELINE_SAMPLE_INTERVAL_MS)
+                SessionDiagnostics.log("overlay_timeline_recorder_start sampleIntervalMs=$OVERLAY_TIMELINE_SAMPLE_INTERVAL_MS")
+            }
+            sessionId?.let { activeSessionId ->
+                overlayTimelineRecorder?.record(overlayFrame.toTimelineFrame(activeSessionId, sessionStartedAtMs))
+            }
             lastOverlayCaptureTsMs = smoothed.timestampMs
             if (overlayFrames.size % OVERLAY_FRAME_LOG_INTERVAL == 0) {
                 SessionDiagnostics.logStructured(
@@ -791,6 +751,8 @@ class LiveCoachingViewModel(
                     topImprovementFocus = "pending",
                 ),
             )
+            overlayTimelineRecorder = OverlayTimelineRecorder(startedAtMs = now, sampleIntervalMs = OVERLAY_TIMELINE_SAMPLE_INTERVAL_MS)
+            SessionDiagnostics.log("overlay_timeline_recorder_start sampleIntervalMs=$OVERLAY_TIMELINE_SAMPLE_INTERVAL_MS;startedAtMs=$now")
             sessionId = newSessionId
             AnnotatedExportJobTracker.markFinished(newSessionId)
             pendingStopCallback?.let { callback ->
