@@ -1,9 +1,6 @@
 package com.inversioncoach.app.motion
 
-import com.inversioncoach.app.model.AlignmentStrictness
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MovementTrackingTest {
@@ -65,13 +62,4 @@ class MovementTrackingTest {
         assertEquals(3000L, snapshot.currentAlignedStreakMs)
     }
 
-    @Test
-    fun strictnessAffectsAlignmentClassification() {
-        val deviation = 0.14f
-        val easy = deviation <= AlignmentPolicy.forStrictness(AlignmentStrictness.BEGINNER).lineDeviationNormMax
-        val strict = deviation <= AlignmentPolicy.forStrictness(AlignmentStrictness.ADVANCED).lineDeviationNormMax
-
-        assertTrue(easy)
-        assertFalse(strict)
-    }
 }

@@ -12,7 +12,7 @@ Both flows persist sessions and converge on a shared **Results / Replay / Export
 
 ### Prerequisites
 
-- **JDK 17** (required). The project currently fails on JDK 25 because Gradle/Kotlin script parsing is not compatible in this repo setup.
+- **JDK 17** (required).
 - Android SDK with:
   - `compileSdk 34`
   - `targetSdk 34`
