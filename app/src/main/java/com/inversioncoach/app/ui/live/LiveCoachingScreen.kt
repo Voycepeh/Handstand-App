@@ -10,15 +10,19 @@ import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.camera.view.PreviewView.ScaleType
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
@@ -65,6 +69,7 @@ import com.inversioncoach.app.ui.common.formatSessionDuration
 import java.util.concurrent.Executors
 
 private const val TAG = "LiveCoachingScreen"
+private val overlayPanelShape = RoundedCornerShape(14.dp)
 
 @Composable
 fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop: (SessionStopResult) -> Unit) {
@@ -246,92 +251,206 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             }
         }
 
+        TopHud(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            title = "${freestyleViewLabel ?: "Side View"} • ${drillType.displayName}",
+            sessionDurationMs = sessionDurationMs,
+            trackingLabel = if (uiState.cameraReady) "Tracking ${uiState.smoothedAlignmentScore}%" else "Calibrating",
+            phase = uiState.currentPhase.uppercase(),
+            warningMessage = when {
+                !uiState.cameraPermissionGranted -> "Camera permission required for live coaching."
+                uiState.cameraPermissionGranted && !uiState.cameraReady -> "Starting camera..."
+                else -> uiState.warningMessage
+            },
+            errorMessage = uiState.errorMessage,
+        )
+
         Column(
-            modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter)
-                .background(Color.Black.copy(alpha = 0.58f)).padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("${freestyleViewLabel ?: "Side View"} • ${drillType.displayName}", color = Color.White, fontSize = 18.sp)
-                TextButton(onClick = { showDetailedStats.value = !showDetailedStats.value }) {
-                    Text(if (showDetailedStats.value) "Less" else "More", color = Color.White, fontSize = 12.sp)
-                }
-            }
-            Text("Time ${formatSessionDuration(sessionDurationMs)}", color = Color.White, fontSize = 14.sp)
-            Text("Align ${uiState.smoothedAlignmentScore}% • ${uiState.currentPhase.uppercase()}", color = Color.White, fontSize = 14.sp)
-
-            if (uiState.sessionMode != SessionMode.FREESTYLE) {
-                Text("Camera Side: ${options.drillCameraSide.name.lowercase().replaceFirstChar { it.uppercase() }}", color = Color.White, fontSize = 13.sp)
-            }
-
-            if (showDetailedStats.value) {
-                Text("Started: ${formatSessionDateTime(vm.sessionStartTimestampMs)}", color = Color.White, fontSize = 13.sp)
-                if (uiState.sessionMode != SessionMode.FREESTYLE) {
-                    Text("Cue: ${uiState.currentCue.ifBlank { "Awaiting stable frame..." }}", color = Color.White, fontSize = 13.sp)
-                }
-                Text("Confidence: ${(uiState.confidence * 100).toInt()}% • Raw ${uiState.alignmentScore}", color = Color.White, fontSize = 13.sp)
-                if (uiState.sessionMode == SessionMode.FREESTYLE || trackingMode == RepMode.HOLD_BASED) {
-                    Text("Hold ${formatSessionDuration(uiState.totalAlignedDurationMs)} (${(uiState.alignmentRate * 100).toInt()}%)", color = Color.White, fontSize = 13.sp)
-                    Text("Streak ${formatSessionDuration(uiState.currentAlignedStreakMs)} • Best ${formatSessionDuration(uiState.bestAlignedStreakMs)}", color = Color.White, fontSize = 13.sp)
-                    Text("Avg align ${uiState.averageAlignmentScore} • Stability ${uiState.stabilityScore}", color = Color.White, fontSize = 13.sp)
-                } else {
-                    Text("Reps ✅${uiState.acceptedReps} ❌${uiState.rejectedReps} • Raw ${uiState.rawRepCount}", color = Color.White, fontSize = 13.sp)
-                    Text("Rep quality avg ${uiState.averageRepQuality} • Best ${uiState.bestRepScore} • Last ${uiState.lastRepScore}", color = Color.White, fontSize = 13.sp)
-                }
-                if (uiState.sessionMode != SessionMode.FREESTYLE && uiState.activeFault.isNotBlank()) Text("Active fault: ${uiState.activeFault}", color = Color.Yellow, fontSize = 13.sp)
-            }
-            if (!uiState.cameraPermissionGranted) {
-                Text("Camera permission required for live coaching.", color = Color.Yellow, fontSize = 13.sp)
-            }
-            if (uiState.cameraPermissionGranted && !uiState.cameraReady) {
-                Text("Starting camera...", color = Color.Yellow, fontSize = 13.sp)
-            }
-            uiState.warningMessage?.let { Text(it, color = Color.Yellow, fontSize = 13.sp) }
-            uiState.errorMessage?.let { Text(it, color = Color.Red, fontSize = 13.sp) }
             vm.activeSessionId?.let { sid ->
                 val events = SessionDiagnostics.eventsForSession(sid)
                 val last = events.lastOrNull()
-                Text(
-                    "Diag stage: ${last?.stage?.name ?: "SESSION_START"} • ${last?.status?.name ?: "STARTED"}",
-                    color = Color.White,
-                    fontSize = 12.sp,
-                )
-                Text(last?.message ?: "No diagnostics yet", color = Color.White, fontSize = 12.sp)
-                TextButton(onClick = { diagnosticsExpanded.value = !diagnosticsExpanded.value }) {
-                    Text(if (diagnosticsExpanded.value) "Hide technical log" else "Show technical log", color = Color.White, fontSize = 12.sp)
-                }
-                if (diagnosticsExpanded.value) {
-                    val report = SessionDiagnostics.buildReport(session = null, sessionId = sid)
-                    TextButton(onClick = {
+                DiagnosticsPanel(
+                    diagnosticsExpanded = diagnosticsExpanded.value,
+                    onToggleExpanded = { diagnosticsExpanded.value = !diagnosticsExpanded.value },
+                    onToggleDetailedStats = { showDetailedStats.value = !showDetailedStats.value },
+                    showDetailedStats = showDetailedStats.value,
+                    stageLabel = "${last?.stage?.name ?: "SESSION_START"} • ${last?.status?.name ?: "STARTED"}",
+                    eventMessage = last?.message ?: "No diagnostics yet",
+                    startedAt = formatSessionDateTime(vm.sessionStartTimestampMs),
+                    cameraSideLabel = options.drillCameraSide.name.lowercase().replaceFirstChar { it.uppercase() },
+                    cueText = uiState.currentCue.ifBlank { "Awaiting stable frame..." },
+                    confidenceText = "${(uiState.confidence * 100).toInt()}% • Raw ${uiState.alignmentScore}",
+                    holdSummary = "Hold ${formatSessionDuration(uiState.totalAlignedDurationMs)} (${(uiState.alignmentRate * 100).toInt()}%)",
+                    streakSummary = "Streak ${formatSessionDuration(uiState.currentAlignedStreakMs)} • Best ${formatSessionDuration(uiState.bestAlignedStreakMs)}",
+                    holdMetrics = "Avg align ${uiState.averageAlignmentScore} • Stability ${uiState.stabilityScore}",
+                    repsSummary = "Reps ✅${uiState.acceptedReps} ❌${uiState.rejectedReps} • Raw ${uiState.rawRepCount}",
+                    repQualitySummary = "Rep quality avg ${uiState.averageRepQuality} • Best ${uiState.bestRepScore} • Last ${uiState.lastRepScore}",
+                    activeFault = uiState.activeFault,
+                    showHoldBasedMetrics = uiState.sessionMode == SessionMode.FREESTYLE || trackingMode == RepMode.HOLD_BASED,
+                    showDrillSpecificDetails = uiState.sessionMode != SessionMode.FREESTYLE,
+                    onCopyDiagnostics = {
+                        val report = SessionDiagnostics.buildReport(session = null, sessionId = sid)
                         clipboardManager.setText(AnnotatedString(report))
-                    }) { Text("Export diagnostic logs", color = Color.White, fontSize = 12.sp) }
-                    Text(
-                        report,
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        maxLines = 14,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                    )
-                }
+                    },
+                    diagnosticsReport = if (diagnosticsExpanded.value) SessionDiagnostics.buildReport(session = null, sessionId = sid) else null,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                FilledTonalButton(onClick = {
+                    if (uiState.isRecording) {
+                        stopRecordingsAndPersist()
+                        vm.setRecording(false)
+                        vm.stopSession(onStop)
+                    } else {
+                        vm.stopSession(onStop)
+                    }
+                }) { Text("Stop") }
             }
         }
+    }
+}
 
-
-
+@Composable
+private fun TopHud(
+    modifier: Modifier,
+    title: String,
+    sessionDurationMs: Long,
+    trackingLabel: String,
+    phase: String,
+    warningMessage: String?,
+    errorMessage: String?,
+) {
+    Column(
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.45f), overlayPanelShape)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         Row(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
         ) {
-            FilledTonalButton(onClick = {
-                if (uiState.isRecording) {
-                    stopRecordingsAndPersist()
-                    vm.setRecording(false)
-                    vm.stopSession(onStop)
-                } else {
-                    vm.stopSession(onStop)
-                }
-            }) { Text("Stop") }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, color = Color.White, fontSize = 16.sp)
+                Text(formatSessionDuration(sessionDurationMs), color = Color.White, fontSize = 13.sp)
+            }
+            Text(
+                "$trackingLabel • $phase",
+                color = Color.White,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+        }
+        warningMessage?.let { Text(it, color = Color.Yellow, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+        errorMessage?.let { Text(it, color = Color.Red, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+    }
+}
+
+@Composable
+private fun DiagnosticsPanel(
+    diagnosticsExpanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onToggleDetailedStats: () -> Unit,
+    showDetailedStats: Boolean,
+    stageLabel: String,
+    eventMessage: String,
+    startedAt: String,
+    cameraSideLabel: String,
+    cueText: String,
+    confidenceText: String,
+    holdSummary: String,
+    streakSummary: String,
+    holdMetrics: String,
+    repsSummary: String,
+    repQualitySummary: String,
+    activeFault: String,
+    showHoldBasedMetrics: Boolean,
+    showDrillSpecificDetails: Boolean,
+    onCopyDiagnostics: () -> Unit,
+    diagnosticsReport: String?,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.Black.copy(alpha = 0.54f), overlayPanelShape)
+            .clickable { onToggleExpanded() }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Diagnostics • $stageLabel", color = Color.White, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (!diagnosticsExpanded) {
+            Text(
+                eventMessage,
+                color = Color.White,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            return
+        }
+
+        Text("Stage: $stageLabel", color = Color.White, fontSize = 12.sp)
+        Text("Event: $eventMessage", color = Color.White, fontSize = 12.sp)
+        Text("Started: $startedAt", color = Color.White, fontSize = 12.sp)
+        if (showDrillSpecificDetails) {
+            Text("Camera Side: $cameraSideLabel", color = Color.White, fontSize = 12.sp)
+            Text("Cue: $cueText", color = Color.White, fontSize = 12.sp)
+        }
+        Text("Confidence: $confidenceText", color = Color.White, fontSize = 12.sp)
+        if (showHoldBasedMetrics) {
+            Text(holdSummary, color = Color.White, fontSize = 12.sp)
+            Text(streakSummary, color = Color.White, fontSize = 12.sp)
+            Text(holdMetrics, color = Color.White, fontSize = 12.sp)
+        } else {
+            Text(repsSummary, color = Color.White, fontSize = 12.sp)
+            Text(repQualitySummary, color = Color.White, fontSize = 12.sp)
+        }
+        if (showDrillSpecificDetails && activeFault.isNotBlank()) {
+            Text("Active fault: $activeFault", color = Color.Yellow, fontSize = 12.sp)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = onToggleDetailedStats) {
+                Text(if (showDetailedStats) "Hide metrics" else "Show metrics", color = Color.White, fontSize = 12.sp)
+            }
+            TextButton(onClick = onCopyDiagnostics) {
+                Text("Export technical log", color = Color.White, fontSize = 12.sp)
+            }
+            TextButton(onClick = onToggleExpanded) {
+                Text("Collapse", color = Color.White, fontSize = 12.sp)
+            }
+        }
+        if (showDetailedStats) {
+            diagnosticsReport?.let { report ->
+                Text(
+                    report,
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    maxLines = 12,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .verticalScroll(rememberScrollState()),
+                )
+            }
+        } else {
+            Spacer(modifier = Modifier.height(2.dp))
         }
     }
 }
