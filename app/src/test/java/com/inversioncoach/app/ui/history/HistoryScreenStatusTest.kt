@@ -16,10 +16,11 @@ class HistoryScreenStatusTest {
             rawPersistStatus = RawPersistStatus.SUCCEEDED,
             annotatedExportStatus = AnnotatedExportStatus.PROCESSING,
             rawVideoUri = "file:///raw.mp4",
+            bestPlayableUri = "file:///raw.mp4",
         )
 
-        assertEquals("Raw replay ready • Annotated replay processing", videoStatus(session))
-        assertEquals(0.7f, uploadProgress(session))
+        assertEquals("Raw replay ready", videoStatus(session))
+        assertEquals(1f, uploadProgress(session))
     }
 
     @Test
@@ -28,9 +29,10 @@ class HistoryScreenStatusTest {
             rawPersistStatus = RawPersistStatus.SUCCEEDED,
             annotatedExportStatus = AnnotatedExportStatus.ANNOTATED_FAILED,
             rawVideoUri = "file:///raw.mp4",
+            bestPlayableUri = "file:///raw.mp4",
         )
 
-        assertEquals("Raw replay ready • Annotated replay failed", videoStatus(session))
+        assertEquals("Failed", videoStatus(session))
         assertEquals(1f, uploadProgress(session))
     }
 

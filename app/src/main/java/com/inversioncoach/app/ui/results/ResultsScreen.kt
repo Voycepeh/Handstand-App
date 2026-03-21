@@ -54,6 +54,7 @@ import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.mediaAssetExists
 import com.inversioncoach.app.ui.live.selectReplayAsset
 import com.inversioncoach.app.ui.live.SessionDiagnostics
+import com.inversioncoach.app.ui.live.ReplayAssetSelection
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -63,8 +64,9 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val repository = remember { ServiceLocator.repository(context) }
     val session by repository.observeSession(sessionId).collectAsState(initial = null)
     val issueTimeline by repository.observeIssueTimeline(sessionId).collectAsState(initial = emptyList())
-    val replaySelection = remember(session) { selectReplayAsset(session) }
-    val rawUri = session?.rawVideoUri?.takeIf(::mediaAssetExists)
+    var replaySelection by remember(sessionId) { mutableStateOf(ReplayAssetSelection(uri = null, label = "Replay unavailable")) }
+    var replaySelectionKey by remember(sessionId) { mutableStateOf<String?>(null) }
+    val rawUri = session?.takeIf(::isRawReplayPlayable)?.rawVideoUri?.takeIf(::mediaAssetExists)
     val hasReplay = replaySelection.uri != null
     val showRawVideoButton = shouldShowRawVideoButton(
         replayUri = replaySelection.uri,
@@ -90,7 +92,19 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     }
 
 
-    LaunchedEffect(sessionId, replaySelection.uri, replaySelection.label) {
+    LaunchedEffect(session) {
+        val activeSession = session ?: return@LaunchedEffect
+        val candidate = selectReplayAsset(activeSession)
+        val stable = isReplayStateStable(activeSession)
+        val candidateKey = "${candidate.label}|${candidate.uri.orEmpty()}"
+        if (replaySelectionKey == null || candidate.uri != replaySelection.uri || stable) {
+            replaySelection = candidate
+            replaySelectionKey = candidateKey
+        }
+    }
+
+    LaunchedEffect(sessionId, replaySelection.uri, replaySelection.label, replaySelectionKey) {
+        if (replaySelectionKey == null) return@LaunchedEffect
         SessionDiagnostics.logStructured(
             event = "results_source_selection",
             sessionId = sessionId,
@@ -156,7 +170,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 if (isProcessing || activeSession.annotatedExportStatus in setOf(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportStatus.SKIPPED)) {
                     val isFailed = activeSession.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED
                     val isSkipped = activeSession.annotatedExportStatus == AnnotatedExportStatus.SKIPPED
-                    val rawFallbackAvailable = !activeSession.rawFinalUri.isNullOrBlank() || !activeSession.rawVideoUri.isNullOrBlank()
+                    val rawFallbackAvailable = isRawReplayPlayable(activeSession)
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
@@ -191,6 +205,12 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                                 }
                             }
                             Text("Raw: ${activeSession.rawPersistStatus}")
+                            if (activeSession.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT")) {
+                                Text(
+                                    "Raw replay file was copied but is not decodable (${activeSession.rawPersistFailureReason}).",
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
                             Text("Annotated: ${activeSession.annotatedExportStatus}")
                             if (!activeSession.annotatedExportFailureReason.isNullOrBlank()) {
                                 Text("Failure: ${activeSession.annotatedExportFailureReason}", color = MaterialTheme.colorScheme.error)
@@ -282,14 +302,20 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             )
 
             Button(
-                onClick = { openVideo(context, replaySelection.uri) },
+                onClick = { openVideo(context, replaySelection.uri, sessionId) },
                 enabled = hasReplay,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(replaySelection.label)
             }
             if (!hasReplay) {
-                Text("No replay asset is available for this session.")
+                val rawFailure = session?.rawPersistFailureReason
+                val message = if (rawFailure in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT")) {
+                    "Replay unavailable: raw file exists but cannot be decoded ($rawFailure)."
+                } else {
+                    "No replay asset is available for this session."
+                }
+                Text(message)
             }
             Text(
                 replayAvailabilityBadge(replaySelection.label),
@@ -490,9 +516,28 @@ private fun formatElapsed(startedAtMs: Long?, timestampMs: Long?): String {
 }
 
 private fun openVideo(context: android.content.Context, videoUri: String?) {
+    openVideo(context, videoUri, null)
+}
+
+private fun openVideo(context: android.content.Context, videoUri: String?, sessionId: Long?) {
     if (videoUri.isNullOrBlank()) return
+    SessionDiagnostics.record(
+        sessionId = sessionId,
+        stage = SessionDiagnostics.Stage.REPLAY_SOURCE_SELECT,
+        status = SessionDiagnostics.Status.PROGRESS,
+        message = "player preparing",
+        metrics = mapOf("uri" to videoUri),
+    )
     val resolvedUri = toSharableVideoUri(context, Uri.parse(videoUri)) ?: run {
         Toast.makeText(context, "Unable to open video file.", Toast.LENGTH_SHORT).show()
+        SessionDiagnostics.record(
+            sessionId = sessionId,
+            stage = SessionDiagnostics.Stage.REPLAY_SOURCE_SELECT,
+            status = SessionDiagnostics.Status.FAILED,
+            message = "onPlayerError: unresolved sharable URI",
+            errorCode = "PLAYER_URI_RESOLUTION_FAILED",
+            metrics = mapOf("uri" to videoUri),
+        )
         return
     }
     val mimeType = context.contentResolver.getType(resolvedUri) ?: "video/*"
@@ -504,13 +549,50 @@ private fun openVideo(context: android.content.Context, videoUri: String?) {
         val chooser = Intent.createChooser(intent, "Open video")
         chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         context.startActivity(chooser)
+        SessionDiagnostics.record(
+            sessionId = sessionId,
+            stage = SessionDiagnostics.Stage.REPLAY_SOURCE_SELECT,
+            status = SessionDiagnostics.Status.SUCCEEDED,
+            message = "player ready",
+            metrics = mapOf("uri" to videoUri),
+        )
     }.onFailure { error ->
         if (error is ActivityNotFoundException) {
             Toast.makeText(context, "No video player available to open this file.", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, "Unable to open video file.", Toast.LENGTH_SHORT).show()
         }
+        SessionDiagnostics.record(
+            sessionId = sessionId,
+            stage = SessionDiagnostics.Stage.REPLAY_SOURCE_SELECT,
+            status = SessionDiagnostics.Status.FAILED,
+            message = "onPlayerError: ${error::class.java.name}",
+            errorCode = error.message,
+            throwable = error,
+            metrics = mapOf("uri" to videoUri),
+        )
     }
+}
+
+private fun isReplayStateStable(session: com.inversioncoach.app.model.SessionRecord): Boolean {
+    val annotatedTerminal = session.annotatedExportStatus in setOf(
+        AnnotatedExportStatus.ANNOTATED_READY,
+        AnnotatedExportStatus.ANNOTATED_FAILED,
+        AnnotatedExportStatus.SKIPPED,
+        AnnotatedExportStatus.NOT_STARTED,
+    )
+    val rawTerminal = session.rawPersistStatus != com.inversioncoach.app.model.RawPersistStatus.PROCESSING
+    return annotatedTerminal && rawTerminal
+}
+
+private fun isRawReplayPlayable(session: com.inversioncoach.app.model.SessionRecord): Boolean {
+    val invalidReason = session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT")
+    if (invalidReason) return false
+    val rawUri = session.rawFinalUri ?: session.rawVideoUri ?: session.rawMasterUri
+    if (rawUri.isNullOrBlank() || !mediaAssetExists(rawUri)) return false
+    val bestPlayableUri = session.bestPlayableUri
+    val bestPlayableReadable = mediaAssetExists(bestPlayableUri)
+    return bestPlayableUri.isNullOrBlank() || bestPlayableUri == rawUri || !bestPlayableReadable
 }
 
 private fun toSharableVideoUri(context: android.content.Context, sourceUri: Uri): Uri? {

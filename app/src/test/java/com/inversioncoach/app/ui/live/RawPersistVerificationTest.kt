@@ -27,6 +27,7 @@ class RawPersistVerificationTest {
 
             assertTrue(result.isPersisted)
             assertEquals(rawFile.toURI().toString(), result.persistedUri)
+            assertFalse(result.isReplayPlayable)
         } finally {
             rawFile.delete()
         }
@@ -43,5 +44,6 @@ class RawPersistVerificationTest {
 
         assertFalse(result.isPersisted)
         assertEquals(null, result.persistedUri)
+        assertFalse(result.isReplayPlayable)
     }
 }

@@ -37,6 +37,7 @@ import com.inversioncoach.app.overlay.FreestyleViewMode
 import com.inversioncoach.app.pose.PoseSmoother
 import com.inversioncoach.app.recording.MediaVerificationHelper
 import com.inversioncoach.app.recording.MediaVerificationResult
+import com.inversioncoach.app.recording.ReplayInspectionResult
 import com.inversioncoach.app.recording.AnnotatedExportPipeline
 import com.inversioncoach.app.recording.OverlayStabilizer
 import com.inversioncoach.app.recording.OverlayTimelineJson
@@ -905,7 +906,7 @@ class LiveCoachingViewModel(
 
     private fun setRawPersistState(status: RawPersistStatus, failureReason: String?) {
         rawPersistStatus = status
-        rawPersistFailureReason = if (status == RawPersistStatus.SUCCEEDED) null else failureReason
+        rawPersistFailureReason = failureReason
     }
 
     private fun setAnnotatedExportState(status: AnnotatedExportStatus, failureReason: String?) {
@@ -960,7 +961,6 @@ class LiveCoachingViewModel(
     private fun reconcileMediaStateForPersistence(hasActiveExportJob: Boolean): Pair<AnnotatedExportStatus, String?> {
         if (!rawVideoUri.isNullOrBlank() && mediaAssetExists(rawVideoUri)) {
             rawPersistStatus = RawPersistStatus.SUCCEEDED
-            rawPersistFailureReason = null
         }
         if (rawPersistStatus == RawPersistStatus.SUCCEEDED && rawPersistFailureReason == AnnotatedExportFailureReason.RAW_SAVE_FAILED.name) {
             rawPersistFailureReason = null
@@ -1024,6 +1024,7 @@ class LiveCoachingViewModel(
             val rawVerification = verifyPersistedRawVideoUris(
                 candidateUris = listOf(persistedRawCandidate, expectedPersistedRaw),
                 metadataVerifier = { MediaVerificationHelper.verify(it) },
+                replayInspector = { MediaVerificationHelper.inspectReplay(it) },
             )
             rawMasterUri = rawVerification.persistedUri
             rawVideoUri = rawVerification.persistedUri
@@ -1050,15 +1051,21 @@ class LiveCoachingViewModel(
 
             val snapshot = createExportSnapshot(activeSessionId)
 
-            setRawPersistState(RawPersistStatus.SUCCEEDED, null)
+            val rawReplayFailureReason = when {
+                rawVerification.isReplayPlayable -> null
+                rawVerification.persistedUri.isNullOrBlank() -> AnnotatedExportFailureReason.RAW_SAVE_FAILED.name
+                rawVerification.inspection?.hasVideoTrack == false -> AnnotatedExportFailureReason.RAW_MEDIA_CORRUPT.name
+                else -> AnnotatedExportFailureReason.RAW_REPLAY_INVALID.name
+            }
+            setRawPersistState(RawPersistStatus.SUCCEEDED, rawReplayFailureReason)
             repository.updateMediaPipelineState(activeSessionId) { session ->
                 session.copy(
                     rawPersistStatus = RawPersistStatus.SUCCEEDED,
-                    rawPersistFailureReason = null,
+                    rawPersistFailureReason = rawReplayFailureReason,
                     rawVideoUri = rawMasterUri,
                     rawFinalUri = rawMasterUri,
                     rawMasterUri = rawMasterUri,
-                    bestPlayableUri = rawMasterUri,
+                    bestPlayableUri = if (rawVerification.isReplayPlayable) rawMasterUri else null,
                     completedAtMs = snapshot.stopTimestampMs,
                 )
             }
@@ -1069,7 +1076,7 @@ class LiveCoachingViewModel(
                 rawUri = rawMasterUri,
                 annotatedUri = null,
                 overlayFrameCount = snapshot.overlayFrameCount,
-                failureReason = "rawDurationMs=${snapshot.rawDurationMs}",
+                failureReason = "rawDurationMs=${snapshot.rawDurationMs};replayPlayable=${rawVerification.isReplayPlayable};rawPersistFailureReason=${rawReplayFailureReason.orEmpty()};inspection=${rawVerification.inspectionSummary()}",
             )
 
             if (snapshot.overlayTimeline.frames.isEmpty()) {
@@ -1877,11 +1884,19 @@ private fun com.inversioncoach.app.recording.OverlayTimeline.isMonotonic(): Bool
 internal data class RawPersistVerification(
     val isPersisted: Boolean,
     val persistedUri: String?,
+    val isReplayPlayable: Boolean,
+    val inspection: ReplayInspectionResult?,
 )
+
+internal fun RawPersistVerification.inspectionSummary(): String {
+    val details = inspection ?: return "none"
+    return "exists=${details.fileExists},size=${details.fileSizeBytes},durationMs=${details.durationMs ?: -1},width=${details.width ?: -1},height=${details.height ?: -1},hasVideoTrack=${details.hasVideoTrack},firstFrameDecoded=${details.firstFrameDecoded},error=${details.errorDetail.orEmpty()}"
+}
 
 internal fun verifyPersistedRawVideoUris(
     candidateUris: List<String?>,
     metadataVerifier: (String) -> MediaVerificationResult,
+    replayInspector: (String) -> ReplayInspectionResult = { MediaVerificationHelper.inspectReplay(it) },
 ): RawPersistVerification {
     val normalizedCandidates = candidateUris
         .mapNotNull { it?.takeIf(String::isNotBlank) }
@@ -1893,12 +1908,20 @@ internal fun verifyPersistedRawVideoUris(
         if (!file.exists() || !file.canRead() || file.length() <= 0L) continue
 
         val verification = metadataVerifier(candidate)
-        if (!verification.isValid) {
-            SessionDiagnostics.log("raw_persist_metadata_unreadable_fallback uri=$candidate")
+        val inspection = replayInspector(candidate)
+        if (!verification.isValid || !inspection.isDecodable) {
+            SessionDiagnostics.log(
+                "raw_persist_replay_probe_failed uri=$candidate failure=${verification.failureReason};exists=${inspection.fileExists};size=${inspection.fileSizeBytes};durationMs=${inspection.durationMs};width=${inspection.width};height=${inspection.height};hasVideoTrack=${inspection.hasVideoTrack};firstFrameDecoded=${inspection.firstFrameDecoded};detail=${inspection.errorDetail.orEmpty()}",
+            )
         }
-        return RawPersistVerification(isPersisted = true, persistedUri = candidate)
+        return RawPersistVerification(
+            isPersisted = true,
+            persistedUri = candidate,
+            isReplayPlayable = verification.isValid && inspection.isDecodable,
+            inspection = inspection,
+        )
     }
-    return RawPersistVerification(isPersisted = false, persistedUri = null)
+    return RawPersistVerification(isPersisted = false, persistedUri = null, isReplayPlayable = false, inspection = null)
 }
 
 internal fun resolveSessionVideoOutcome(

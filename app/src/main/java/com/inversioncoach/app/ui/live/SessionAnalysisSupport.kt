@@ -360,6 +360,17 @@ fun resolveReplaySourceState(
     val rawUri = session.rawFinalUri ?: session.rawVideoUri ?: session.rawMasterUri
     val annotatedReadable = isReadable(annotatedUri)
     val rawReadable = isReadable(rawUri)
+    val bestPlayableUri = session.bestPlayableUri
+    val bestPlayableReadable = isReadable(bestPlayableUri)
+    val rawPlayable = rawReadable && (
+        bestPlayableUri.isNullOrBlank() ||
+            bestPlayableUri == rawUri ||
+            !bestPlayableReadable
+        )
+    val rawMarkedInvalid = session.rawPersistFailureReason in setOf(
+        AnnotatedExportFailureReason.RAW_REPLAY_INVALID.name,
+        AnnotatedExportFailureReason.RAW_MEDIA_CORRUPT.name,
+    )
     val decisionPending = session.annotatedExportStatus in setOf(
         AnnotatedExportStatus.VALIDATING_INPUT,
         AnnotatedExportStatus.PROCESSING,
@@ -371,7 +382,10 @@ fun resolveReplaySourceState(
     if (decisionPending) {
         return ReplayResolution(ReplaySourceState.UNRESOLVED, null, "ANNOTATED_DECISION_PENDING")
     }
-    if (rawReadable) {
+    if (rawMarkedInvalid) {
+        return ReplayResolution(ReplaySourceState.UNAVAILABLE, null, session.rawPersistFailureReason.orEmpty())
+    }
+    if (rawPlayable) {
         return ReplayResolution(ReplaySourceState.RAW_READY, rawUri, "RAW_FALLBACK_${session.annotatedExportStatus.name}")
     }
     return ReplayResolution(ReplaySourceState.UNAVAILABLE, null, "NO_READABLE_REPLAY")
@@ -492,8 +506,16 @@ fun deriveReplayDisplayState(session: SessionRecord?, hasActiveExportJob: Boolea
     if (session == null) return ReplayDisplayState.INCONSISTENT_STATE
     val annotatedUri = session.annotatedFinalUri ?: session.annotatedVideoUri
     val rawUri = session.rawFinalUri ?: session.rawVideoUri ?: session.rawMasterUri
+    val rawInvalid = session.rawPersistFailureReason in setOf(
+        AnnotatedExportFailureReason.RAW_REPLAY_INVALID.name,
+        AnnotatedExportFailureReason.RAW_MEDIA_CORRUPT.name,
+    )
     val annotatedReadable = mediaAssetExists(annotatedUri)
-    val rawReadable = mediaAssetExists(rawUri)
+    val bestPlayableUri = session.bestPlayableUri
+    val bestPlayableReadable = mediaAssetExists(bestPlayableUri)
+    val rawReadable = !rawInvalid &&
+        mediaAssetExists(rawUri) &&
+        (bestPlayableUri.isNullOrBlank() || bestPlayableUri == rawUri || !bestPlayableReadable)
     val hasInconsistentValues =
         ((session.annotatedExportStatus == AnnotatedExportStatus.VALIDATING_INPUT ||
             session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING ||
@@ -604,6 +626,13 @@ object SessionDiagnostics {
         if (session?.sessionSource == com.inversioncoach.app.model.SessionSource.UPLOADED_VIDEO) {
             if (session.rawPersistStatus == com.inversioncoach.app.model.RawPersistStatus.FAILED) {
                 return "Upload raw import failed."
+            }
+            if (session.rawPersistFailureReason in setOf(
+                    AnnotatedExportFailureReason.RAW_REPLAY_INVALID.name,
+                    AnnotatedExportFailureReason.RAW_MEDIA_CORRUPT.name,
+                )
+            ) {
+                return "Upload raw file copied but replay is invalid (${session.rawPersistFailureReason})."
             }
             val isInProgress = session.rawPersistStatus == com.inversioncoach.app.model.RawPersistStatus.PROCESSING ||
                 session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING ||

@@ -2,6 +2,7 @@ package com.inversioncoach.app.ui.live
 
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.AnnotatedExportStatus
+import com.inversioncoach.app.model.AnnotatedExportFailureReason
 import com.inversioncoach.app.model.SessionRecord
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -138,10 +139,27 @@ class ReplayAssetSelectionTest {
         assertEquals("file:///raw.mp4", resolution.uri)
     }
 
+    @Test
+    fun replayResolutionReportsUnavailableWhenRawMarkedInvalid() {
+        val resolution = resolveReplaySourceState(
+            session = sessionRecord(
+                rawUri = "file:///raw.mp4",
+                annotatedUri = null,
+                annotatedStatus = AnnotatedExportStatus.ANNOTATED_FAILED,
+                rawPersistFailureReason = AnnotatedExportFailureReason.RAW_REPLAY_INVALID.name,
+            ),
+            isReadable = { it == "file:///raw.mp4" },
+        )
+
+        assertEquals(ReplaySourceState.UNAVAILABLE, resolution.state)
+        assertEquals(null, resolution.uri)
+    }
+
     private fun sessionRecord(
         rawUri: String?,
         annotatedUri: String?,
         annotatedStatus: AnnotatedExportStatus = if (annotatedUri == null) AnnotatedExportStatus.NOT_STARTED else AnnotatedExportStatus.ANNOTATED_READY,
+        rawPersistFailureReason: String? = null,
     ) = SessionRecord(
         id = 99,
         title = "Test session",
@@ -156,6 +174,7 @@ class ReplayAssetSelectionTest {
         metricsJson = "",
         annotatedVideoUri = annotatedUri,
         rawVideoUri = rawUri,
+        rawPersistFailureReason = rawPersistFailureReason,
         annotatedExportStatus = annotatedStatus,
         notesUri = null,
         bestFrameTimestampMs = null,

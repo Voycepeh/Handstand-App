@@ -103,8 +103,8 @@ class SessionRepository(
             }.getOrDefault(false)
         } ?: false
         if (!isValid) return false
-        if (session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.rawPersistFailureReason.isNullOrBlank()) return false
-        sessionDao.upsert(session.copy(rawPersistStatus = RawPersistStatus.SUCCEEDED, rawPersistFailureReason = null))
+        if (session.rawPersistStatus == RawPersistStatus.SUCCEEDED) return false
+        sessionDao.upsert(session.copy(rawPersistStatus = RawPersistStatus.SUCCEEDED))
         return true
     }
 

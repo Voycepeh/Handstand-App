@@ -26,6 +26,8 @@ class UploadStageDerivationTest {
             base.copy(
                 rawPersistStatus = RawPersistStatus.SUCCEEDED,
                 annotatedExportStatus = AnnotatedExportStatus.ANNOTATED_FAILED,
+                rawVideoUri = "file:///raw.mp4",
+                bestPlayableUri = "file:///raw.mp4",
             ),
         )
         assertEquals(UploadStage.COMPLETED_RAW_ONLY, stage)

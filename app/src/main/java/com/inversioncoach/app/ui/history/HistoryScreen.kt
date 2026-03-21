@@ -183,6 +183,7 @@ private enum class HistorySort { RECENCY, STORAGE_SIZE, SESSION_DURATION }
 internal fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): String = when {
     session.rawPersistStatus == RawPersistStatus.FAILED -> "Failed"
     session.rawPersistStatus == RawPersistStatus.PROCESSING -> "Copying raw video"
+    session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT") -> "Raw replay unavailable (${session.rawPersistFailureReason})"
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> "Ready"
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> "Failed"
     session.annotatedExportStatus in setOf(AnnotatedExportStatus.VALIDATING_INPUT, AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) -> {
@@ -199,8 +200,8 @@ internal fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): S
         }
         "${stageLabel} ${session.annotatedExportPercent}%"
     }
-    session.annotatedExportStatus == AnnotatedExportStatus.SKIPPED && session.rawPersistStatus == RawPersistStatus.SUCCEEDED -> "Raw replay ready (annotated skipped)"
-    session.rawPersistStatus == RawPersistStatus.SUCCEEDED -> "Raw replay ready"
+    session.annotatedExportStatus == AnnotatedExportStatus.SKIPPED && rawReplayPlayableForUi(session) -> "Raw replay ready (annotated skipped)"
+    rawReplayPlayableForUi(session) -> "Raw replay ready"
     else -> "Replay unavailable"
 }
 
@@ -209,10 +210,18 @@ internal fun uploadProgress(session: com.inversioncoach.app.model.SessionRecord)
     session.rawPersistStatus == RawPersistStatus.PROCESSING -> 0.2f
     session.annotatedExportStatus in setOf(AnnotatedExportStatus.VALIDATING_INPUT, AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) ->
         (session.annotatedExportPercent.coerceIn(0, 100) / 100f).coerceAtLeast(0.2f)
-    session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> 1f
-    session.rawPersistStatus == RawPersistStatus.SUCCEEDED && session.annotatedExportStatus in setOf(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportStatus.SKIPPED) -> 1f
+    session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> 1f
+    rawReplayPlayableForUi(session) -> 1f
     session.rawPersistStatus == RawPersistStatus.SUCCEEDED -> 0.7f
     else -> 0f
+}
+
+private fun rawReplayPlayableForUi(session: com.inversioncoach.app.model.SessionRecord): Boolean {
+    if (session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT")) return false
+    val rawUri = session.rawFinalUri ?: session.rawVideoUri ?: session.rawMasterUri
+    if (rawUri.isNullOrBlank()) return false
+    val bestPlayableUri = session.bestPlayableUri
+    return bestPlayableUri.isNullOrBlank() || bestPlayableUri == rawUri
 }
 
 private fun sortLabel(baseLabel: String, isSelected: Boolean, isAscending: Boolean): String = when {
