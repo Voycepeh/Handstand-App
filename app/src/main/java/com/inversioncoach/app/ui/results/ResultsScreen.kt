@@ -35,9 +35,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.model.SessionSource
@@ -57,6 +57,7 @@ import com.inversioncoach.app.ui.live.SessionDiagnostics
 import com.inversioncoach.app.ui.live.ReplayAssetSelection
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.Locale
 
 @Composable
 fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
@@ -179,8 +180,9 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
                                 when {
+                                    rawFallbackAvailable && (isFailed || isSkipped) -> "Raw replay available"
                                     isSkipped -> "Annotated export skipped"
-                                    isFailed -> "Processing failed"
+                                    isFailed -> "Annotated export failed"
                                     else -> "Processing status"
                                 },
                                 style = MaterialTheme.typography.titleMedium,
@@ -194,41 +196,39 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                                 Text("Progress: ${activeSession.annotatedExportPercent}%")
                                 Text("ETA: ${activeSession.annotatedExportEtaSeconds?.let { "${it}s" } ?: "-"}")
                             } else if (isSkipped) {
-                                Text("Stage: ${AnnotatedExportStage.COMPLETED}")
+                                Text("Status: ${humanReadableStatus("SKIPPED")}")
                                 if (rawFallbackAvailable) {
-                                    Text("Annotated export was skipped, raw replay available")
+                                    Text("Annotated export failed. Raw replay is available.")
                                 }
                             } else {
-                                Text("Stage: ${AnnotatedExportStage.FAILED}")
+                                Text("Status: ${humanReadableStatus("FAILED")}")
                                 if (rawFallbackAvailable) {
-                                    Text("Annotated export failed, raw replay available")
+                                    Text("Annotated export failed. Raw replay is available.")
                                 }
                             }
-                            Text("Raw: ${activeSession.rawPersistStatus}")
+                            StatusRow("Replay source", if (rawFallbackAvailable && !isProcessing) "Raw" else replaySelection.label.removeSuffix(" replay"))
+                            StatusRow("Raw", humanReadableStatus(activeSession.rawPersistStatus.name))
                             if (activeSession.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT")) {
                                 Text(
                                     "Raw replay file was copied but is not decodable (${activeSession.rawPersistFailureReason}).",
                                     color = MaterialTheme.colorScheme.error,
                                 )
                             }
-                            Text("Annotated: ${activeSession.annotatedExportStatus}")
+                            StatusRow("Annotated", humanReadableStatus(activeSession.annotatedExportStatus.name))
                             if (!activeSession.annotatedExportFailureReason.isNullOrBlank()) {
-                                Text("Failure: ${activeSession.annotatedExportFailureReason}", color = MaterialTheme.colorScheme.error)
+                                StatusRow(
+                                    "Failure reason",
+                                    humanReadableStatus(activeSession.annotatedExportFailureReason.orEmpty()),
+                                    valueColor = MaterialTheme.colorScheme.error,
+                                )
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (isProcessing) {
                                 OutlinedButton(onClick = {
-                                    val report = repository.readSessionDiagnostics(sessionId).orEmpty().ifBlank { "No log entries yet." }
-                                    clipboardManager.setText(AnnotatedString(report))
-                                    Toast.makeText(context, "Logs copied", Toast.LENGTH_SHORT).show()
-                                }) { Text("Copy log") }
-                                if (isProcessing) {
-                                    OutlinedButton(onClick = {
-                                        scope.launch {
-                                            repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-                                            repository.updateAnnotatedExportFailureReason(sessionId, "EXPORT_CANCELLED")
-                                        }
-                                    }) { Text("Cancel") }
-                                }
+                                    scope.launch {
+                                        repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
+                                        repository.updateAnnotatedExportFailureReason(sessionId, "EXPORT_CANCELLED")
+                                    }
+                                }) { Text("Cancel") }
                             }
                         }
                     }
@@ -330,20 +330,6 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     Text("Raw replay")
                 }
             }
-            if (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
-                Text("replay source selected: ${if (replaySelection.label == "Annotated replay") "annotated" else if (replaySelection.label == "Raw replay") "raw" else "none"}")
-                Text("rawPersistStatus: ${session?.rawPersistStatus}")
-                Text("rawVideoUri: ${session?.rawVideoUri.orEmpty()}")
-                Text("annotatedExportStatus: ${session?.annotatedExportStatus}")
-                Text("annotatedExportFailureReason: ${session?.annotatedExportFailureReason.orEmpty()}")
-                Text("annotatedVideoUri: ${session?.annotatedVideoUri.orEmpty()}")
-                Text("overlay frame count: ${session?.overlayFrameCount ?: 0}")
-                Text("overlayTimelineUri: ${session?.overlayTimelineUri.orEmpty()}")
-                Text("export started at: ${session?.annotatedExportLastUpdatedAt ?: 0L}")
-                Text("export completed at: ${session?.annotatedExportedAtMs ?: 0L}")
-                Text("raw duration: ${formatDurationWithMs(mediaDurationMs(session?.rawVideoUri))}")
-                Text("annotated duration: ${formatDurationWithMs(mediaDurationMs(session?.annotatedVideoUri))}")
-            }
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
@@ -353,22 +339,37 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     val inMemoryReport = SessionDiagnostics.buildReport(session, sessionId)
                     val report = persistedDiagnostics?.takeIf { it.isNotBlank() } ?: inMemoryReport
                     val events = SessionDiagnostics.eventsForSession(sessionId)
-                    Text("Technical diagnostics", style = MaterialTheme.typography.titleMedium)
+                    val canCopyDiagnostics = report.isNotBlank()
+                    Text("Developer diagnostics", style = MaterialTheme.typography.titleMedium)
                     Text(SessionDiagnostics.rootCauseSummary(session, events))
+                    StatusRow("Replay source", if (replaySelection.label == "Annotated replay") "Annotated" else if (replaySelection.label == "Raw replay") "Raw" else "None")
+                    StatusRow("Raw", humanReadableStatus(session?.rawPersistStatus?.name))
+                    StatusRow("Annotated", humanReadableStatus(session?.annotatedExportStatus?.name))
+                    session?.annotatedExportFailureReason?.takeIf { it.isNotBlank() }?.let { reason ->
+                        StatusRow("Failure", humanReadableStatus(reason), valueColor = MaterialTheme.colorScheme.error)
+                    }
                     Button(onClick = { diagnosticsExpanded = !diagnosticsExpanded }, modifier = Modifier.fillMaxWidth()) {
                         Text(if (diagnosticsExpanded) "Hide diagnostics" else "Show diagnostics")
                     }
-                    Button(
-                        onClick = {
-                            clipboardManager.setText(AnnotatedString(report))
-                            Toast.makeText(context, "Diagnostic logs copied", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Export diagnostic logs") }
+                    if (canCopyDiagnostics) {
+                        Button(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(report))
+                                Toast.makeText(context, "Diagnostics copied", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Copy diagnostics log") }
+                    }
                     if (diagnosticsExpanded) {
                         Text(
+                            buildDeveloperStateDump(session, replaySelection.label),
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            maxLines = 16,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
                             report,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                             maxLines = 24,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -461,6 +462,48 @@ internal fun formatElapsedDuration(elapsedMs: Long?): String {
     val min = totalSec / 60L
     val sec = totalSec % 60L
     return if (min > 0L) "${min}m ${sec}s" else "${sec}s"
+}
+
+@Composable
+private fun StatusRow(
+    label: String,
+    value: String?,
+    valueColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface,
+) {
+    if (value.isNullOrBlank()) return
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text("$label:")
+        Text(value, color = valueColor)
+    }
+}
+
+private fun humanReadableStatus(value: String?): String {
+    if (value.isNullOrBlank()) return "-"
+    return value
+        .replace('_', ' ')
+        .lowercase(Locale.US)
+        .replaceFirstChar { it.titlecase(Locale.US) }
+}
+
+private fun buildDeveloperStateDump(
+    session: com.inversioncoach.app.model.SessionRecord?,
+    replayLabel: String,
+): String = buildString {
+    appendLine("replay source selected: ${if (replayLabel == "Annotated replay") "annotated" else if (replayLabel == "Raw replay") "raw" else "none"}")
+    appendLine("rawPersistStatus: ${session?.rawPersistStatus}")
+    appendLine("rawVideoUri: ${session?.rawVideoUri.orEmpty()}")
+    appendLine("annotatedExportStatus: ${session?.annotatedExportStatus}")
+    appendLine("annotatedExportFailureReason: ${session?.annotatedExportFailureReason.orEmpty()}")
+    appendLine("annotatedVideoUri: ${session?.annotatedVideoUri.orEmpty()}")
+    appendLine("overlay frame count: ${session?.overlayFrameCount ?: 0}")
+    appendLine("overlayTimelineUri: ${session?.overlayTimelineUri.orEmpty()}")
+    appendLine("export started at: ${session?.annotatedExportLastUpdatedAt ?: 0L}")
+    appendLine("export completed at: ${session?.annotatedExportedAtMs ?: 0L}")
+    appendLine("raw duration: ${formatDurationWithMs(mediaDurationMs(session?.rawVideoUri))}")
+    appendLine("annotated duration: ${formatDurationWithMs(mediaDurationMs(session?.annotatedVideoUri))}")
 }
 
 private data class CollapsedIssueRange(
