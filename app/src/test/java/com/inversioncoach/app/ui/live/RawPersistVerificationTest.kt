@@ -49,6 +49,70 @@ class RawPersistVerificationTest {
     }
 
     @Test
+    fun requiresReadableMetadataWhenStrictPersistenceCheckEnabled() {
+        val rawFile = File.createTempFile("raw_verification_strict", ".mp4")
+        try {
+            rawFile.writeBytes(byteArrayOf(1, 2, 3, 4))
+            val result = verifyPersistedRawVideoUris(
+                candidateUris = listOf(rawFile.toURI().toString()),
+                metadataVerifier = {
+                    MediaVerificationResult(
+                        isValid = false,
+                        failureReason = AnnotatedExportFailureReason.METADATA_UNREADABLE,
+                    )
+                },
+                replayInspector = {
+                    ReplayInspectionResult(
+                        uri = it,
+                        fileExists = true,
+                        fileSizeBytes = rawFile.length(),
+                        lastModifiedEpochMs = rawFile.lastModified(),
+                        durationMs = null,
+                        trackCount = 1,
+                        width = 1280,
+                        height = 720,
+                        hasVideoTrack = true,
+                        firstFrameDecoded = false,
+                        errorDetail = "METADATA_UNREADABLE",
+                    )
+                },
+                requireReadableMetadataForPersistence = true,
+            )
+
+            assertFalse(result.isPersisted)
+            assertEquals(null, result.persistedUri)
+        } finally {
+            rawFile.delete()
+        }
+    }
+
+    @Test
+    fun captureSpanComputesNonNegativeDuration() {
+        assertEquals(11_500L, captureSpanMs(startMs = 10_000L, stopMs = 21_500L))
+        assertEquals(0L, captureSpanMs(startMs = 21_500L, stopMs = 10_000L))
+    }
+
+    @Test
+    fun fullLiveRecordingDurationCanBeValidatedWithinTolerance() {
+        val captureSpan = 11_500L
+        val persistedDuration = 11_320L
+        assertTrue(
+            persistedDurationWithinTolerance(
+                captureSpanMs = captureSpan,
+                persistedDurationMs = persistedDuration,
+                toleranceMs = 250L,
+            ),
+        )
+        assertFalse(
+            persistedDurationWithinTolerance(
+                captureSpanMs = captureSpan,
+                persistedDurationMs = 7_267L,
+                toleranceMs = 250L,
+            ),
+        )
+    }
+
+    @Test
     fun classifiesMissingVideoTrackAsRawMediaCorrupt() {
         val failure = classifyRawReplayFailure(
             RawPersistVerification(
