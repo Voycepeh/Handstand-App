@@ -58,6 +58,20 @@ class FileUploadedAnalysisRepository(private val rootDir: File) : UploadedAnalys
 
 interface VideoPoseFrameSource {
     fun decode(videoUri: Uri): Sequence<PoseFrame>
+    fun decode(videoUri: Uri, observer: AnalysisProgressObserver): Sequence<PoseFrame> = decode(videoUri)
+}
+
+data class AnalysisProgressEvent(
+    val stage: String,
+    val processedFrames: Int = 0,
+    val estimatedTotalFrames: Int? = null,
+    val droppedFrames: Int = 0,
+    val timestampMs: Long? = null,
+    val detail: String? = null,
+)
+
+fun interface AnalysisProgressObserver {
+    fun onProgress(event: AnalysisProgressEvent)
 }
 
 class UploadedVideoAnalyzer(
@@ -67,59 +81,118 @@ class UploadedVideoAnalyzer(
     private val phaseDetectorFactory: (MovementProfile) -> MotionPhaseDetector = { MotionPhaseDetector(it) },
     private val alignmentScorer: AlignmentScorer = AlignmentScorer(),
 ) {
-    fun analyze(videoUri: Uri, profile: MovementProfile): UploadedVideoAnalysisResult {
-        val decodeStart = System.currentTimeMillis()
-        val sourceFrames = frameSource.decode(videoUri).toList()
-        val decodeDuration = System.currentTimeMillis() - decodeStart
+    fun analyze(
+        videoUri: Uri,
+        profile: MovementProfile,
+        progressObserver: AnalysisProgressObserver? = null,
+    ): UploadedVideoAnalysisResult {
+        try {
+            val decodeStart = System.currentTimeMillis()
+            Log.i(UPLOAD_ANALYSIS_TAG, "analysis_loop_start uri=$videoUri")
+            progressObserver?.onProgress(AnalysisProgressEvent(stage = "decode_start", detail = "Sampling uploaded video frames"))
+            val sourceFrames = frameSource.decode(
+                videoUri = videoUri,
+                observer = AnalysisProgressObserver { progressEvent ->
+                    progressObserver?.onProgress(progressEvent)
+                },
+            ).toList()
+            val decodeDuration = System.currentTimeMillis() - decodeStart
 
-        val analysisStart = System.currentTimeMillis()
-        val phaseDetector = phaseDetectorFactory(profile)
-        val timeline = mutableListOf<OverlayTimelinePoint>()
-        val phaseTimeline = mutableListOf<Pair<Long, String>>()
-        var dropped = 0
-        sourceFrames.forEach { frame ->
-            if (frame.confidence <= 0f || frame.joints.isEmpty()) {
-                dropped += 1
-            } else {
-                val normalized = poseFrameNormalizer.normalize(frame)
-                val angleFrame = angleEngine.compute(normalized)
-                val alignment = alignmentScorer.score(normalized, profile.alignmentRules)
-                val phase = phaseDetector.update(angleFrame, alignment >= 0.65f)
-                phaseTimeline += frame.timestampMs to phase.name
-                timeline += OverlayTimelinePoint(
-                    timestampMs = frame.timestampMs,
-                    landmarks = normalized.joints.map { it.name to (it.x to it.y) },
-                    metrics = mapOf("alignment_score" to alignment, "trunk_lean" to angleFrame.trunkLeanDeg),
-                    phaseId = phase.name,
-                    confidence = frame.confidence,
+            val analysisStart = System.currentTimeMillis()
+            val phaseDetector = phaseDetectorFactory(profile)
+            val timeline = mutableListOf<OverlayTimelinePoint>()
+            val phaseTimeline = mutableListOf<Pair<Long, String>>()
+            var dropped = 0
+            progressObserver?.onProgress(
+                AnalysisProgressEvent(
+                    stage = "analysis_started",
+                    processedFrames = 0,
+                    estimatedTotalFrames = sourceFrames.size,
+                    droppedFrames = 0,
+                    detail = "Starting post-processing on decoded frames",
                 )
+            )
+            sourceFrames.forEachIndexed { index, frame ->
+                if (index % 10 == 0) {
+                    Log.i(
+                        UPLOAD_ANALYSIS_TAG,
+                        "analysis_sample frameIndex=$index total=${sourceFrames.size} timestampMs=${frame.timestampMs} dropped=$dropped",
+                    )
+                }
+                if (frame.confidence <= 0f || frame.joints.isEmpty()) {
+                    dropped += 1
+                    progressObserver?.onProgress(
+                        AnalysisProgressEvent(
+                            stage = "analysis_frame_dropped",
+                            processedFrames = index + 1,
+                            estimatedTotalFrames = sourceFrames.size,
+                            droppedFrames = dropped,
+                            timestampMs = frame.timestampMs,
+                        ),
+                    )
+                } else {
+                    val normalized = poseFrameNormalizer.normalize(frame)
+                    val angleFrame = angleEngine.compute(normalized)
+                    val alignment = alignmentScorer.score(normalized, profile.alignmentRules)
+                    val phase = phaseDetector.update(angleFrame, alignment >= 0.65f)
+                    phaseTimeline += frame.timestampMs to phase.name
+                    timeline += OverlayTimelinePoint(
+                        timestampMs = frame.timestampMs,
+                        landmarks = normalized.joints.map { it.name to (it.x to it.y) },
+                        metrics = mapOf("alignment_score" to alignment, "trunk_lean" to angleFrame.trunkLeanDeg),
+                        phaseId = phase.name,
+                        confidence = frame.confidence,
+                    )
+                    progressObserver?.onProgress(
+                        AnalysisProgressEvent(
+                            stage = "analysis_frame_processed",
+                            processedFrames = index + 1,
+                            estimatedTotalFrames = sourceFrames.size,
+                            droppedFrames = dropped,
+                            timestampMs = frame.timestampMs,
+                        ),
+                    )
+                }
             }
+            val analysisDuration = System.currentTimeMillis() - analysisStart
+            val view = inferView(profile)
+            val template = MovementTemplateCandidateGenerator().generate(
+                sessionId = "upload-${System.currentTimeMillis()}",
+                movementName = profile.displayName,
+                inferredView = view,
+                profile = profile,
+                overlayTimeline = timeline,
+                phaseTimeline = phaseTimeline,
+            )
+            Log.i(UPLOAD_ANALYSIS_TAG, "decodeMs=$decodeDuration analyzeMs=$analysisDuration total=${sourceFrames.size} dropped=$dropped view=$view phases=${phaseTimeline.size} candidate=${template.status}")
+            progressObserver?.onProgress(
+                AnalysisProgressEvent(
+                    stage = "analysis_complete",
+                    processedFrames = sourceFrames.size,
+                    estimatedTotalFrames = sourceFrames.size,
+                    droppedFrames = dropped,
+                    detail = "Uploaded analysis complete",
+                ),
+            )
+            return UploadedVideoAnalysisResult(
+                inferredView = view,
+                phaseTimeline = phaseTimeline,
+                overlayTimeline = timeline,
+                droppedFrames = dropped,
+                telemetry = mapOf(
+                    "decode_time_ms" to decodeDuration,
+                    "analysis_time_ms" to analysisDuration,
+                    "total_frames_processed" to sourceFrames.size.toLong(),
+                    "frames_dropped" to dropped.toLong(),
+                    "candidate_phase_count" to phaseTimeline.map { it.second }.distinct().size.toLong(),
+                ),
+                candidate = template,
+            )
+        } catch (e: Exception) {
+            Log.e(UPLOAD_ANALYSIS_TAG, "analysis_exception uri=$videoUri message=${e.message}", e)
+            progressObserver?.onProgress(AnalysisProgressEvent(stage = "analysis_exception", detail = e.message))
+            throw e
         }
-        val analysisDuration = System.currentTimeMillis() - analysisStart
-        val view = inferView(profile)
-        val template = MovementTemplateCandidateGenerator().generate(
-            sessionId = "upload-${System.currentTimeMillis()}",
-            movementName = profile.displayName,
-            inferredView = view,
-            profile = profile,
-            overlayTimeline = timeline,
-            phaseTimeline = phaseTimeline,
-        )
-        Log.i(UPLOAD_ANALYSIS_TAG, "decodeMs=$decodeDuration analyzeMs=$analysisDuration total=${sourceFrames.size} dropped=$dropped view=$view phases=${phaseTimeline.size} candidate=${template.status}")
-        return UploadedVideoAnalysisResult(
-            inferredView = view,
-            phaseTimeline = phaseTimeline,
-            overlayTimeline = timeline,
-            droppedFrames = dropped,
-            telemetry = mapOf(
-                "decode_time_ms" to decodeDuration,
-                "analysis_time_ms" to analysisDuration,
-                "total_frames_processed" to sourceFrames.size.toLong(),
-                "frames_dropped" to dropped.toLong(),
-                "candidate_phase_count" to phaseTimeline.map { it.second }.distinct().size.toLong(),
-            ),
-            candidate = template,
-        )
     }
 
     private fun inferView(profile: MovementProfile): CameraViewConstraint = when {

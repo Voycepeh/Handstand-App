@@ -39,7 +39,9 @@ class MlKitVideoPoseFrameSource(
     var lastDecodeTelemetry: DecodeTelemetry = DecodeTelemetry(0, boundedWorkerCount, 0, 0.0)
         private set
 
-    override fun decode(videoUri: Uri): Sequence<PoseFrame> {
+    override fun decode(videoUri: Uri): Sequence<PoseFrame> = decode(videoUri, observer = AnalysisProgressObserver { })
+
+    override fun decode(videoUri: Uri, observer: AnalysisProgressObserver): Sequence<PoseFrame> {
         val frames = mutableListOf<PoseFrame>()
         runBlocking(Dispatchers.Default) {
             val retriever = MediaMetadataRetriever()
@@ -50,8 +52,20 @@ class MlKitVideoPoseFrameSource(
                 val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 1280
                 if (durationMs <= 0L) {
                     Log.w(TAG, "decode_failed reason=missing_duration uri=$videoUri")
+                    observer.onProgress(AnalysisProgressEvent(stage = "decode_failed", detail = "missing_duration"))
                     return@runBlocking
                 }
+                val intervalMs = (1000f / sampleFps.coerceAtLeast(1)).toLong().coerceAtLeast(16L)
+                val estimatedTotalFrames = (durationMs / intervalMs).toInt().coerceAtLeast(1) + 1
+                Log.i(TAG, "decode_loop_start uri=$videoUri durationMs=$durationMs intervalMs=$intervalMs estimatedTotalFrames=$estimatedTotalFrames")
+                observer.onProgress(
+                    AnalysisProgressEvent(
+                        stage = "decode_start",
+                        processedFrames = 0,
+                        estimatedTotalFrames = estimatedTotalFrames,
+                        detail = "Decode pipeline started",
+                    ),
+                )
                 data class FramePacket(val index: Int, val timestampMs: Long, val bitmap: Bitmap)
                 val frameQueue = Channel<FramePacket>(capacity = queueCapacity.coerceAtLeast(2))
                 val resultQueue = Channel<Pair<Int, PoseFrame>>(capacity = queueCapacity.coerceAtLeast(2))
@@ -74,8 +88,17 @@ class MlKitVideoPoseFrameSource(
                                 for (packet in frameQueue) {
                                     activeWorkers.incrementAndGet()
                                     try {
-                                        val poseFrame = mapBitmapToPoseFrame(packet.bitmap, detector, packet.timestampMs, width, height)
+                                        val poseFrame = mapBitmapToPoseFrame(packet.bitmap, detector, packet.index, packet.timestampMs, width, height)
                                         resultQueue.send(packet.index to poseFrame)
+                                        observer.onProgress(
+                                            AnalysisProgressEvent(
+                                                stage = "pose_detection_complete",
+                                                processedFrames = packet.index + 1,
+                                                estimatedTotalFrames = estimatedTotalFrames,
+                                                timestampMs = packet.timestampMs,
+                                                detail = "Pose detection completed",
+                                            ),
+                                        )
                                     } finally {
                                         packet.bitmap.recycle()
                                         activeWorkers.decrementAndGet()
@@ -89,16 +112,34 @@ class MlKitVideoPoseFrameSource(
                     }
 
                     val producer = launch(Dispatchers.IO) {
-                        val intervalMs = (1000f / sampleFps.coerceAtLeast(1)).toLong().coerceAtLeast(16L)
                         var timestampMs = 0L
                         var index = 0
                         while (timestampMs <= durationMs) {
-                            retriever.getFrameAtTime(timestampMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST)?.let { bitmap ->
-                                frameQueue.send(FramePacket(index = index, timestampMs = timestampMs, bitmap = bitmap))
-                                maxBacklog = maxOf(maxBacklog, backlog.incrementAndGet())
-                                activeSamples += activeWorkers.get().toLong()
-                                activeTicks += 1
-                                index += 1
+                            try {
+                                retriever.getFrameAtTime(timestampMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST)?.let { bitmap ->
+                                    if (index % 10 == 0) {
+                                        Log.i(TAG, "decode_sample frameIndex=$index timestampMs=$timestampMs/$durationMs")
+                                    }
+                                    frameQueue.send(FramePacket(index = index, timestampMs = timestampMs, bitmap = bitmap))
+                                    maxBacklog = maxOf(maxBacklog, backlog.incrementAndGet())
+                                    activeSamples += activeWorkers.get().toLong()
+                                    activeTicks += 1
+                                    observer.onProgress(
+                                        AnalysisProgressEvent(
+                                            stage = "frame_sampled",
+                                            processedFrames = index + 1,
+                                            estimatedTotalFrames = estimatedTotalFrames,
+                                            timestampMs = timestampMs,
+                                            detail = "Frame sampled for pose detection",
+                                        ),
+                                    )
+                                    index += 1
+                                } ?: run {
+                                    Log.w(TAG, "decode_frame_missing timestampMs=$timestampMs index=$index")
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "decode_exception frameIndex=$index timestampMs=$timestampMs message=${e.message}", e)
+                                throw e
                             }
                             timestampMs += intervalMs
                         }
@@ -123,6 +164,14 @@ class MlKitVideoPoseFrameSource(
                     maxQueueBacklog = maxBacklog,
                     averageWorkerActive = if (activeTicks == 0) 0.0 else activeSamples.toDouble() / activeTicks.toDouble(),
                 )
+                observer.onProgress(
+                    AnalysisProgressEvent(
+                        stage = "decode_complete",
+                        processedFrames = frames.size,
+                        estimatedTotalFrames = estimatedTotalFrames,
+                        detail = "Decoded frames are ready for analysis",
+                    ),
+                )
                 Log.i(
                     TAG,
                     "decode_pipeline_complete sampled=${frames.size} workers=$boundedWorkerCount maxBacklog=$maxBacklog avgActive=${"%.2f".format(lastDecodeTelemetry.averageWorkerActive)}",
@@ -138,12 +187,23 @@ class MlKitVideoPoseFrameSource(
     private fun mapBitmapToPoseFrame(
         bitmap: Bitmap,
         detector: com.google.mlkit.vision.pose.PoseDetector,
+        frameIndex: Int,
         timestampMs: Long,
         width: Int,
         height: Int,
     ): PoseFrame {
-        val pose = Tasks.await(detector.process(InputImage.fromBitmap(bitmap, 0)))
+        val pose = try {
+            Tasks.await(detector.process(InputImage.fromBitmap(bitmap, 0)))
+        } catch (e: Exception) {
+            Log.e(TAG, "pose_detection_failed frameIndex=$frameIndex timestampMs=$timestampMs message=${e.message}", e)
+            throw e
+        }
         val landmarks = pose.allPoseLandmarks
+        if (landmarks.isEmpty()) {
+            Log.w(TAG, "pose_detection_empty timestampMs=$timestampMs")
+        } else {
+            Log.i(TAG, "pose_detection_success timestampMs=$timestampMs landmarks=${landmarks.size}")
+        }
         val joints = landmarks.map { landmark ->
             JointPoint(
                 name = landmarkName(landmark.landmarkType),

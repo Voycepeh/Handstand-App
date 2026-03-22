@@ -45,6 +45,7 @@ import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SessionSource
 import com.inversioncoach.app.movementprofile.ExistingDrillToProfileAdapter
+import com.inversioncoach.app.movementprofile.AnalysisProgressObserver
 import com.inversioncoach.app.movementprofile.MlKitVideoPoseFrameSource
 import com.inversioncoach.app.movementprofile.UploadedVideoAnalyzer
 import com.inversioncoach.app.movementprofile.VideoPoseFrameSource
@@ -299,7 +300,47 @@ class DefaultUploadVideoAnalysisRunner(
             logStage("ANALYZING_UPLOADED_VIDEO", "analysis_started=true")
             onProgress(UploadProgress(currentStage, 0.25f, detail = "Analyzing uploaded frames"))
             val analysisStart = System.currentTimeMillis()
-            val analysis = analyzer.analyze(Uri.parse(persistedRawUri), profile)
+            var lastAnalysisPercent = 25
+            val analysis = analyzer.analyze(
+                Uri.parse(persistedRawUri),
+                profile,
+                progressObserver = AnalysisProgressObserver { event ->
+                    val estimatedTotal = event.estimatedTotalFrames?.coerceAtLeast(1)
+                    val processed = event.processedFrames.coerceAtLeast(0)
+                    if (estimatedTotal != null && processed > 0) {
+                        val bounded = processed.coerceAtMost(estimatedTotal)
+                        val progressWindow = (bounded.toFloat() / estimatedTotal.toFloat()) * 35f
+                        val percent = (25f + progressWindow).toInt().coerceIn(25, 60)
+                        if (percent > lastAnalysisPercent) {
+                            lastAnalysisPercent = percent
+                            repository.updateAnnotatedExportProgress(
+                                sessionId = sessionId,
+                                stage = AnnotatedExportStage.PROCESSING,
+                                percent = percent,
+                                etaSeconds = null,
+                                elapsedMs = System.currentTimeMillis() - startedAt,
+                            )
+                            onProgress(
+                                UploadProgress(
+                                    currentStage,
+                                    percent / 100f,
+                                    detail = "Analyzing uploaded frames ($processed/${estimatedTotal})",
+                                ),
+                            )
+                        }
+                    }
+
+                    if (event.stage in setOf("decode_start", "analysis_started", "decode_complete", "analysis_complete", "analysis_exception")) {
+                        log(
+                            "analysis_progress stage=${event.stage} processed=${event.processedFrames} total=${event.estimatedTotalFrames ?: -1} dropped=${event.droppedFrames} timestampMs=${event.timestampMs ?: -1} detail=${event.detail ?: ""}",
+                        )
+                    } else if (event.processedFrames % 15 == 0 && event.processedFrames > 0) {
+                        log(
+                            "analysis_progress stage=${event.stage} processed=${event.processedFrames} total=${event.estimatedTotalFrames ?: -1} dropped=${event.droppedFrames} timestampMs=${event.timestampMs ?: -1}",
+                        )
+                    }
+                },
+            )
             val analysisDurationMs = System.currentTimeMillis() - analysisStart
             if (analysis.overlayTimeline.isEmpty()) {
                 SessionDiagnostics.record(
