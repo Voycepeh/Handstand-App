@@ -1014,6 +1014,17 @@ class LiveCoachingViewModel(
             repository.updateRawPersistStatus(activeSessionId, RawPersistStatus.PROCESSING)
             repository.updateRawPersistFailureReason(activeSessionId, null)
             SessionDiagnostics.logStructured("raw_persist_started", activeSessionId, drillType, finalizedUri, null, overlayFrames.size, "attempt=$rawPersistAttemptCount")
+            val sourceReadyInspection = awaitFinalizeSourceReadiness(
+                sessionId = activeSessionId,
+                finalizedUri = finalizedUri,
+            )
+            logRawInspection(
+                event = "raw_source_finalize_probe",
+                sessionId = activeSessionId,
+                uri = finalizedUri,
+                inspection = sourceReadyInspection,
+                detail = "phase=pre_persist",
+            )
 
             val rawPersistStartMs = System.currentTimeMillis()
             val persistedRawCandidate = repository.saveRawVideoBlob(activeSessionId, finalizedUri)
@@ -1029,7 +1040,14 @@ class LiveCoachingViewModel(
             rawMasterUri = rawVerification.persistedUri
             rawVideoUri = rawVerification.persistedUri
             rawFinalUri = rawVerification.persistedUri
-            bestPlayableUri = rawVerification.persistedUri
+            bestPlayableUri = if (rawVerification.isReplayPlayable) rawVerification.persistedUri else null
+            logRawInspection(
+                event = "raw_persisted_probe",
+                sessionId = activeSessionId,
+                uri = rawVerification.persistedUri,
+                inspection = rawVerification.inspection,
+                detail = "phase=post_persist;sourceReady=${sourceReadyInspection?.isDecodable == true}",
+            )
             SessionDiagnostics.log("raw_persist_duration_ms=${System.currentTimeMillis() - rawPersistStartMs}")
 
             if (!rawVerification.isPersisted) {
@@ -1051,12 +1069,7 @@ class LiveCoachingViewModel(
 
             val snapshot = createExportSnapshot(activeSessionId)
 
-            val rawReplayFailureReason = when {
-                rawVerification.isReplayPlayable -> null
-                rawVerification.persistedUri.isNullOrBlank() -> AnnotatedExportFailureReason.RAW_SAVE_FAILED.name
-                rawVerification.inspection?.hasVideoTrack == false -> AnnotatedExportFailureReason.RAW_MEDIA_CORRUPT.name
-                else -> AnnotatedExportFailureReason.RAW_REPLAY_INVALID.name
-            }
+            val rawReplayFailureReason = classifyRawReplayFailure(rawVerification)
             setRawPersistState(RawPersistStatus.SUCCEEDED, rawReplayFailureReason)
             repository.updateMediaPipelineState(activeSessionId) { session ->
                 session.copy(
@@ -1078,6 +1091,13 @@ class LiveCoachingViewModel(
                 overlayFrameCount = snapshot.overlayFrameCount,
                 failureReason = "rawDurationMs=${snapshot.rawDurationMs};replayPlayable=${rawVerification.isReplayPlayable};rawPersistFailureReason=${rawReplayFailureReason.orEmpty()};inspection=${rawVerification.inspectionSummary()}",
             )
+            if (!rawVerification.isReplayPlayable) {
+                persistAnnotatedExportFailed(
+                    activeSessionId,
+                    rawReplayFailureReason ?: AnnotatedExportFailureReason.SOURCE_VIDEO_UNREADABLE.name,
+                )
+                return
+            }
 
             if (snapshot.overlayTimeline.frames.isEmpty()) {
                 setAnnotatedExportState(AnnotatedExportStatus.SKIPPED, AnnotatedExportFailureReason.OVERLAY_CAPTURE_EMPTY.name)
@@ -1545,6 +1565,66 @@ class LiveCoachingViewModel(
         }
     }
 
+    private suspend fun awaitFinalizeSourceReadiness(
+        sessionId: Long,
+        finalizedUri: String,
+        maxAttempts: Int = 5,
+    ): ReplayInspectionResult? {
+        var latestInspection: ReplayInspectionResult? = null
+        for (attempt in 1..maxAttempts.coerceAtLeast(1)) {
+            val inspection = MediaVerificationHelper.inspectReplay(finalizedUri)
+            latestInspection = inspection
+            logRawInspection(
+                event = "raw_source_readiness_probe",
+                sessionId = sessionId,
+                uri = finalizedUri,
+                inspection = inspection,
+                detail = "attempt=$attempt",
+            )
+            if (inspection.isDecodable) return inspection
+            if (attempt < maxAttempts) {
+                val waitMs = RAW_FINALIZE_READINESS_BACKOFF_MS.getOrElse(attempt - 1) {
+                    RAW_FINALIZE_READINESS_BACKOFF_MS.lastOrNull() ?: 300L
+                }
+                delay(waitMs)
+            }
+        }
+        return latestInspection
+    }
+
+    private fun logRawInspection(
+        event: String,
+        sessionId: Long,
+        uri: String?,
+        inspection: ReplayInspectionResult?,
+        detail: String = "",
+    ) {
+        val details = inspection
+        val payload = buildString {
+            if (detail.isNotBlank()) {
+                append(detail)
+                append(';')
+            }
+            append("exists=${details?.fileExists};")
+            append("size=${details?.fileSizeBytes};")
+            append("lastModifiedMs=${details?.lastModifiedEpochMs};")
+            append("durationMs=${details?.durationMs};")
+            append("trackCount=${details?.trackCount};")
+            append("hasVideoTrack=${details?.hasVideoTrack};")
+            append("firstFrameDecoded=${details?.firstFrameDecoded};")
+            append("error=${details?.errorDetail.orEmpty()}")
+        }
+        SessionDiagnostics.logStructured(
+            event = event,
+            sessionId = sessionId,
+            drillType = drillType,
+            rawUri = uri,
+            annotatedUri = null,
+            overlayFrameCount = overlayFrames.size,
+            failureReason = payload,
+        )
+    }
+
 
     override fun onCleared() {
         super.onCleared()
@@ -1559,6 +1639,7 @@ class LiveCoachingViewModel(
         private const val ANNOTATED_EXPORT_TIMEOUT_MS = 120_000L
         private const val PROCESSING_SLOW_THRESHOLD_MS = 90_000L
         private const val EXPORT_SNAPSHOT_DURATION_TOLERANCE_MS = 600L
+        private val RAW_FINALIZE_READINESS_BACKOFF_MS = listOf(200L, 350L, 550L, 800L)
     }
 }
 
@@ -1890,7 +1971,18 @@ internal data class RawPersistVerification(
 
 internal fun RawPersistVerification.inspectionSummary(): String {
     val details = inspection ?: return "none"
-    return "exists=${details.fileExists},size=${details.fileSizeBytes},durationMs=${details.durationMs ?: -1},width=${details.width ?: -1},height=${details.height ?: -1},hasVideoTrack=${details.hasVideoTrack},firstFrameDecoded=${details.firstFrameDecoded},error=${details.errorDetail.orEmpty()}"
+    return "exists=${details.fileExists},size=${details.fileSizeBytes},lastModifiedMs=${details.lastModifiedEpochMs ?: -1},durationMs=${details.durationMs ?: -1},trackCount=${details.trackCount},width=${details.width ?: -1},height=${details.height ?: -1},hasVideoTrack=${details.hasVideoTrack},firstFrameDecoded=${details.firstFrameDecoded},error=${details.errorDetail.orEmpty()}"
+}
+
+internal fun classifyRawReplayFailure(verification: RawPersistVerification): String? {
+    if (verification.isReplayPlayable) return null
+    if (verification.persistedUri.isNullOrBlank()) return AnnotatedExportFailureReason.RAW_SAVE_FAILED.name
+    val inspection = verification.inspection
+    if (inspection?.hasVideoTrack == false) return AnnotatedExportFailureReason.RAW_MEDIA_CORRUPT.name
+    if (inspection?.durationMs == null || inspection.durationMs <= 0L || inspection.firstFrameDecoded == false) {
+        return AnnotatedExportFailureReason.SOURCE_VIDEO_UNREADABLE.name
+    }
+    return AnnotatedExportFailureReason.RAW_REPLAY_INVALID.name
 }
 
 internal fun verifyPersistedRawVideoUris(
@@ -1911,7 +2003,7 @@ internal fun verifyPersistedRawVideoUris(
         val inspection = replayInspector(candidate)
         if (!verification.isValid || !inspection.isDecodable) {
             SessionDiagnostics.log(
-                "raw_persist_replay_probe_failed uri=$candidate failure=${verification.failureReason};exists=${inspection.fileExists};size=${inspection.fileSizeBytes};durationMs=${inspection.durationMs};width=${inspection.width};height=${inspection.height};hasVideoTrack=${inspection.hasVideoTrack};firstFrameDecoded=${inspection.firstFrameDecoded};detail=${inspection.errorDetail.orEmpty()}",
+                "raw_persist_replay_probe_failed uri=$candidate failure=${verification.failureReason};exists=${inspection.fileExists};size=${inspection.fileSizeBytes};lastModifiedMs=${inspection.lastModifiedEpochMs};durationMs=${inspection.durationMs};trackCount=${inspection.trackCount};width=${inspection.width};height=${inspection.height};hasVideoTrack=${inspection.hasVideoTrack};firstFrameDecoded=${inspection.firstFrameDecoded};detail=${inspection.errorDetail.orEmpty()}",
             )
         }
         return RawPersistVerification(

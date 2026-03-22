@@ -208,7 +208,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                             }
                             StatusRow("Replay source", if (rawFallbackAvailable && !isProcessing) "Raw" else replaySelection.label.removeSuffix(" replay"))
                             StatusRow("Raw", humanReadableStatus(activeSession.rawPersistStatus.name))
-                            if (activeSession.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT")) {
+                            if (activeSession.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE")) {
                                 Text(
                                     "Raw replay file was copied but is not decodable (${activeSession.rawPersistFailureReason}).",
                                     color = MaterialTheme.colorScheme.error,
@@ -310,7 +310,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             }
             if (!hasReplay) {
                 val rawFailure = session?.rawPersistFailureReason
-                val message = if (rawFailure in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT")) {
+                val message = if (rawFailure in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE")) {
                     "Replay unavailable: raw file exists but cannot be decoded ($rawFailure)."
                 } else {
                     "No replay asset is available for this session."
@@ -629,7 +629,7 @@ private fun isReplayStateStable(session: com.inversioncoach.app.model.SessionRec
 }
 
 private fun isRawReplayPlayable(session: com.inversioncoach.app.model.SessionRecord): Boolean {
-    val invalidReason = session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT")
+    val invalidReason = session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE")
     if (invalidReason) return false
     val rawUri = session.rawFinalUri ?: session.rawVideoUri ?: session.rawMasterUri
     if (rawUri.isNullOrBlank() || !mediaAssetExists(rawUri)) return false

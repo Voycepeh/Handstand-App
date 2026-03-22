@@ -18,7 +18,9 @@ data class ReplayInspectionResult(
     val uri: String?,
     val fileExists: Boolean,
     val fileSizeBytes: Long,
+    val lastModifiedEpochMs: Long?,
     val durationMs: Long?,
+    val trackCount: Int,
     val width: Int?,
     val height: Int?,
     val hasVideoTrack: Boolean,
@@ -68,7 +70,9 @@ object MediaVerificationHelper {
                 uri = uri,
                 fileExists = false,
                 fileSizeBytes = 0L,
+                lastModifiedEpochMs = null,
                 durationMs = null,
+                trackCount = 0,
                 width = null,
                 height = null,
                 hasVideoTrack = false,
@@ -82,7 +86,9 @@ object MediaVerificationHelper {
                 uri = uri,
                 fileExists = false,
                 fileSizeBytes = 0L,
+                lastModifiedEpochMs = null,
                 durationMs = null,
+                trackCount = 0,
                 width = null,
                 height = null,
                 hasVideoTrack = false,
@@ -92,6 +98,7 @@ object MediaVerificationHelper {
         }
 
         val fileSize = file.length().coerceAtLeast(0L)
+        val lastModifiedEpochMs = file.lastModified().takeIf { it > 0L }
         var durationMs: Long? = null
         var width: Int? = null
         var height: Int? = null
@@ -113,10 +120,12 @@ object MediaVerificationHelper {
         }
 
         var hasVideoTrack = false
+        var trackCount = 0
         var trackError: String? = null
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(file.absolutePath)
+            trackCount = extractor.trackCount
             for (index in 0 until extractor.trackCount) {
                 val format = extractor.getTrackFormat(index)
                 val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
@@ -135,7 +144,9 @@ object MediaVerificationHelper {
             uri = uri,
             fileExists = true,
             fileSizeBytes = fileSize,
+            lastModifiedEpochMs = lastModifiedEpochMs,
             durationMs = durationMs,
+            trackCount = trackCount,
             width = width,
             height = height,
             hasVideoTrack = hasVideoTrack,

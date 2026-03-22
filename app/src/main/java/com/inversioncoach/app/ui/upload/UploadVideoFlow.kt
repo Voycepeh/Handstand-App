@@ -731,7 +731,7 @@ class UploadVideoViewModel(
 internal fun deriveUploadStage(session: SessionRecord): UploadStage = when {
     session.rawPersistStatus == RawPersistStatus.PROCESSING -> UploadStage.IMPORTING_RAW_VIDEO
     session.rawPersistStatus == RawPersistStatus.FAILED -> UploadStage.FAILED
-    session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT") -> UploadStage.FAILED
+    session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE") -> UploadStage.FAILED
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> UploadStage.COMPLETED_ANNOTATED
     session.annotatedExportStatus in setOf(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportStatus.SKIPPED) &&
         rawReplayPlayableForStage(session) -> UploadStage.COMPLETED_RAW_ONLY
@@ -754,7 +754,7 @@ internal fun deriveUploadStage(session: SessionRecord): UploadStage = when {
 }
 
 private fun rawReplayPlayableForStage(session: SessionRecord): Boolean {
-    if (session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT")) return false
+    if (session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE")) return false
     val rawUri = session.rawFinalUri ?: session.rawVideoUri ?: session.rawMasterUri
     if (rawUri.isNullOrBlank()) return false
     val bestPlayableUri = session.bestPlayableUri

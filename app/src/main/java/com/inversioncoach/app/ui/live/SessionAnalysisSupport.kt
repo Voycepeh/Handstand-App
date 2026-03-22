@@ -370,6 +370,7 @@ fun resolveReplaySourceState(
     val rawMarkedInvalid = session.rawPersistFailureReason in setOf(
         AnnotatedExportFailureReason.RAW_REPLAY_INVALID.name,
         AnnotatedExportFailureReason.RAW_MEDIA_CORRUPT.name,
+        AnnotatedExportFailureReason.SOURCE_VIDEO_UNREADABLE.name,
     )
     val decisionPending = session.annotatedExportStatus in setOf(
         AnnotatedExportStatus.VALIDATING_INPUT,
@@ -509,6 +510,7 @@ fun deriveReplayDisplayState(session: SessionRecord?, hasActiveExportJob: Boolea
     val rawInvalid = session.rawPersistFailureReason in setOf(
         AnnotatedExportFailureReason.RAW_REPLAY_INVALID.name,
         AnnotatedExportFailureReason.RAW_MEDIA_CORRUPT.name,
+        AnnotatedExportFailureReason.SOURCE_VIDEO_UNREADABLE.name,
     )
     val annotatedReadable = mediaAssetExists(annotatedUri)
     val bestPlayableUri = session.bestPlayableUri
@@ -630,6 +632,7 @@ object SessionDiagnostics {
             if (session.rawPersistFailureReason in setOf(
                     AnnotatedExportFailureReason.RAW_REPLAY_INVALID.name,
                     AnnotatedExportFailureReason.RAW_MEDIA_CORRUPT.name,
+                    AnnotatedExportFailureReason.SOURCE_VIDEO_UNREADABLE.name,
                 )
             ) {
                 return "Upload raw file copied but replay is invalid (${session.rawPersistFailureReason})."

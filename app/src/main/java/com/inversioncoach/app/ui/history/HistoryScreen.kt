@@ -183,7 +183,7 @@ private enum class HistorySort { RECENCY, STORAGE_SIZE, SESSION_DURATION }
 internal fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): String = when {
     session.rawPersistStatus == RawPersistStatus.FAILED -> "Failed"
     session.rawPersistStatus == RawPersistStatus.PROCESSING -> "Copying raw video"
-    session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT") -> "Raw replay unavailable (${session.rawPersistFailureReason})"
+    session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE") -> "Raw replay unavailable (${session.rawPersistFailureReason})"
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> "Ready"
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> "Failed"
     session.annotatedExportStatus in setOf(AnnotatedExportStatus.VALIDATING_INPUT, AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) -> {
@@ -217,7 +217,7 @@ internal fun uploadProgress(session: com.inversioncoach.app.model.SessionRecord)
 }
 
 private fun rawReplayPlayableForUi(session: com.inversioncoach.app.model.SessionRecord): Boolean {
-    if (session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT")) return false
+    if (session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE")) return false
     val rawUri = session.rawFinalUri ?: session.rawVideoUri ?: session.rawMasterUri
     if (rawUri.isNullOrBlank()) return false
     val bestPlayableUri = session.bestPlayableUri
