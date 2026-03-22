@@ -458,6 +458,20 @@ class ExportDurationResolutionTest {
     }
 
     @Test
+    fun persistedCanonicalUriIsNotReplacedByLaterCacheUri() {
+        val persistedUri = "file:///data/user/0/com.inversioncoach.app/files/session_blobs/session_44/${SessionBlobStorage.RAW_MASTER_FILE_NAME}"
+        val redundantCacheUri = "file:///cache/CameraX/transient_capture.mp4"
+
+        val acceptance = evaluateFinalizeCallbackAcceptance(
+            existingAcceptedUri = persistedUri,
+            incomingUri = redundantCacheUri,
+        )
+
+        assertEquals(FinalizeCallbackAction.IGNORED_REDUNDANT, acceptance.action)
+        assertEquals(persistedUri, acceptance.acceptedUri)
+    }
+
+    @Test
     fun upgradeInFlightDecisionUsesExplicitIgnoreRule() {
         assertFalse(
             resolveRecorderFinalizeFlowOutcome(
