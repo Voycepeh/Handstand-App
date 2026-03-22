@@ -22,10 +22,12 @@ class UploadVideoViewModelTest {
         val runner = object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                trackingMode: UploadTrackingMode,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,
             ): UploadFlowResult {
+                assertEquals(UploadTrackingMode.HOLD_BASED, trackingMode)
                 onSessionCreated(42L)
                 onProgress(UploadProgress(UploadStage.IMPORTING_RAW_VIDEO, 0.1f))
                 onProgress(UploadProgress(UploadStage.RAW_IMPORT_COMPLETE, 0.2f))
@@ -41,6 +43,7 @@ class UploadVideoViewModelTest {
             }
         }
         val viewModel = UploadVideoViewModel(runner)
+        viewModel.onTrackingModeSelected(UploadTrackingMode.HOLD_BASED)
 
         viewModel.analyze(Uri.parse("content://video"))
         advanceUntilIdle()
@@ -59,6 +62,7 @@ class UploadVideoViewModelTest {
         val runner = object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                trackingMode: UploadTrackingMode,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,
@@ -77,6 +81,7 @@ class UploadVideoViewModelTest {
             }
         }
         val viewModel = UploadVideoViewModel(runner)
+        viewModel.onTrackingModeSelected(UploadTrackingMode.HOLD_BASED)
 
         viewModel.analyze(Uri.parse("content://video"))
         advanceUntilIdle()
@@ -94,6 +99,7 @@ class UploadVideoViewModelTest {
         val runner = object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                trackingMode: UploadTrackingMode,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,
@@ -113,6 +119,7 @@ class UploadVideoViewModelTest {
             }
         }
         val viewModel = UploadVideoViewModel(runner)
+        viewModel.onTrackingModeSelected(UploadTrackingMode.HOLD_BASED)
 
         viewModel.analyze(Uri.parse("content://video"))
         advanceUntilIdle()
@@ -130,6 +137,7 @@ class UploadVideoViewModelTest {
         val runner = object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                trackingMode: UploadTrackingMode,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,
@@ -148,6 +156,7 @@ class UploadVideoViewModelTest {
             }
         }
         val viewModel = UploadVideoViewModel(runner)
+        viewModel.onTrackingModeSelected(UploadTrackingMode.HOLD_BASED)
 
         viewModel.analyze(Uri.parse("content://video"))
         advanceUntilIdle()
@@ -165,11 +174,13 @@ class UploadVideoViewModelTest {
         val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                trackingMode: UploadTrackingMode,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,
             ): UploadFlowResult = throw IllegalStateException("Unreadable media")
         })
+        viewModel.onTrackingModeSelected(UploadTrackingMode.HOLD_BASED)
 
         viewModel.analyze(Uri.parse("content://broken"))
         advanceUntilIdle()
@@ -185,6 +196,7 @@ class UploadVideoViewModelTest {
         val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                trackingMode: UploadTrackingMode,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,
@@ -196,5 +208,56 @@ class UploadVideoViewModelTest {
 
         assertEquals(UploadStage.FAILED, viewModel.state.value.stage)
         assertEquals("not a video", viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun analyzeRequiresTrackingModeSelectionBeforeProcessing() = runTest(dispatcher) {
+        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+        var runnerCalled = false
+        val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
+            override suspend fun run(
+                uri: Uri,
+                trackingMode: UploadTrackingMode,
+                onSessionCreated: (Long) -> Unit,
+                onProgress: (UploadProgress) -> Unit,
+                onLog: (String) -> Unit,
+            ): UploadFlowResult {
+                runnerCalled = true
+                return UploadFlowResult(1L, null, rawReady = false, annotatedReady = false, finalStage = UploadStage.FAILED)
+            }
+        })
+
+        viewModel.analyze(Uri.parse("content://video"))
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.errorMessage?.contains("Choose Hold-based or Rep-based") == true)
+        assertTrue(!runnerCalled)
+        kotlinx.coroutines.Dispatchers.resetMain()
+    }
+
+    @Test
+    fun selectedUploadTrackingModeIsForwardedToRunner() = runTest(dispatcher) {
+        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+        var capturedMode: UploadTrackingMode? = null
+        val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
+            override suspend fun run(
+                uri: Uri,
+                trackingMode: UploadTrackingMode,
+                onSessionCreated: (Long) -> Unit,
+                onProgress: (UploadProgress) -> Unit,
+                onLog: (String) -> Unit,
+            ): UploadFlowResult {
+                capturedMode = trackingMode
+                onSessionCreated(9L)
+                return UploadFlowResult(9L, "file:///raw.mp4", rawReady = true, annotatedReady = false, finalStage = UploadStage.COMPLETED_RAW_ONLY)
+            }
+        })
+        viewModel.onTrackingModeSelected(UploadTrackingMode.REP_BASED)
+
+        viewModel.analyze(Uri.parse("content://video"))
+        advanceUntilIdle()
+
+        assertEquals(UploadTrackingMode.REP_BASED, capturedMode)
+        kotlinx.coroutines.Dispatchers.resetMain()
     }
 }

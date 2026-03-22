@@ -248,13 +248,26 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     session?.let { Text(formatPrimaryPerformance(it)) }
                     session?.let {
                         val metrics = parseSessionMetrics(it.metricsJson)
-                        if (metrics.trackingMode == "HOLD_BASED") {
+                        val hasHoldMetrics =
+                            metrics.alignedDurationMs != null &&
+                                metrics.bestAlignedStreakMs != null &&
+                                metrics.sessionTrackedMs != null &&
+                                metrics.alignmentRate != null &&
+                                metrics.avgStability != null
+                        val hasRepMetrics =
+                            (metrics.acceptedReps != null || metrics.validReps != null) &&
+                                metrics.rawRepAttempts != null &&
+                                metrics.rejectedReps != null &&
+                                metrics.avgRepScore != null
+                        if (metrics.trackingMode == "HOLD_BASED" && hasHoldMetrics) {
                             Text("Alignment %: ${((metrics.alignmentRate ?: 0f) * 100f).toInt()} • Avg alignment: ${metrics.avgAlignment ?: 0}")
                             Text("Avg stability: ${metrics.avgStability ?: 0}")
-                        } else {
+                        } else if (metrics.trackingMode == "REP_BASED" && hasRepMetrics) {
                             Text("Accepted reps: ${metrics.acceptedReps ?: metrics.validReps ?: 0} • Rejected: ${metrics.rejectedReps ?: 0}")
                             Text("Avg rep score: ${metrics.avgRepScore ?: 0} • Best rep: ${metrics.bestRepScore ?: 0}")
                             if (!metrics.repFailureReason.isNullOrBlank()) Text("Top failure reason: ${metrics.repFailureReason}")
+                        } else if (it.sessionSource == SessionSource.UPLOADED_VIDEO) {
+                            Text("Upload analysis metrics are not available yet.")
                         }
                     }
                     Text(

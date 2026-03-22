@@ -99,6 +99,11 @@ data class UploadProgress(
     val detail: String? = null,
 )
 
+enum class UploadTrackingMode {
+    HOLD_BASED,
+    REP_BASED,
+}
+
 data class UploadVideoUiState(
     val selectedVideoUri: Uri? = null,
     val stage: UploadStage = UploadStage.IDLE,
@@ -113,6 +118,7 @@ data class UploadVideoUiState(
     val annotatedVideoStatus: AnnotatedExportStatus = AnnotatedExportStatus.NOT_STARTED,
     val currentProcessingStage: UploadStage = UploadStage.IDLE,
     val technicalLog: String = "",
+    val selectedTrackingMode: UploadTrackingMode? = null,
 )
 
 data class UploadFlowResult(
@@ -127,6 +133,7 @@ data class UploadFlowResult(
 interface UploadVideoAnalysisRunner {
     suspend fun run(
         uri: Uri,
+        trackingMode: UploadTrackingMode,
         onSessionCreated: (Long) -> Unit,
         onProgress: (UploadProgress) -> Unit,
         onLog: (String) -> Unit,
@@ -154,6 +161,7 @@ class DefaultUploadVideoAnalysisRunner(
 
     override suspend fun run(
         uri: Uri,
+        trackingMode: UploadTrackingMode,
         onSessionCreated: (Long) -> Unit,
         onProgress: (UploadProgress) -> Unit,
         onLog: (String) -> Unit,
@@ -172,7 +180,7 @@ class DefaultUploadVideoAnalysisRunner(
                 limitingFactor = "Pending analysis",
                 issues = "",
                 wins = "",
-                metricsJson = "{}",
+                metricsJson = "trackingMode:${trackingMode.name}",
                 annotatedVideoUri = null,
                 rawVideoUri = null,
                 notesUri = null,
@@ -203,6 +211,12 @@ class DefaultUploadVideoAnalysisRunner(
             Log.i(TAG, line)
         }
 
+        fun logStage(stage: String, message: String) {
+            val line = "session=$sessionId | stage=$stage | $message"
+            onLog(line)
+            Log.i(TAG, line)
+        }
+
         try {
             SessionDiagnostics.record(
                 sessionId = sessionId,
@@ -229,6 +243,22 @@ class DefaultUploadVideoAnalysisRunner(
 
             val metadata = extractMetadata(Uri.parse(persistedRawUri))
             sourceDurationMs = metadata.durationMs.coerceAtLeast(0L)
+            repository.updateMediaPipelineState(sessionId) { session ->
+                session.copy(
+                    completedAtMs = startedAt + sourceDurationMs,
+                    rawVideoUri = persistedRawUri,
+                    bestPlayableUri = persistedRawUri,
+                    metricsJson = mergeMetricsJson(
+                        session.metricsJson,
+                        mapOf(
+                            "trackingMode" to trackingMode.name,
+                            "sourceDurationMs" to sourceDurationMs.toString(),
+                            "sourceWidth" to metadata.width.toString(),
+                            "sourceHeight" to metadata.height.toString(),
+                        ),
+                    ),
+                )
+            }
             SessionDiagnostics.record(
                 sessionId = sessionId,
                 stage = SessionDiagnostics.Stage.TIMESTAMP_ALIGNMENT,
@@ -241,9 +271,19 @@ class DefaultUploadVideoAnalysisRunner(
                 ),
             )
             log("metadata durationMs=${metadata.durationMs} width=${metadata.width} height=${metadata.height}")
+            currentStage = UploadStage.RAW_IMPORT_COMPLETE
+            logStage("RAW_IMPORTED", "rawUri=$persistedRawUri durationMs=$sourceDurationMs width=${metadata.width} height=${metadata.height}")
 
             val profile = ExistingDrillToProfileAdapter().fromDrill(drillType)
             currentStage = UploadStage.PREPARING_ANALYSIS
+            repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.VALIDATING_INPUT)
+            repository.updateAnnotatedExportProgress(
+                sessionId = sessionId,
+                stage = AnnotatedExportStage.PREPARING,
+                percent = 20,
+                etaSeconds = null,
+                elapsedMs = System.currentTimeMillis() - startedAt,
+            )
             onProgress(UploadProgress(currentStage, 0.2f, detail = "Preparing uploaded analysis"))
             val frameSource = frameSourceFactory(context.applicationContext, preset.analysisFps)
             val analyzer = analyzerFactory(frameSource)
@@ -256,6 +296,7 @@ class DefaultUploadVideoAnalysisRunner(
                 metrics = mapOf("analysisFps" to preset.analysisFps.toString()),
             )
             currentStage = UploadStage.ANALYZING_VIDEO
+            logStage("ANALYZING_UPLOADED_VIDEO", "analysis_started=true")
             onProgress(UploadProgress(currentStage, 0.25f, detail = "Analyzing uploaded frames"))
             val analysisStart = System.currentTimeMillis()
             val analysis = analyzer.analyze(Uri.parse(persistedRawUri), profile)
@@ -349,6 +390,7 @@ class DefaultUploadVideoAnalysisRunner(
 
             currentStage = UploadStage.EXPORTING_ANNOTATED_VIDEO
             onProgress(UploadProgress(currentStage, 0.72f, detail = "Encoding annotated output"))
+            logStage("EXPORTING_ANNOTATED_VIDEO", "export_started=true")
             repository.updateAnnotatedExportProgress(
                 sessionId = sessionId,
                 stage = AnnotatedExportStage.ENCODING,
@@ -391,6 +433,7 @@ class DefaultUploadVideoAnalysisRunner(
                 etaSeconds = null,
                 elapsedMs = System.currentTimeMillis() - startedAt,
             )
+            logStage("VERIFYING_OUTPUT", "annotatedUri=${export.persistedUri.orEmpty()} verified=${!export.persistedUri.isNullOrBlank()}")
 
             val now = System.currentTimeMillis()
             val replayUri = export.persistedUri ?: persistedRawUri
@@ -437,7 +480,16 @@ class DefaultUploadVideoAnalysisRunner(
                     limitingFactor = if (isAnnotatedReady) "Consistency" else "Annotated export unavailable",
                     wins = "Processed uploaded video",
                     issues = if (analysis.droppedFrames > 0) "Dropped ${analysis.droppedFrames} low-confidence frames" else "",
-                    metricsJson = "trackingMode:HOLD_BASED|validFrames:${analysis.overlayTimeline.size}|invalidFrames:${analysis.droppedFrames}|totalJobTimeMs:${now - startedAt}",
+                    metricsJson = mergeMetricsJson(
+                        session.metricsJson,
+                        mapOf(
+                            "trackingMode" to trackingMode.name,
+                            "validFrames" to analysis.overlayTimeline.size.toString(),
+                            "invalidFrames" to analysis.droppedFrames.toString(),
+                            "totalJobTimeMs" to (now - startedAt).toString(),
+                            "sessionTrackedMs" to sourceDurationMs.toString(),
+                        ),
+                    ),
                     bestPlayableUri = replayUri,
                     rawVideoUri = persistedRawUri,
                     annotatedVideoUri = export.persistedUri,
@@ -445,6 +497,7 @@ class DefaultUploadVideoAnalysisRunner(
                     overlayTimelineUri = overlayTimelineUri,
                 )
             }
+            logStage("BUILDING_UPLOAD_SUMMARY", "summary_written=true")
             log("repo_write final replayUri=$replayUri annotatedReady=$isAnnotatedReady")
 
             if (isAnnotatedReady) {
@@ -460,6 +513,7 @@ class DefaultUploadVideoAnalysisRunner(
                 currentStage = UploadStage.COMPLETED_ANNOTATED
                 onProgress(UploadProgress(currentStage, 1f, etaMs = 0L, detail = "Annotated replay ready"))
                 log("complete annotatedReady=true replayUri=$replayUri")
+                logStage("COMPLETED", "replaySource=annotated")
                 SessionDiagnostics.persistReport(sessionId, repository.observeSession(sessionId).first(), repository)
                 return@withContext UploadFlowResult(
                     sessionId = sessionId,
@@ -485,6 +539,7 @@ class DefaultUploadVideoAnalysisRunner(
             currentStage = UploadStage.COMPLETED_RAW_ONLY
             onProgress(UploadProgress(currentStage, 1f, etaMs = 0L, detail = "Raw replay ready; annotated export failed"))
             log("complete annotatedReady=false reason=$failureReason")
+            logStage("COMPLETED", "replaySource=raw")
             SessionDiagnostics.persistReport(sessionId, repository.observeSession(sessionId).first(), repository)
             UploadFlowResult(
                 sessionId = sessionId,
@@ -529,6 +584,7 @@ class DefaultUploadVideoAnalysisRunner(
                     limitingFactor = "Upload processing failed",
                 )
             }
+            logStage("FAILED", "reason=${error.message ?: mappedFailure}")
             SessionDiagnostics.persistReport(sessionId, repository.observeSession(sessionId).first(), repository)
             throw error
         }
@@ -546,6 +602,20 @@ class DefaultUploadVideoAnalysisRunner(
         } finally {
             runCatching { retriever.release() }
         }
+    }
+
+    private fun mergeMetricsJson(base: String, updates: Map<String, String>): String {
+        val pairs = base.split('|')
+            .mapNotNull { token ->
+                val idx = token.indexOf(':')
+                if (idx <= 0) null else token.substring(0, idx) to token.substring(idx + 1)
+            }
+            .toMap()
+            .toMutableMap()
+        updates.forEach { (key, value) ->
+            pairs[key] = value
+        }
+        return pairs.entries.joinToString(separator = "|") { (key, value) -> "$key:$value" }
     }
 }
 
@@ -602,8 +672,30 @@ class UploadVideoViewModel(
         }
     }
 
+    fun onTrackingModeSelected(mode: UploadTrackingMode) {
+        _state.update {
+            it.copy(
+                selectedTrackingMode = mode,
+                errorMessage = null,
+            )
+        }
+    }
+
     fun analyze(uri: Uri) {
         if (activeJob?.isActive == true) return
+        val trackingMode = _state.value.selectedTrackingMode
+        if (trackingMode == null) {
+            _state.update {
+                it.copy(
+                    stage = UploadStage.FAILED,
+                    currentProcessingStage = UploadStage.FAILED,
+                    stageText = "Select movement type",
+                    errorMessage = "Choose Hold-based or Rep-based before processing an upload.",
+                    canCancel = false,
+                )
+            }
+            return
+        }
         activeJob = uploadScope.launch {
             _state.update {
                 it.copy(
@@ -623,6 +715,7 @@ class UploadVideoViewModel(
             runCatching {
                 runner.run(
                     uri = uri,
+                    trackingMode = trackingMode,
                     onSessionCreated = { sessionId ->
                         activeSessionId = sessionId
                         _state.update { current -> current.copy(sessionId = sessionId) }
@@ -818,9 +911,25 @@ fun UploadVideoScreen(
             Text("Analyze a recorded video with pose overlay", style = MaterialTheme.typography.titleMedium)
             Text(state.stageText, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Current stage: ${state.currentProcessingStage.label}", style = MaterialTheme.typography.bodySmall)
+            Text("Movement type: ${state.selectedTrackingMode?.name ?: "Not selected"}", style = MaterialTheme.typography.bodySmall)
             Text("Raw video status: ${state.rawVideoStatus.name}", style = MaterialTheme.typography.bodySmall)
             Text("Annotated video status: ${state.annotatedVideoStatus.name}", style = MaterialTheme.typography.bodySmall)
             state.selectedVideoUri?.let { Text("Selected: $it", style = MaterialTheme.typography.bodySmall) }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { viewModel.onTrackingModeSelected(UploadTrackingMode.HOLD_BASED) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (state.selectedTrackingMode == UploadTrackingMode.HOLD_BASED) "✓ Hold-based" else "Hold-based")
+                }
+                OutlinedButton(
+                    onClick = { viewModel.onTrackingModeSelected(UploadTrackingMode.REP_BASED) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (state.selectedTrackingMode == UploadTrackingMode.REP_BASED) "✓ Rep-based" else "Rep-based")
+                }
+            }
 
             if (state.stage in inFlightStages || state.stage == UploadStage.RAW_IMPORT_COMPLETE) {
                 CircularProgressIndicator()
@@ -842,9 +951,12 @@ fun UploadVideoScreen(
                     picker.launch(arrayOf("video/*"))
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = state.stage !in inFlightStages,
+                enabled = state.stage !in inFlightStages && state.selectedTrackingMode != null,
             ) {
                 Text("Choose Video")
+            }
+            if (state.selectedTrackingMode == null) {
+                Text("Select movement type before choosing a video.", style = MaterialTheme.typography.bodySmall)
             }
 
             if (state.canCancel) {
