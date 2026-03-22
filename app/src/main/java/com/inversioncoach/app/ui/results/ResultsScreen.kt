@@ -208,7 +208,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                             }
                             StatusRow("Replay source", if (rawFallbackAvailable && !isProcessing) "Raw" else replaySelection.label.removeSuffix(" replay"))
                             StatusRow("Raw", humanReadableStatus(activeSession.rawPersistStatus.name))
-                            if (activeSession.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT")) {
+                            if (activeSession.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE")) {
                                 Text(
                                     "Raw replay file was copied but is not decodable (${activeSession.rawPersistFailureReason}).",
                                     color = MaterialTheme.colorScheme.error,
@@ -248,13 +248,26 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     session?.let { Text(formatPrimaryPerformance(it)) }
                     session?.let {
                         val metrics = parseSessionMetrics(it.metricsJson)
-                        if (metrics.trackingMode == "HOLD_BASED") {
+                        val hasHoldMetrics =
+                            metrics.alignedDurationMs != null &&
+                                metrics.bestAlignedStreakMs != null &&
+                                metrics.sessionTrackedMs != null &&
+                                metrics.alignmentRate != null &&
+                                metrics.avgStability != null
+                        val hasRepMetrics =
+                            (metrics.acceptedReps != null || metrics.validReps != null) &&
+                                metrics.rawRepAttempts != null &&
+                                metrics.rejectedReps != null &&
+                                metrics.avgRepScore != null
+                        if (metrics.trackingMode == "HOLD_BASED" && hasHoldMetrics) {
                             Text("Alignment %: ${((metrics.alignmentRate ?: 0f) * 100f).toInt()} • Avg alignment: ${metrics.avgAlignment ?: 0}")
                             Text("Avg stability: ${metrics.avgStability ?: 0}")
-                        } else {
+                        } else if (metrics.trackingMode == "REP_BASED" && hasRepMetrics) {
                             Text("Accepted reps: ${metrics.acceptedReps ?: metrics.validReps ?: 0} • Rejected: ${metrics.rejectedReps ?: 0}")
                             Text("Avg rep score: ${metrics.avgRepScore ?: 0} • Best rep: ${metrics.bestRepScore ?: 0}")
                             if (!metrics.repFailureReason.isNullOrBlank()) Text("Top failure reason: ${metrics.repFailureReason}")
+                        } else if (it.sessionSource == SessionSource.UPLOADED_VIDEO) {
+                            Text("Upload analysis metrics are not available yet.")
                         }
                     }
                     Text(
@@ -310,7 +323,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             }
             if (!hasReplay) {
                 val rawFailure = session?.rawPersistFailureReason
-                val message = if (rawFailure in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT")) {
+                val message = if (rawFailure in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE")) {
                     "Replay unavailable: raw file exists but cannot be decoded ($rawFailure)."
                 } else {
                     "No replay asset is available for this session."
@@ -629,7 +642,7 @@ private fun isReplayStateStable(session: com.inversioncoach.app.model.SessionRec
 }
 
 private fun isRawReplayPlayable(session: com.inversioncoach.app.model.SessionRecord): Boolean {
-    val invalidReason = session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT")
+    val invalidReason = session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE")
     if (invalidReason) return false
     val rawUri = session.rawFinalUri ?: session.rawVideoUri ?: session.rawMasterUri
     if (rawUri.isNullOrBlank() || !mediaAssetExists(rawUri)) return false

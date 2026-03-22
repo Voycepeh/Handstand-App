@@ -25,9 +25,16 @@ class OverlayTimelineResolverTest {
     @Test
     fun holdsLastSampleWhenTimelineIsSparse() {
         val resolver = OverlayTimelineResolver(listOf(frame(0L, x = 0f)))
-        val resolved = resolver.overlayAt(100L)
+        val resolved = resolver.overlayAt(90L)
         assertNotNull(resolved)
         assertEquals(0f, resolved!!.smoothedLandmarks.first().x, 0.01f)
+    }
+
+    @Test
+    fun returnsNullWhenRequestedTimestampIsOutsideTolerance() {
+        val resolver = OverlayTimelineResolver(listOf(frame(0L, x = 0f)))
+        val resolved = resolver.overlayAt(350L)
+        assertEquals(null, resolved)
     }
 
     @Test

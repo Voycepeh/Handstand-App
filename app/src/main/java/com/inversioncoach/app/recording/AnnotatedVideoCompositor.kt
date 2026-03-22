@@ -21,7 +21,6 @@ import android.opengl.EGLSurface
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.opengl.GLUtils
-import android.opengl.Matrix
 import android.util.Log
 import android.view.Surface
 import com.inversioncoach.app.model.AnnotatedExportFailureReason
@@ -42,6 +41,7 @@ import kotlin.math.roundToInt
 private const val TAG = "AnnotatedVideoCompositor"
 private const val FIRST_FRAME_DECODE_TIMEOUT_MS = 2_500L
 private const val FRAME_SYNC_TIMEOUT_MS = 500L
+private const val EXPORT_DURATION_TOLERANCE_MS = 750L
 
 class AnnotatedVideoCompositor(
     private val context: Context,
@@ -56,7 +56,6 @@ class AnnotatedVideoCompositor(
         onProgress: (Int, Int) -> Unit = { _, _ -> },
         onTelemetry: (AnnotatedExportTelemetry) -> Unit = {},
     ): String? = withContext(Dispatchers.IO) {
-        if (overlayFrames.isEmpty()) return@withContext null
         val telemetry = AnnotatedExportTelemetry(
             exportStartedAtMs = System.currentTimeMillis(),
             overlayFramesAvailable = overlayFrames.size,
@@ -102,25 +101,34 @@ class AnnotatedVideoCompositor(
             val inputFormat = extractorInstance.getTrackFormat(videoTrack)
             val mime = inputFormat.getString(MediaFormat.KEY_MIME)
                 ?: return@withContext fail(AnnotatedExportFailureReason.DECODER_INIT_FAILED)
-            val sourceWidth = inputFormat.getInteger(MediaFormat.KEY_WIDTH)
-            val sourceHeight = inputFormat.getInteger(MediaFormat.KEY_HEIGHT)
-            val sourceRotationDegrees = if (inputFormat.containsKey(MediaFormat.KEY_ROTATION)) inputFormat.getInteger(MediaFormat.KEY_ROTATION) else 0
-            val durationUs = if (inputFormat.containsKey(MediaFormat.KEY_DURATION)) inputFormat.getLong(MediaFormat.KEY_DURATION) else 0L
-
-            val scale = (preset.targetHeight.toFloat() / sourceHeight.toFloat()).coerceAtMost(1f)
-            val outWidth = ((sourceWidth * scale) / 2f).roundToInt().coerceAtLeast(2) * 2
-            val outHeight = ((sourceHeight * scale) / 2f).roundToInt().coerceAtLeast(2) * 2
-            val estimatedTotalFrames = if (durationUs > 0L) {
-                ((durationUs / 1_000_000f) * preset.outputFps).roundToInt().coerceAtLeast(1)
+            val sourceMetadata = readSourceVideoMetadata(inputFormat, rawUri)
+            val transform = buildExportTransform(sourceMetadata, preset)
+            val estimatedTotalFrames = if (sourceMetadata.durationUs > 0L) {
+                ((sourceMetadata.durationUs / 1_000_000f) * preset.outputFps).roundToInt().coerceAtLeast(1)
             } else {
-                overlayFrames.size
+                1
             }
+            val firstOverlayTs = overlayFrames.firstOrNull()?.timestampMs
+            val lastOverlayTs = overlayFrames.lastOrNull()?.timestampMs
+            val overlaySpanMs = if (firstOverlayTs != null && lastOverlayTs != null) {
+                (lastOverlayTs - firstOverlayTs).coerceAtLeast(0L)
+            } else {
+                0L
+            }
+            Log.i(
+                TAG,
+                "export_diagnostics_start rawSourceUri=$rawVideoUri rawDurationMs=${sourceMetadata.durationUs / 1_000L} " +
+                    "rawWidth=${sourceMetadata.width} rawHeight=${sourceMetadata.height} sourceRotationDegrees=${sourceMetadata.rotationDegrees} " +
+                    "overlayFrameCount=${overlayFrames.size} firstOverlayTimestampMs=${firstOverlayTs ?: -1L} " +
+                    "lastOverlayTimestampMs=${lastOverlayTs ?: -1L} overlayTimelineSpanMs=$overlaySpanMs " +
+                    "outputWidth=${transform.outputWidth} outputHeight=${transform.outputHeight}",
+            )
 
             encoder = try {
                 MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC).apply {
-                    val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, outWidth, outHeight).apply {
+                    val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, transform.outputWidth, transform.outputHeight).apply {
                         setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                        setInteger(MediaFormat.KEY_BIT_RATE, computeBitrate(outWidth, outHeight, preset))
+                        setInteger(MediaFormat.KEY_BIT_RATE, computeBitrate(transform.outputWidth, transform.outputHeight, preset))
                         setInteger(MediaFormat.KEY_FRAME_RATE, preset.outputFps)
                         setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
                     }
@@ -138,7 +146,7 @@ class AnnotatedVideoCompositor(
             encoderInstance.start()
 
             glCompositor = try {
-                GlSurfaceCompositor(sourceWidth, sourceHeight, outWidth, outHeight, sourceRotationDegrees, encoderInputSurface)
+                GlSurfaceCompositor(sourceMetadata.width, sourceMetadata.height, transform, encoderInputSurface)
             } catch (e: CompositorInitException) {
                 Log.e(TAG, "egl_gl_init_failure stage=${e.reason}", e)
                 return@withContext fail(e.reason)
@@ -168,6 +176,7 @@ class AnnotatedVideoCompositor(
                 return@withContext fail(AnnotatedExportFailureReason.MUXER_INIT_FAILED)
             }
             val muxerInstance = muxer ?: return@withContext fail(AnnotatedExportFailureReason.MUXER_INIT_FAILED)
+            runCatching { muxerInstance.setOrientationHint(0) }
 
             val resolver = OverlayTimelineResolver(overlayFrames)
             val decoderInfo = MediaCodec.BufferInfo()
@@ -242,7 +251,7 @@ class AnnotatedVideoCompositor(
                                 val presentationTimeMs = decoderInfo.presentationTimeUs / 1000L
                                 val overlay = resolver.overlayAt(presentationTimeMs)
                                 if (overlay != null) telemetry.overlayFramesConsumed += 1
-                                val instruction = buildRenderInstruction(overlay, drillType, drillCameraSide)
+                                val instruction = buildRenderInstruction(overlay, drillType, drillCameraSide, transform)
                                 val result = glCompositorInstance.renderFrame(decoderInfo.presentationTimeUs, instruction, FRAME_SYNC_TIMEOUT_MS)
                                 telemetry.frameAvailableWaitMs += result.frameWaitMs
                                 telemetry.compositorRenderMs += result.renderMs
@@ -289,8 +298,25 @@ class AnnotatedVideoCompositor(
             onTelemetry(telemetry)
 
             val outputUri = Uri.fromFile(output).toString()
-            val readable = verifyReadableOutput(outputUri)
-            if (!readable || output.length() <= 0L) {
+            val outputMetadata = readOutputVideoMetadata(outputUri)
+            val verification = verifyExportedVideo(
+                sourceDurationMs = sourceMetadata.durationUs / 1_000L,
+                output = outputMetadata,
+                toleranceMs = EXPORT_DURATION_TOLERANCE_MS,
+                expectedWidth = transform.outputWidth,
+                expectedHeight = transform.outputHeight,
+                expectedRotationDegrees = 0,
+            )
+            Log.i(
+                TAG,
+                "export_diagnostics_finish rawSourceUri=$rawVideoUri exportStartTimestampMs=${telemetry.exportStartedAtMs} " +
+                    "exportEndTimestampMs=${telemetry.exportCompletedAtMs ?: -1L} verifiedOutputDurationMs=${outputMetadata?.durationMs ?: -1L} " +
+                    "verifiedOutputWidth=${outputMetadata?.width ?: -1} verifiedOutputHeight=${outputMetadata?.height ?: -1} " +
+                    "verifiedOutputRotationDegrees=${outputMetadata?.rotationDegrees ?: -1} verificationPassed=${verification.passed} " +
+                    "verificationDetail=${verification.failureDetail.orEmpty()}",
+            )
+            if (!verification.passed || output.length() <= 0L) {
+                Log.w(TAG, "export_verification_failed detail=${verification.failureDetail.orEmpty()}")
                 return@withContext fail(AnnotatedExportFailureReason.VERIFICATION_FAILED)
             }
             if (debugValidation) {
@@ -316,9 +342,11 @@ class AnnotatedVideoCompositor(
         overlay: AnnotatedOverlayFrame?,
         drillType: DrillType,
         drillCameraSide: DrillCameraSide,
+        transform: ExportTransform,
     ): RenderInstruction {
         if (overlay == null) return RenderInstruction()
         val joints = overlay.smoothedLandmarks.ifEmpty { overlay.landmarks }
+            .map { mapOverlayPointToExportSpace(it, transform) }
         val model = OverlayGeometry.build(
             drillType = drillType,
             sessionMode = overlay.sessionMode,
@@ -331,6 +359,60 @@ class AnnotatedVideoCompositor(
             drawSkeleton = overlay.showSkeleton,
             drawIdealLine = overlay.showIdealLine,
         )
+    }
+
+    private fun readSourceVideoMetadata(
+        inputFormat: MediaFormat,
+        rawUri: Uri,
+    ): SourceVideoMetadata {
+        val width = inputFormat.getInteger(MediaFormat.KEY_WIDTH)
+        val height = inputFormat.getInteger(MediaFormat.KEY_HEIGHT)
+        val formatDurationUs = if (inputFormat.containsKey(MediaFormat.KEY_DURATION)) inputFormat.getLong(MediaFormat.KEY_DURATION) else 0L
+        val formatRotation = if (inputFormat.containsKey(MediaFormat.KEY_ROTATION)) inputFormat.getInteger(MediaFormat.KEY_ROTATION) else 0
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, rawUri)
+            val retrieverDurationUs =
+                (retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L) * 1_000L
+            val retrieverRotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            val resolvedDurationUs = maxOf(formatDurationUs, retrieverDurationUs)
+            SourceVideoMetadata(
+                durationUs = resolvedDurationUs,
+                width = width,
+                height = height,
+                rotationDegrees = normalizedRotationDegrees(if (formatRotation != 0) formatRotation else retrieverRotation),
+            )
+        } catch (_: Throwable) {
+            SourceVideoMetadata(
+                durationUs = formatDurationUs,
+                width = width,
+                height = height,
+                rotationDegrees = normalizedRotationDegrees(formatRotation),
+            )
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
+    private fun readOutputVideoMetadata(outputUri: String): OutputVideoMetadata? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, Uri.parse(outputUri))
+            val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: return null
+            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: return null
+            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: return null
+            val rotationDegrees = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            OutputVideoMetadata(
+                durationMs = durationMs,
+                width = width,
+                height = height,
+                rotationDegrees = rotationDegrees,
+            )
+        } catch (_: Throwable) {
+            null
+        } finally {
+            runCatching { retriever.release() }
+        }
     }
 
     private fun verifyReadableOutput(annotatedVideoUri: String): Boolean {
@@ -407,11 +489,11 @@ class AnnotatedVideoCompositor(
     private class GlSurfaceCompositor(
         sourceWidth: Int,
         sourceHeight: Int,
-        private val width: Int,
-        private val height: Int,
-        sourceRotationDegrees: Int,
+        transform: ExportTransform,
         encoderSurface: Surface,
     ) {
+        private val width: Int = transform.outputWidth
+        private val height: Int = transform.outputHeight
         private val eglDisplay: EGLDisplay
         private val eglContext: EGLContext
         private val eglSurface: EGLSurface
@@ -420,9 +502,7 @@ class AnnotatedVideoCompositor(
         private val quad: FloatBuffer = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
             put(floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)); position(0)
         }
-        private val tex: FloatBuffer = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
-            put(floatArrayOf(0f, 1f, 1f, 1f, 0f, 0f, 1f, 0f)); position(0)
-        }
+        private val tex: FloatBuffer = createTextureCoordinateBuffer(transform.rotationDegrees)
 
         val decoderSurface: Surface
         private val decoderTextureId: Int
@@ -433,8 +513,6 @@ class AnnotatedVideoCompositor(
         private val overlayBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         private val overlayCanvas = Canvas(overlayBitmap)
         private val texMatrix = FloatArray(16)
-        private val rotationMatrix = FloatArray(16)
-        private val finalTexMatrix = FloatArray(16)
 
         init {
             eglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
@@ -487,13 +565,6 @@ class AnnotatedVideoCompositor(
             overlayTextureId = create2dTexture()
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, overlayTextureId)
             GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, overlayBitmap, 0)
-
-            Matrix.setIdentityM(rotationMatrix, 0)
-            if (sourceRotationDegrees != 0) {
-                Matrix.translateM(rotationMatrix, 0, 0.5f, 0.5f, 0f)
-                Matrix.rotateM(rotationMatrix, 0, sourceRotationDegrees.toFloat(), 0f, 0f, 1f)
-                Matrix.translateM(rotationMatrix, 0, -0.5f, -0.5f, 0f)
-            }
         }
 
         fun renderFrame(presentationTimeUs: Long, instruction: RenderInstruction, frameTimeoutMs: Long): RenderSubmissionResult {
@@ -505,7 +576,6 @@ class AnnotatedVideoCompositor(
             val renderStart = System.currentTimeMillis()
             surfaceTexture.updateTexImage()
             surfaceTexture.getTransformMatrix(texMatrix)
-            Matrix.multiplyMM(finalTexMatrix, 0, texMatrix, 0, rotationMatrix, 0)
 
             GLES20.glViewport(0, 0, width, height)
             GLES20.glClearColor(0f, 0f, 0f, 1f)
@@ -547,8 +617,36 @@ class AnnotatedVideoCompositor(
         private fun drawVideo() {
             GLES20.glUseProgram(videoProgram)
             val matrixLoc = GLES20.glGetUniformLocation(videoProgram, "uTexMatrix")
-            GLES20.glUniformMatrix4fv(matrixLoc, 1, false, finalTexMatrix, 0)
+            GLES20.glUniformMatrix4fv(matrixLoc, 1, false, texMatrix, 0)
             drawQuad(videoProgram, GLES11Ext.GL_TEXTURE_EXTERNAL_OES, decoderTextureId)
+        }
+
+        private fun createTextureCoordinateBuffer(rotationDegrees: Int): FloatBuffer {
+            val baseCoordinates = floatArrayOf(
+                0f, 1f,
+                1f, 1f,
+                0f, 0f,
+                1f, 0f,
+            )
+            val rotatedCoordinates = FloatArray(baseCoordinates.size)
+            var idx = 0
+            while (idx < baseCoordinates.size) {
+                val (x, y) = mapNormalizedPointToExportSpace(
+                    x = baseCoordinates[idx],
+                    y = baseCoordinates[idx + 1],
+                    rotationDegrees = rotationDegrees,
+                )
+                rotatedCoordinates[idx] = x
+                rotatedCoordinates[idx + 1] = y
+                idx += 2
+            }
+            return ByteBuffer.allocateDirect(rotatedCoordinates.size * 4)
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer()
+                .apply {
+                    put(rotatedCoordinates)
+                    position(0)
+                }
         }
 
         private fun drawOverlay(instruction: RenderInstruction) {

@@ -2,6 +2,8 @@ package com.inversioncoach.app.ui.common
 
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.model.SessionRecord
+import com.inversioncoach.app.model.SessionSource
+import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.sessionMode
 import java.text.DateFormat
 import java.util.Date
@@ -80,6 +82,48 @@ fun parseSessionMetrics(metricsJson: String): SessionMetrics {
 
 fun formatPrimaryPerformance(session: SessionRecord): String {
     val metrics = parseSessionMetrics(session.metricsJson)
+    if (session.sessionSource == SessionSource.UPLOADED_VIDEO) {
+        val hasHoldMetrics =
+            metrics.alignedDurationMs != null &&
+                metrics.bestAlignedStreakMs != null &&
+                metrics.sessionTrackedMs != null &&
+                metrics.alignmentRate != null &&
+                metrics.avgStability != null
+        val hasRepMetrics =
+            (metrics.acceptedReps != null || metrics.validReps != null) &&
+                metrics.rawRepAttempts != null &&
+                metrics.rejectedReps != null &&
+                metrics.avgRepScore != null
+        return when {
+            metrics.trackingMode == "HOLD_BASED" && hasHoldMetrics -> {
+                val aligned = formatSessionDuration(metrics.alignedDurationMs ?: 0L)
+                val best = formatSessionDuration(metrics.bestAlignedStreakMs ?: 0L)
+                val total = formatSessionDuration(metrics.sessionTrackedMs ?: computeSessionDurationMs(session.startedAtMs, session.completedAtMs))
+                "Hold: $aligned aligned • Best streak: $best • Session: $total • Align ${(((metrics.alignmentRate ?: 0f) * 100f).toInt())}% • Stability ${metrics.avgStability ?: 0}"
+            }
+
+            metrics.trackingMode == "REP_BASED" && hasRepMetrics -> {
+                val accepted = metrics.acceptedReps ?: metrics.validReps ?: 0
+                val rejected = metrics.rejectedReps ?: 0
+                val raw = metrics.rawRepAttempts ?: (accepted + rejected)
+                "Reps: $accepted accepted / $raw attempts • Rejected: $rejected • Avg rep ${metrics.avgRepScore ?: 0}"
+            }
+
+            session.annotatedExportStatus in setOf(
+                AnnotatedExportStatus.NOT_STARTED,
+                AnnotatedExportStatus.VALIDATING_INPUT,
+                AnnotatedExportStatus.PROCESSING,
+                AnnotatedExportStatus.PROCESSING_SLOW,
+            ) -> "Upload analysis is still processing."
+
+            session.annotatedExportStatus in setOf(
+                AnnotatedExportStatus.ANNOTATED_FAILED,
+                AnnotatedExportStatus.SKIPPED,
+            ) -> "Upload analysis did not produce scored attempts."
+
+            else -> "Upload analysis metrics are unavailable."
+        }
+    }
     return if (metrics.trackingMode == "HOLD_BASED") {
         val aligned = formatSessionDuration(metrics.alignedDurationMs ?: 0L)
         val best = formatSessionDuration(metrics.bestAlignedStreakMs ?: 0L)

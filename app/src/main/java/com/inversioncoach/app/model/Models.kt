@@ -50,6 +50,13 @@ enum class SessionMode {
     FREESTYLE,
 }
 
+enum class SessionStartupState {
+    IDLE,
+    COUNTDOWN,
+    ACTIVE,
+    CANCELLED,
+}
+
 enum class SessionSource {
     LIVE_COACHING,
     UPLOADED_VIDEO,
@@ -329,6 +336,7 @@ data class UserSettings(
     val retainDays: Int = 60,
     val debugOverlayEnabled: Boolean = false,
     val maxStorageMb: Int = 1024,
+    val startupCountdownSeconds: Int = 10,
     val minSessionDurationSeconds: Int = 3,
     val alignmentStrictness: AlignmentStrictness = AlignmentStrictness.BEGINNER,
     val customLineDeviation: Float = 0.14f,
@@ -370,6 +378,8 @@ data class LiveSessionUiState(
     val averageStabilityScore: Int = 0,
     val peakDrift: Float = 0f,
     val isRecording: Boolean = false,
+    val startupState: SessionStartupState = SessionStartupState.IDLE,
+    val sessionCountdownRemainingSeconds: Int? = null,
     val showOverlay: Boolean = true,
     val showIdealLine: Boolean = true,
     val showDebugOverlay: Boolean = false,

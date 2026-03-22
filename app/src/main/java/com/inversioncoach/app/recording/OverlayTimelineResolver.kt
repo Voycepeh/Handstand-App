@@ -4,6 +4,7 @@ import com.inversioncoach.app.model.JointPoint
 
 class OverlayTimelineResolver(
     frames: List<AnnotatedOverlayFrame>,
+    private val toleranceMs: Long = DEFAULT_OVERLAY_TOLERANCE_MS,
 ) {
     private val samples = frames.sortedBy { it.timestampMs }
     private var lowerIndex = 0
@@ -18,9 +19,15 @@ class OverlayTimelineResolver(
         }
         val previous = samples[lowerIndex]
         val next = samples.getOrNull(lowerIndex + 1)
-        if (next == null || previous.timestampMs == next.timestampMs) return previous
-        if (targetTimestampMs <= previous.timestampMs) return previous
-        if (targetTimestampMs >= next.timestampMs) return next
+        if (next == null || previous.timestampMs == next.timestampMs) {
+            return previous.takeIf { kotlin.math.abs(targetTimestampMs - it.timestampMs) <= toleranceMs }
+        }
+        if (targetTimestampMs <= previous.timestampMs) {
+            return previous.takeIf { kotlin.math.abs(targetTimestampMs - it.timestampMs) <= toleranceMs }
+        }
+        if (targetTimestampMs >= next.timestampMs) {
+            return next.takeIf { kotlin.math.abs(targetTimestampMs - it.timestampMs) <= toleranceMs }
+        }
         val span = (next.timestampMs - previous.timestampMs).toFloat().coerceAtLeast(1f)
         val t = ((targetTimestampMs - previous.timestampMs).toFloat() / span).coerceIn(0f, 1f)
         return interpolate(previous, next, t)
@@ -76,4 +83,7 @@ class OverlayTimelineResolver(
 
     private fun lerp(a: Float, b: Float, t: Float): Float = a + ((b - a) * t)
 
+    companion object {
+        private const val DEFAULT_OVERLAY_TOLERANCE_MS = 120L
+    }
 }

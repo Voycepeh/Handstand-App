@@ -47,6 +47,7 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
     var debug by remember { mutableStateOf(false) }
     var localOnlyPrivacyMode by remember { mutableStateOf(true) }
     var maxStorageMb by remember { mutableIntStateOf(1024) }
+    var startupCountdownSeconds by remember { mutableIntStateOf(10) }
     var minSessionDurationSeconds by remember { mutableIntStateOf(3) }
     var alignmentStrictness by remember { mutableStateOf(AlignmentStrictness.BEGINNER) }
     var customLineDeviation by remember { mutableFloatStateOf(0.14f) }
@@ -63,6 +64,7 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
             debug = s.debugOverlayEnabled
             localOnlyPrivacyMode = s.localOnlyPrivacyMode
             maxStorageMb = s.maxStorageMb
+            startupCountdownSeconds = s.startupCountdownSeconds
             minSessionDurationSeconds = s.minSessionDurationSeconds
             alignmentStrictness = s.alignmentStrictness
             customLineDeviation = s.customLineDeviation
@@ -91,6 +93,12 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
                 value = maxStorageMb.toFloat(),
                 onValueChange = { maxStorageMb = it.toInt().coerceIn(256, 4096) },
                 valueRange = 256f..4096f,
+            )
+            Text("Startup countdown: ${startupCountdownSeconds}s")
+            Slider(
+                value = startupCountdownSeconds.toFloat(),
+                onValueChange = { startupCountdownSeconds = it.toInt().coerceIn(0, 30) },
+                valueRange = 0f..30f,
             )
             Text("Minimum session length to keep (without video): ${minSessionDurationSeconds}s")
             Slider(
@@ -180,6 +188,7 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
                                         debugOverlayEnabled = debug,
                                         localOnlyPrivacyMode = localOnlyPrivacyMode,
                                         maxStorageMb = maxStorageMb,
+                                        startupCountdownSeconds = startupCountdownSeconds,
                                         minSessionDurationSeconds = minSessionDurationSeconds,
                                         alignmentStrictness = alignmentStrictness,
                                         customLineDeviation = customLineDeviation,

@@ -13,6 +13,7 @@ class UploadStageDerivationTest {
 
     @Test
     fun processingStagesMapToTruthfulUploadStages() {
+        assertEquals(UploadStage.PREPARING_ANALYSIS, deriveUploadStage(base.copy(rawPersistStatus = RawPersistStatus.SUCCEEDED, annotatedExportStatus = AnnotatedExportStatus.VALIDATING_INPUT, annotatedExportStage = AnnotatedExportStage.PREPARING)))
         assertEquals(UploadStage.PREPARING_ANALYSIS, deriveUploadStage(base.copy(rawPersistStatus = RawPersistStatus.SUCCEEDED, annotatedExportStatus = AnnotatedExportStatus.PROCESSING, annotatedExportStage = AnnotatedExportStage.PREPARING)))
         assertEquals(UploadStage.ANALYZING_VIDEO, deriveUploadStage(base.copy(rawPersistStatus = RawPersistStatus.SUCCEEDED, annotatedExportStatus = AnnotatedExportStatus.PROCESSING, annotatedExportStage = AnnotatedExportStage.DECODING_SOURCE)))
         assertEquals(UploadStage.RENDERING_OVERLAY, deriveUploadStage(base.copy(rawPersistStatus = RawPersistStatus.SUCCEEDED, annotatedExportStatus = AnnotatedExportStatus.PROCESSING, annotatedExportStage = AnnotatedExportStage.LOADING_OVERLAYS)))

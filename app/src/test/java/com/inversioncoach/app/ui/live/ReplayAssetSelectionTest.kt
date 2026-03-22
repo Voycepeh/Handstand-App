@@ -155,6 +155,22 @@ class ReplayAssetSelectionTest {
         assertEquals(null, resolution.uri)
     }
 
+    @Test
+    fun replayResolutionReportsUnavailableWhenRawValidationMarkedUnreadable() {
+        val resolution = resolveReplaySourceState(
+            session = sessionRecord(
+                rawUri = "file:///raw.mp4",
+                annotatedUri = null,
+                annotatedStatus = AnnotatedExportStatus.ANNOTATED_FAILED,
+                rawPersistFailureReason = AnnotatedExportFailureReason.SOURCE_VIDEO_UNREADABLE.name,
+            ),
+            isReadable = { it == "file:///raw.mp4" },
+        )
+
+        assertEquals(ReplaySourceState.UNAVAILABLE, resolution.state)
+        assertEquals(null, resolution.uri)
+    }
+
     private fun sessionRecord(
         rawUri: String?,
         annotatedUri: String?,
