@@ -41,6 +41,10 @@ fun OverlayRenderer(
             frame = OverlayDrawingFrame(
                 drawSkeleton = joints.isNotEmpty(),
                 drawIdealLine = showIdealLine,
+                sourceWidth = frame?.analysisWidth ?: 0,
+                sourceHeight = frame?.analysisHeight ?: 0,
+                sourceRotationDegrees = frame?.analysisRotationDegrees ?: 0,
+                mirrored = frame?.mirrored ?: false,
             ),
         )
 

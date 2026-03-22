@@ -160,6 +160,9 @@ class PoseAnalyzer(
                     inferenceTimeMs = inferenceMs,
                     droppedFrames = droppedFrames.toInt(),
                     rejectionReason = rejectionReason,
+                    analysisWidth = normalizedWidth,
+                    analysisHeight = normalizedHeight,
+                    analysisRotationDegrees = rotationDegrees,
                 ),
             )
         }

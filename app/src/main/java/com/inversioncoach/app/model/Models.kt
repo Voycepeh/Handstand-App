@@ -75,12 +75,20 @@ data class PoseFrame(
     val inferenceTimeMs: Long = 0L,
     val droppedFrames: Int = 0,
     val rejectionReason: String = "none",
+    val analysisWidth: Int = 0,
+    val analysisHeight: Int = 0,
+    val analysisRotationDegrees: Int = 0,
+    val mirrored: Boolean = false,
 )
 
 data class SmoothedPoseFrame(
     val timestampMs: Long,
     val joints: List<JointPoint>,
     val confidence: Float,
+    val analysisWidth: Int = 0,
+    val analysisHeight: Int = 0,
+    val analysisRotationDegrees: Int = 0,
+    val mirrored: Boolean = false,
 )
 
 data class AlignmentMetric(
@@ -328,6 +336,7 @@ data class UserSettings(
     val customRepAcceptanceThreshold: Int = 70,
     val customHoldAlignedThreshold: Int = 72,
     val drillCameraSideSelections: String = "",
+    val userBodyProfileJson: String? = null,
 )
 
 data class LiveSessionUiState(
