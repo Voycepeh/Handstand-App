@@ -11,6 +11,7 @@ import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.UserSettings
+import com.inversioncoach.app.calibration.UserBodyProfile
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.storage.SessionBlobStorage
 import com.inversioncoach.app.storage.db.FrameMetricDao
@@ -287,6 +288,16 @@ class SessionRepository(
             this[drillType] = side
         }
         userSettingsDao.upsert(settings.copy(drillCameraSideSelections = encodeDrillSides(updated)))
+    }
+
+    suspend fun saveUserBodyProfile(profile: UserBodyProfile?) {
+        val settings = userSettingsDao.getSettings() ?: UserSettings()
+        userSettingsDao.upsert(settings.copy(userBodyProfileJson = profile?.encode()))
+    }
+
+    suspend fun getUserBodyProfile(): UserBodyProfile? {
+        val settings = userSettingsDao.getSettings() ?: return null
+        return UserBodyProfile.decode(settings.userBodyProfileJson)
     }
 
     private suspend fun enforceConfiguredStorageLimit() {

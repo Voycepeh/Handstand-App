@@ -2,13 +2,21 @@ package com.inversioncoach.app.overlay
 
 import android.graphics.Canvas
 import android.graphics.Paint
+import com.inversioncoach.app.pose.PoseCoordinateMapper
+import com.inversioncoach.app.pose.PoseProjectionInput
+import com.inversioncoach.app.pose.PoseScaleMode
 
 data class OverlayDrawingFrame(
     val drawSkeleton: Boolean,
     val drawIdealLine: Boolean,
+    val sourceWidth: Int = 0,
+    val sourceHeight: Int = 0,
+    val sourceRotationDegrees: Int = 0,
+    val mirrored: Boolean = false,
 )
 
 object OverlayFrameRenderer {
+    private val mapper = PoseCoordinateMapper()
     private val skeletonPaint = Paint().apply {
         color = 0xFF7CF0A9.toInt()
         strokeWidth = 6f
@@ -36,24 +44,37 @@ object OverlayFrameRenderer {
         frame: OverlayDrawingFrame,
     ) {
         if (frame.drawSkeleton) {
+            val projection = PoseProjectionInput(
+                sourceWidth = frame.sourceWidth.coerceAtLeast(1),
+                sourceHeight = frame.sourceHeight.coerceAtLeast(1),
+                previewWidth = width.toFloat(),
+                previewHeight = height.toFloat(),
+                rotationDegrees = frame.sourceRotationDegrees,
+                mirrored = frame.mirrored,
+                scaleMode = PoseScaleMode.FIT,
+            )
             model.connections.forEach { (from, to) ->
                 val start = model.joints.firstOrNull { it.name == from } ?: return@forEach
                 val end = model.joints.firstOrNull { it.name == to } ?: return@forEach
+                val startMapped = mapper.map(start.x, start.y, projection)
+                val endMapped = mapper.map(end.x, end.y, projection)
                 canvas.drawLine(
-                    start.x * width,
-                    start.y * height,
-                    end.x * width,
-                    end.y * height,
+                    startMapped.x,
+                    startMapped.y,
+                    endMapped.x,
+                    endMapped.y,
                     skeletonPaint,
                 )
             }
 
             model.joints.forEach { joint ->
                 val style = jointStyle(joint.name, androidx.compose.ui.graphics.Color(0xFF7CF0A9), 6f)
-                jointFillPaint.color = style.color.toArgbCompat()
+                val alphaColor = style.color.copy(alpha = style.color.alpha * joint.visibility.coerceIn(0.2f, 1f))
+                jointFillPaint.color = alphaColor.toArgbCompat()
+                val mapped = mapper.map(joint.x, joint.y, projection)
                 canvas.drawCircle(
-                    joint.x * width,
-                    joint.y * height,
+                    mapped.x,
+                    mapped.y,
                     style.radius,
                     jointFillPaint,
                 )

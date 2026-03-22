@@ -35,7 +35,8 @@ import com.inversioncoach.app.motion.UserCalibrationSettings
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.overlay.FreestyleOrientationClassifier
 import com.inversioncoach.app.overlay.FreestyleViewMode
-import com.inversioncoach.app.pose.PoseSmoother
+import com.inversioncoach.app.pose.PoseSmoothingEngine
+import com.inversioncoach.app.pose.PoseValidationAndCorrectionEngine
 import com.inversioncoach.app.recording.MediaVerificationHelper
 import com.inversioncoach.app.recording.MediaVerificationResult
 import com.inversioncoach.app.recording.ReplayInspectionResult
@@ -48,6 +49,7 @@ import com.inversioncoach.app.recording.VideoCompressionPipeline
 import com.inversioncoach.app.storage.SessionBlobStorage
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.summary.SummaryGenerator
+import com.inversioncoach.app.calibration.UserBodyProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -86,7 +88,8 @@ class LiveCoachingViewModel(
     private val repository: SessionRepository,
     private val options: LiveSessionOptions,
     private val summaryGenerator: SummaryGenerator = SummaryGenerator(com.inversioncoach.app.summary.RecommendationEngine()),
-    private val smoother: PoseSmoother = PoseSmoother(),
+    private val smoother: PoseSmoothingEngine = PoseSmoothingEngine(),
+    private val correctionEngine: PoseValidationAndCorrectionEngine = PoseValidationAndCorrectionEngine(),
     private val motionPipeline: MotionAnalysisPipeline = MotionAnalysisPipeline(drillType),
     private val overlayStabilizer: OverlayStabilizer = OverlayStabilizer(),
     private val compressionPipeline: VideoCompressionPipeline = VideoCompressionPipeline(),
@@ -334,16 +337,31 @@ class LiveCoachingViewModel(
         val readiness = readinessEngine?.evaluate(frame)
         val sideForAnalysis = readiness?.actualSide ?: options.drillCameraSide
         val frameForSession = if (sessionMode == SessionMode.FREESTYLE) frame else frame.filterForDrillSide(sideForAnalysis)
-        val smoothed = smoother.smooth(frameForSession)
-        _smoothedFrame.value = smoothed
-        val freestyleViewMode = if (sessionMode == SessionMode.FREESTYLE) freestyleOrientationClassifier.classify(smoothed.joints) else FreestyleViewMode.UNKNOWN
-        _uiState.value = _uiState.value.copy(
-            confidence = smoothed.confidence,
-            freestyleViewMode = freestyleViewMode,
-        )
-        if (_uiState.value.startupState != SessionStartupState.ACTIVE) {
-            return
+        val bodyProfile = UserBodyProfile.decode(settings.userBodyProfileJson)
+        val corrected = correctionEngine.process(frameForSession, bodyProfile)
+        if (corrected.inversionDetected) {
+            SessionDiagnostics.logStructured(
+                event = "pose_inversion_detected",
+                sessionId = sessionId,
+                drillType = drillType,
+                rawUri = null,
+                annotatedUri = null,
+                overlayFrameCount = overlayFrames.size,
+                failureReason = "unreliable=${corrected.unreliableJointNames.joinToString(",")}",
+            )
         }
+        corrected.unreliableJointNames.forEach { jointName ->
+            SessionDiagnostics.logStructured(
+                event = "pose_joint_marked_unreliable",
+                sessionId = sessionId,
+                drillType = drillType,
+                rawUri = null,
+                annotatedUri = null,
+                overlayFrameCount = overlayFrames.size,
+                failureReason = "joint=$jointName",
+            )
+        }
+        val smoothed = smoother.smooth(corrected.frame)
         val calibration = if (settings.alignmentStrictness.name == "CUSTOM") {
             UserCalibrationSettings(
                 strictness = settings.alignmentStrictness,
@@ -360,7 +378,9 @@ class LiveCoachingViewModel(
             UserCalibrationSettings(settings.alignmentStrictness)
         }
         val motionEligible = sessionMode == SessionMode.DRILL && (readiness?.timerEligible ?: false)
-        val motion = if (motionEligible) motionPipeline.analyze(frameForSession, settings.alignmentStrictness, calibration) else null
+        val freestyleViewMode = if (sessionMode == SessionMode.FREESTYLE) freestyleOrientationClassifier.classify(smoothed.joints) else FreestyleViewMode.UNKNOWN
+        val motion = if (motionEligible) motionPipeline.analyze(corrected.frame, settings.alignmentStrictness, calibration) else null
+        _smoothedFrame.value = smoothed
         if (!overlayCaptureFrozen && shouldCaptureOverlayFrame(smoothed.timestampMs)) {
             val overlayFrame = overlayStabilizer.stabilize(
                 frame = smoothed,
@@ -936,6 +956,8 @@ class LiveCoachingViewModel(
 
     private fun startSession() {
         viewModelScope.launch {
+            smoother.reset()
+            correctionEngine.reset()
             val now = System.currentTimeMillis()
             sessionStartedAtMs = now
             val newSessionId = repository.saveSession(
@@ -1002,7 +1024,15 @@ class LiveCoachingViewModel(
         return copy(joints = filtered, landmarksDetected = filtered.size)
     }
 
-    private fun SmoothedPoseFrame.toPoseFrame(): PoseFrame = PoseFrame(timestampMs, joints, confidence)
+    private fun SmoothedPoseFrame.toPoseFrame(): PoseFrame = PoseFrame(
+        timestampMs = timestampMs,
+        joints = joints,
+        confidence = confidence,
+        analysisWidth = analysisWidth,
+        analysisHeight = analysisHeight,
+        analysisRotationDegrees = analysisRotationDegrees,
+        mirrored = mirrored,
+    )
 
     private fun setRawPersistState(status: RawPersistStatus, failureReason: String?) {
         rawPersistStatus = status
@@ -1784,6 +1814,8 @@ class LiveCoachingViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        smoother.reset()
+        correctionEngine.reset()
         finalizeSessionSilentlyIfActive()
     }
 
