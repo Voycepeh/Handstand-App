@@ -166,12 +166,12 @@ private fun ActionTile(
 ) {
     val colors = if (featured) {
         CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         )
     } else {
         CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
             contentColor = MaterialTheme.colorScheme.onSurface,
         )
     }
@@ -190,9 +190,10 @@ private fun ActionTile(
         ) {
             Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Surface(
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
                     shape = RoundedCornerShape(12.dp),
                     tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
                 ) {
                     Row(modifier = Modifier.padding(if (hero) 10.dp else 8.dp)) {
                         icon()
@@ -212,7 +213,12 @@ private fun ActionTile(
                 }
             }
             Spacer(modifier = Modifier.width(10.dp))
-            Icon(imageVector = Icons.Default.ArrowOutward, contentDescription = null, modifier = Modifier.size(if (hero) 22.dp else 18.dp))
+            Icon(
+                imageVector = Icons.Default.ArrowOutward,
+                contentDescription = null,
+                modifier = Modifier.size(if (hero) 22.dp else 18.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }
