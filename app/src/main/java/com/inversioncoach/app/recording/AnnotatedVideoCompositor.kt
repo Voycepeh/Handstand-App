@@ -509,7 +509,7 @@ class AnnotatedVideoCompositor(
         private val quad: FloatBuffer = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
             put(floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)); position(0)
         }
-        private val videoTex: FloatBuffer = createTextureCoordinateBuffer(transform.renderRotationDegrees)
+        private val videoTex: FloatBuffer = createOverlayTextureCoordinateBuffer()
         private val overlayTex: FloatBuffer = createOverlayTextureCoordinateBuffer()
 
         val decoderSurface: Surface
@@ -647,35 +647,6 @@ class AnnotatedVideoCompositor(
             val snapped = (normalized / 90f).roundToInt() * 90
             return normalizedRotationDegrees(snapped)
         }
-
-        private fun createTextureCoordinateBuffer(rotationDegrees: Int): FloatBuffer {
-            val baseCoordinates = floatArrayOf(
-                0f, 1f,
-                1f, 1f,
-                0f, 0f,
-                1f, 0f,
-            )
-            val rotatedCoordinates = FloatArray(baseCoordinates.size)
-            var idx = 0
-            while (idx < baseCoordinates.size) {
-                val (x, y) = mapTextureCoordinateToExportSpace(
-                    x = baseCoordinates[idx],
-                    y = baseCoordinates[idx + 1],
-                    rotationDegrees = rotationDegrees,
-                )
-                rotatedCoordinates[idx] = x
-                rotatedCoordinates[idx + 1] = y
-                idx += 2
-            }
-            return ByteBuffer.allocateDirect(rotatedCoordinates.size * 4)
-                .order(ByteOrder.nativeOrder())
-                .asFloatBuffer()
-                .apply {
-                    put(rotatedCoordinates)
-                    position(0)
-                }
-        }
-
 
         private fun createOverlayTextureCoordinateBuffer(): FloatBuffer {
             val coordinates = floatArrayOf(
