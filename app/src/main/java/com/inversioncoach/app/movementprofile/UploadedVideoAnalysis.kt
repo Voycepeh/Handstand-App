@@ -138,7 +138,9 @@ class UploadedVideoAnalyzer(
                     phaseTimeline += frame.timestampMs to phase.name
                     timeline += OverlayTimelinePoint(
                         timestampMs = frame.timestampMs,
-                        landmarks = normalized.joints.map { it.name to (it.x to it.y) },
+                        // Overlay rendering must stay in canonical source-frame normalized space.
+                        // The normalized pose frame is only for movement metrics/phase scoring.
+                        landmarks = frame.joints.map { it.name to (it.x to it.y) },
                         metrics = mapOf("alignment_score" to alignment, "trunk_lean" to angleFrame.trunkLeanDeg),
                         phaseId = phase.name,
                         confidence = frame.confidence,

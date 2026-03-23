@@ -12,6 +12,22 @@ import java.io.File
 
 class UploadedVideoAnalysisTest {
     @Test
+    fun analyzePreservesSourceFrameOverlayCoordinates() {
+        val profile = ExistingDrillToProfileAdapter().fromDrill(DrillType.FREESTYLE)
+        val source = object : VideoPoseFrameSource {
+            override fun decode(videoUri: Uri): Sequence<PoseFrame> = sequence {
+                yield(frame(0, 0.9f))
+            }
+        }
+
+        val result = UploadedVideoAnalyzer(source).analyze(Uri.parse("file:///tmp/source-space.mp4"), profile)
+        val landmarks = result.overlayTimeline.first().landmarks.toMap()
+
+        assertEquals(0.48f, landmarks.getValue("left_shoulder").first, 0.0001f)
+        assertEquals(0.30f, landmarks.getValue("left_shoulder").second, 0.0001f)
+    }
+
+    @Test
     fun analyzeAndPersistUploadSession() {
         val profile = MovementProfile(
             id = "freestyle-generic",
