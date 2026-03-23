@@ -376,11 +376,12 @@ class AnnotatedVideoCompositor(
                 (retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L) * 1_000L
             val retrieverRotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
             val resolvedDurationUs = maxOf(formatDurationUs, retrieverDurationUs)
+            val resolvedRotation = if (retrieverRotation != 0) retrieverRotation else formatRotation
             SourceVideoMetadata(
                 durationUs = resolvedDurationUs,
                 width = width,
                 height = height,
-                rotationDegrees = normalizedRotationDegrees(if (formatRotation != 0) formatRotation else retrieverRotation),
+                rotationDegrees = normalizedRotationDegrees(resolvedRotation),
             )
         } catch (_: Throwable) {
             SourceVideoMetadata(

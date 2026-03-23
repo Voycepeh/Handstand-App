@@ -33,11 +33,7 @@ internal data class OutputVerificationResult(
 
 internal fun normalizedRotationDegrees(rawRotationDegrees: Int): Int = ((rawRotationDegrees % 360) + 360) % 360
 
-internal fun sourceToUprightRotationDegrees(rawRotationDegrees: Int): Int = when (normalizedRotationDegrees(rawRotationDegrees)) {
-    90 -> 270
-    270 -> 90
-    else -> normalizedRotationDegrees(rawRotationDegrees)
-}
+internal fun sourceToUprightRotationDegrees(rawRotationDegrees: Int): Int = normalizedRotationDegrees(rawRotationDegrees)
 
 internal fun buildExportTransform(
     source: SourceVideoMetadata,

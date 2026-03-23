@@ -36,7 +36,7 @@ class AnnotatedExportNormalizationTest {
         )
 
         assertTrue(transform.requiresAxisSwap)
-        assertEquals(270, transform.rotationDegrees)
+        assertEquals(90, transform.rotationDegrees)
         assertTrue(transform.outputHeight > transform.outputWidth)
     }
 
@@ -51,10 +51,10 @@ class AnnotatedExportNormalizationTest {
         )
         val rotated = mapOverlayPointToExportSpace(
             point = point,
-            transform = ExportTransform(rotationDegrees = 270, outputWidth = 720, outputHeight = 1280),
+            transform = ExportTransform(rotationDegrees = 90, outputWidth = 720, outputHeight = 1280),
         )
-        assertEquals(0.75f, rotated.x, 0.0001f)
-        assertEquals(0.75f, rotated.y, 0.0001f)
+        assertEquals(0.25f, rotated.x, 0.0001f)
+        assertEquals(0.25f, rotated.y, 0.0001f)
     }
 
     @Test
@@ -100,7 +100,7 @@ class AnnotatedExportNormalizationTest {
             z = 0f,
             visibility = 1f,
         )
-        val transform = ExportTransform(rotationDegrees = 270, outputWidth = 720, outputHeight = 1280)
+        val transform = ExportTransform(rotationDegrees = 90, outputWidth = 720, outputHeight = 1280)
 
         val mappedOverlay = mapOverlayPointToExportSpace(overlayPoint, transform)
         val mappedNormalized = mapNormalizedPointToExportSpace(
@@ -111,5 +111,13 @@ class AnnotatedExportNormalizationTest {
 
         assertEquals(mappedNormalized.first, mappedOverlay.x, 0.0001f)
         assertEquals(mappedNormalized.second, mappedOverlay.y, 0.0001f)
+    }
+
+    @Test
+    fun sourceRotationMappingPreservesExpectedNormalizationAcrossAllCanonicalRotations() {
+        assertEquals(0, sourceToUprightRotationDegrees(0))
+        assertEquals(90, sourceToUprightRotationDegrees(90))
+        assertEquals(180, sourceToUprightRotationDegrees(180))
+        assertEquals(270, sourceToUprightRotationDegrees(270))
     }
 }
