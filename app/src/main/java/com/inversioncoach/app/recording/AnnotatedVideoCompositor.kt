@@ -21,6 +21,7 @@ import android.opengl.EGLSurface
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.opengl.GLUtils
+import android.opengl.Matrix
 import android.util.Log
 import android.view.Surface
 import com.inversioncoach.app.model.AnnotatedExportFailureReason
@@ -119,6 +120,7 @@ class AnnotatedVideoCompositor(
                 TAG,
                 "export_diagnostics_start rawSourceUri=$rawVideoUri rawDurationMs=${sourceMetadata.durationUs / 1_000L} " +
                     "rawWidth=${sourceMetadata.width} rawHeight=${sourceMetadata.height} sourceRotationDegrees=${sourceMetadata.rotationDegrees} " +
+                    "renderRotationDegrees=${transform.renderRotationDegrees} finalMuxerOrientationHintDegrees=${transform.finalRotationMetadataDegrees} " +
                     "overlayFrameCount=${overlayFrames.size} firstOverlayTimestampMs=${firstOverlayTs ?: -1L} " +
                     "lastOverlayTimestampMs=${lastOverlayTs ?: -1L} overlayTimelineSpanMs=$overlaySpanMs " +
                     "outputWidth=${transform.outputWidth} outputHeight=${transform.outputHeight}",
@@ -176,7 +178,7 @@ class AnnotatedVideoCompositor(
                 return@withContext fail(AnnotatedExportFailureReason.MUXER_INIT_FAILED)
             }
             val muxerInstance = muxer ?: return@withContext fail(AnnotatedExportFailureReason.MUXER_INIT_FAILED)
-            runCatching { muxerInstance.setOrientationHint(0) }
+            runCatching { muxerInstance.setOrientationHint(transform.finalRotationMetadataDegrees) }
 
             val resolver = OverlayTimelineResolver(overlayFrames)
             val decoderInfo = MediaCodec.BufferInfo()
@@ -319,6 +321,11 @@ class AnnotatedVideoCompositor(
                 Log.w(TAG, "export_verification_failed detail=${verification.failureDetail.orEmpty()}")
                 return@withContext fail(AnnotatedExportFailureReason.VERIFICATION_FAILED)
             }
+            Log.i(
+                TAG,
+                "export_diagnostics_complete outputWidth=${outputMetadata?.width ?: -1} " +
+                    "outputHeight=${outputMetadata?.height ?: -1} outputRotationDegrees=${outputMetadata?.rotationDegrees ?: -1}",
+            )
             if (debugValidation) {
                 Log.d(TAG, "debug_validation overlay_present=${verifyAnnotatedDifference(rawVideoUri, outputUri)}")
             }
@@ -503,7 +510,7 @@ class AnnotatedVideoCompositor(
         private val quad: FloatBuffer = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
             put(floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)); position(0)
         }
-        private val tex: FloatBuffer = createTextureCoordinateBuffer(transform.rotationDegrees)
+        private val tex: FloatBuffer = createTextureCoordinateBuffer(transform.renderRotationDegrees)
 
         val decoderSurface: Surface
         private val decoderTextureId: Int
@@ -513,7 +520,9 @@ class AnnotatedVideoCompositor(
         private val overlayTextureId: Int
         private val overlayBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         private val overlayCanvas = Canvas(overlayBitmap)
+        private val identityTexMatrix = FloatArray(16).apply { Matrix.setIdentityM(this, 0) }
         private val texMatrix = FloatArray(16)
+        private var loggedTextureTransformDiagnostics = false
 
         init {
             eglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
@@ -577,6 +586,15 @@ class AnnotatedVideoCompositor(
             val renderStart = System.currentTimeMillis()
             surfaceTexture.updateTexImage()
             surfaceTexture.getTransformMatrix(texMatrix)
+            if (!loggedTextureTransformDiagnostics) {
+                val texMatrixRotation = inferTextureMatrixRotationDegrees(texMatrix)
+                Log.i(
+                    TAG,
+                    "export_diagnostics_texture_transform sourceRotationDegrees=${transform.sourceMetadataRotationDegrees} " +
+                        "renderRotationDegrees=${transform.renderRotationDegrees} texMatrixRotationDegrees=$texMatrixRotation",
+                )
+                loggedTextureTransformDiagnostics = true
+            }
 
             GLES20.glViewport(0, 0, width, height)
             GLES20.glClearColor(0f, 0f, 0f, 1f)
@@ -618,8 +636,17 @@ class AnnotatedVideoCompositor(
         private fun drawVideo() {
             GLES20.glUseProgram(videoProgram)
             val matrixLoc = GLES20.glGetUniformLocation(videoProgram, "uTexMatrix")
-            GLES20.glUniformMatrix4fv(matrixLoc, 1, false, texMatrix, 0)
+            GLES20.glUniformMatrix4fv(matrixLoc, 1, false, identityTexMatrix, 0)
             drawQuad(videoProgram, GLES11Ext.GL_TEXTURE_EXTERNAL_OES, decoderTextureId)
+        }
+
+        private fun inferTextureMatrixRotationDegrees(matrix: FloatArray): Int {
+            val xAxisX = matrix[0]
+            val xAxisY = matrix[1]
+            val angleDegrees = Math.toDegrees(kotlin.math.atan2(xAxisY.toDouble(), xAxisX.toDouble())).toInt()
+            val normalized = ((angleDegrees % 360) + 360) % 360
+            val snapped = (normalized / 90f).roundToInt() * 90
+            return normalizedRotationDegrees(snapped)
         }
 
         private fun createTextureCoordinateBuffer(rotationDegrees: Int): FloatBuffer {

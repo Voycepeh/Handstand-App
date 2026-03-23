@@ -9,6 +9,131 @@ import org.junit.Test
 class AnnotatedExportNormalizationTest {
 
     @Test
+    fun sourceRotationZeroRendersUprightWithZeroOutputMetadataRotation() {
+        val transform = buildExportTransform(
+            source = SourceVideoMetadata(
+                durationUs = 11_000_000L,
+                width = 1080,
+                height = 1920,
+                rotationDegrees = 0,
+            ),
+            preset = ExportPreset.BALANCED,
+        )
+
+        assertFalse(transform.requiresAxisSwap)
+        assertEquals(0, transform.sourceMetadataRotationDegrees)
+        assertEquals(0, transform.renderRotationDegrees)
+        assertEquals(0, transform.finalRotationMetadataDegrees)
+
+        val verification = verifyExportedVideo(
+            sourceDurationMs = 11_000L,
+            output = OutputVideoMetadata(
+                durationMs = 11_000L,
+                width = transform.outputWidth,
+                height = transform.outputHeight,
+                rotationDegrees = 0,
+            ),
+            expectedWidth = transform.outputWidth,
+            expectedHeight = transform.outputHeight,
+            expectedRotationDegrees = transform.finalRotationMetadataDegrees,
+        )
+        assertTrue(verification.passed)
+    }
+
+    @Test
+    fun sourceRotationNinetyRendersUprightWithSwappedAxesAndZeroOutputMetadataRotation() {
+        val transform = buildExportTransform(
+            source = SourceVideoMetadata(
+                durationUs = 11_000_000L,
+                width = 1920,
+                height = 1080,
+                rotationDegrees = 90,
+            ),
+            preset = ExportPreset.BALANCED,
+        )
+
+        assertTrue(transform.requiresAxisSwap)
+        assertEquals(90, transform.sourceMetadataRotationDegrees)
+        assertEquals(90, transform.renderRotationDegrees)
+        assertEquals(0, transform.finalRotationMetadataDegrees)
+        assertTrue(transform.outputHeight > transform.outputWidth)
+
+        val verification = verifyExportedVideo(
+            sourceDurationMs = 11_000L,
+            output = OutputVideoMetadata(
+                durationMs = 11_000L,
+                width = transform.outputWidth,
+                height = transform.outputHeight,
+                rotationDegrees = 0,
+            ),
+            expectedWidth = transform.outputWidth,
+            expectedHeight = transform.outputHeight,
+            expectedRotationDegrees = transform.finalRotationMetadataDegrees,
+        )
+        assertTrue(verification.passed)
+    }
+
+    @Test
+    fun sourceRotationTwoSeventyRendersUprightWithSwappedAxesAndZeroOutputMetadataRotation() {
+        val transform = buildExportTransform(
+            source = SourceVideoMetadata(
+                durationUs = 11_000_000L,
+                width = 1920,
+                height = 1080,
+                rotationDegrees = 270,
+            ),
+            preset = ExportPreset.BALANCED,
+        )
+
+        assertTrue(transform.requiresAxisSwap)
+        assertEquals(270, transform.sourceMetadataRotationDegrees)
+        assertEquals(270, transform.renderRotationDegrees)
+        assertEquals(0, transform.finalRotationMetadataDegrees)
+        assertTrue(transform.outputHeight > transform.outputWidth)
+
+        val verification = verifyExportedVideo(
+            sourceDurationMs = 11_000L,
+            output = OutputVideoMetadata(
+                durationMs = 11_000L,
+                width = transform.outputWidth,
+                height = transform.outputHeight,
+                rotationDegrees = 0,
+            ),
+            expectedWidth = transform.outputWidth,
+            expectedHeight = transform.outputHeight,
+            expectedRotationDegrees = transform.finalRotationMetadataDegrees,
+        )
+        assertTrue(verification.passed)
+    }
+
+    @Test
+    fun doesNotApplySecondRotationWhenContentAlreadyUpright() {
+        val transform = buildExportTransform(
+            source = SourceVideoMetadata(
+                durationUs = 9_000_000L,
+                width = 1080,
+                height = 1920,
+                rotationDegrees = 0,
+            ),
+            preset = ExportPreset.BALANCED,
+        )
+
+        val overlayPoint = JointPoint(
+            name = "left_hip",
+            x = 0.3f,
+            y = 0.6f,
+            z = 0f,
+            visibility = 1f,
+        )
+        val mappedOverlay = mapOverlayPointToExportSpace(overlayPoint, transform)
+
+        assertEquals(overlayPoint.x, mappedOverlay.x, 0.0001f)
+        assertEquals(overlayPoint.y, mappedOverlay.y, 0.0001f)
+        assertEquals(0, transform.renderRotationDegrees)
+        assertEquals(0, transform.finalRotationMetadataDegrees)
+    }
+
+    @Test
     fun shorterOverlayTimelineDoesNotChangeRawDurationVerification() {
         val verification = verifyExportedVideo(
             sourceDurationMs = 11_000L,
@@ -24,23 +149,6 @@ class AnnotatedExportNormalizationTest {
     }
 
     @Test
-    fun rotatedInputSwapsExportDimensionsForPortraitOutput() {
-        val transform = buildExportTransform(
-            source = SourceVideoMetadata(
-                durationUs = 11_000_000L,
-                width = 1920,
-                height = 1080,
-                rotationDegrees = 90,
-            ),
-            preset = ExportPreset.BALANCED,
-        )
-
-        assertTrue(transform.requiresAxisSwap)
-        assertEquals(90, transform.rotationDegrees)
-        assertTrue(transform.outputHeight > transform.outputWidth)
-    }
-
-    @Test
     fun overlayPointsRotateIntoSameNormalizedSpaceAsVideo() {
         val point = JointPoint(
             name = "left_shoulder",
@@ -51,7 +159,12 @@ class AnnotatedExportNormalizationTest {
         )
         val rotated = mapOverlayPointToExportSpace(
             point = point,
-            transform = ExportTransform(rotationDegrees = 90, outputWidth = 720, outputHeight = 1280),
+            transform = ExportTransform(
+                sourceMetadataRotationDegrees = 90,
+                renderRotationDegrees = 90,
+                outputWidth = 720,
+                outputHeight = 1280,
+            ),
         )
         assertEquals(0.25f, rotated.x, 0.0001f)
         assertEquals(0.25f, rotated.y, 0.0001f)
@@ -100,13 +213,18 @@ class AnnotatedExportNormalizationTest {
             z = 0f,
             visibility = 1f,
         )
-        val transform = ExportTransform(rotationDegrees = 90, outputWidth = 720, outputHeight = 1280)
+        val transform = ExportTransform(
+            sourceMetadataRotationDegrees = 90,
+            renderRotationDegrees = 90,
+            outputWidth = 720,
+            outputHeight = 1280,
+        )
 
         val mappedOverlay = mapOverlayPointToExportSpace(overlayPoint, transform)
         val mappedNormalized = mapNormalizedPointToExportSpace(
             x = overlayPoint.x,
             y = overlayPoint.y,
-            rotationDegrees = transform.rotationDegrees,
+            rotationDegrees = transform.renderRotationDegrees,
         )
 
         assertEquals(mappedNormalized.first, mappedOverlay.x, 0.0001f)
@@ -119,5 +237,13 @@ class AnnotatedExportNormalizationTest {
         assertEquals(90, sourceToUprightRotationDegrees(90))
         assertEquals(180, sourceToUprightRotationDegrees(180))
         assertEquals(270, sourceToUprightRotationDegrees(270))
+    }
+
+    @Test
+    fun normalizedPointMappingCoversAllCanonicalRotations() {
+        assertEquals(0.2f to 0.8f, mapNormalizedPointToExportSpace(0.2f, 0.8f, 0))
+        assertEquals(0.2f to 0.2f, mapNormalizedPointToExportSpace(0.8f, 0.2f, 90))
+        assertEquals(0.8f to 0.2f, mapNormalizedPointToExportSpace(0.2f, 0.8f, 180))
+        assertEquals(0.8f to 0.8f, mapNormalizedPointToExportSpace(0.2f, 0.8f, 270))
     }
 }

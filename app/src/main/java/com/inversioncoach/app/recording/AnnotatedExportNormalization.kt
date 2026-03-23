@@ -12,11 +12,13 @@ internal data class SourceVideoMetadata(
 )
 
 internal data class ExportTransform(
-    val rotationDegrees: Int,
+    val sourceMetadataRotationDegrees: Int,
+    val renderRotationDegrees: Int,
     val outputWidth: Int,
     val outputHeight: Int,
+    val finalRotationMetadataDegrees: Int = 0,
 ) {
-    val requiresAxisSwap: Boolean = rotationDegrees == 90 || rotationDegrees == 270
+    val requiresAxisSwap: Boolean = sourceMetadataRotationDegrees == 90 || sourceMetadataRotationDegrees == 270
 }
 
 internal data class OutputVideoMetadata(
@@ -35,6 +37,8 @@ internal fun normalizedRotationDegrees(rawRotationDegrees: Int): Int = ((rawRota
 
 internal fun sourceToUprightRotationDegrees(rawRotationDegrees: Int): Int = normalizedRotationDegrees(rawRotationDegrees)
 
+internal fun finalOutputRotationMetadataDegrees(): Int = 0
+
 internal fun buildExportTransform(
     source: SourceVideoMetadata,
     preset: ExportPreset,
@@ -46,14 +50,16 @@ internal fun buildExportTransform(
     val outputWidth = ((orientedWidth * scale) / 2f).roundToInt().coerceAtLeast(2) * 2
     val outputHeight = ((orientedHeight * scale) / 2f).roundToInt().coerceAtLeast(2) * 2
     return ExportTransform(
-        rotationDegrees = sourceToUprightRotationDegrees(source.rotationDegrees),
+        sourceMetadataRotationDegrees = sourceRotation,
+        renderRotationDegrees = sourceToUprightRotationDegrees(source.rotationDegrees),
         outputWidth = outputWidth,
         outputHeight = outputHeight,
+        finalRotationMetadataDegrees = finalOutputRotationMetadataDegrees(),
     )
 }
 
 internal fun mapOverlayPointToExportSpace(point: JointPoint, transform: ExportTransform): JointPoint {
-    val (mappedX, mappedY) = mapNormalizedPointToExportSpace(point.x, point.y, transform.rotationDegrees)
+    val (mappedX, mappedY) = mapNormalizedPointToExportSpace(point.x, point.y, transform.renderRotationDegrees)
     return point.copy(
         x = mappedX.coerceIn(0f, 1f),
         y = mappedY.coerceIn(0f, 1f),
