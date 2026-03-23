@@ -44,7 +44,6 @@ import com.inversioncoach.app.model.SessionSource
 import com.inversioncoach.app.model.sessionMode
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.storage.ServiceLocator
-import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatPrimaryPerformance
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
@@ -85,6 +84,15 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     }
     val sessionSummaryDisplay = remember(session) { buildSessionSummaryDisplay(session) }
     val sessionMode = session?.sessionMode()
+
+    val displayDurationMs = session?.let { activeSession ->
+        resolveDisplayDurationMs(
+            context = context,
+            annotatedUri = activeSession.annotatedVideoUri,
+            rawUri = activeSession.rawVideoUri,
+            sessionDurationMs = (activeSession.completedAtMs - activeSession.startedAtMs).coerceAtLeast(0L),
+        )
+    } ?: 0L
 
     LaunchedEffect(sessionId) {
         notes = repository.readSessionNotes(sessionId).orEmpty()
@@ -244,7 +252,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     Text("Session ID: $sessionId")
                     Text("Type: ${sessionTypeLabel(session)}")
                     Text("Started: ${formatSessionDateTime(session?.startedAtMs ?: 0L)}")
-                    Text("Duration: ${formatSessionDuration(computeSessionDurationMs(session?.startedAtMs ?: 0L, session?.completedAtMs ?: 0L))}")
+                    Text("Duration: ${formatSessionDuration(displayDurationMs)}")
                     session?.let { Text(formatPrimaryPerformance(it)) }
                     session?.let {
                         val metrics = parseSessionMetrics(it.metricsJson)
@@ -436,6 +444,43 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     }
 }
 
+
+
+internal fun pickDisplayDurationMs(
+    annotatedDurationMs: Long?,
+    rawDurationMs: Long?,
+    sessionDurationMs: Long,
+): Long = annotatedDurationMs ?: rawDurationMs ?: sessionDurationMs
+
+private fun resolveDisplayDurationMs(
+    context: android.content.Context,
+    annotatedUri: String?,
+    rawUri: String?,
+    sessionDurationMs: Long,
+): Long = pickDisplayDurationMs(
+    annotatedDurationMs = extractVideoDurationMs(context, annotatedUri),
+    rawDurationMs = extractVideoDurationMs(context, rawUri),
+    sessionDurationMs = sessionDurationMs,
+)
+
+private fun extractVideoDurationMs(
+    context: android.content.Context,
+    uriString: String?,
+): Long? {
+    if (uriString.isNullOrBlank()) return null
+    return runCatching {
+        val retriever = android.media.MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(context, android.net.Uri.parse(uriString))
+            retriever
+                .extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull()
+                ?.takeIf { it > 0L }
+        } finally {
+            retriever.release()
+        }
+    }.getOrNull()
+}
 
 private fun mediaDurationMs(uri: String?): Long {
     val target = uri?.takeIf(::mediaAssetExists) ?: return 0L
