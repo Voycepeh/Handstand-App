@@ -20,6 +20,10 @@ import kotlin.math.abs
 private const val TAG = "AnnotatedExportPipeline"
 private const val MAX_EXPORT_FPS = 12
 private const val LONG_EXPORT_SESSION_MS = 30_000L
+private const val BASE_EXPORT_TIMEOUT_MS = 25_000L
+private const val MAX_EXPORT_TIMEOUT_MS = 90_000L
+private const val EXPORT_TIMEOUT_PER_FRAME_MS = 80L
+private const val EXPORT_TIMEOUT_DURATION_DIVISOR = 2L
 
 data class AnnotatedOverlayFrame(
     val timestampMs: Long,
@@ -108,12 +112,31 @@ class AnnotatedExportPipeline(
     private val persistAnnotatedVideo: suspend (Long, String) -> String?,
     private val updateExportStatus: suspend (Long, AnnotatedExportStatus) -> Unit,
     private val verifyMedia: (String?) -> MediaVerificationResult = { uri -> MediaVerificationHelper.verify(uri) },
-    private val exportTimeoutMs: Long = EXPORT_TIMEOUT_MS,
+    private val exportTimeoutMs: Long = BASE_EXPORT_TIMEOUT_MS,
     private val renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, OverlayTimeline, ExportPreset, (Int, Int) -> Unit, (AnnotatedExportTelemetry) -> Unit) -> ComposerResult =
         { rawUri, drill, side, timeline, preset, onProgress, onTelemetry ->
             composer.compose(rawUri, timeline, drill, side, preset, onProgress, onTelemetry)
         },
 ) {
+    // Timeout scales with normalized timeline complexity so longer/denser sessions
+    // receive more budget while still honoring a maximum cap.
+    private fun computeExportTimeoutMs(overlayTimeline: OverlayTimeline): Long {
+        if (overlayTimeline.frames.isEmpty()) return exportTimeoutMs
+
+        val sortedFrames = overlayTimeline.frames.sortedBy { it.timestampMs }
+        val firstTimestampMs = sortedFrames.first().timestampMs
+        val lastTimestampMs = sortedFrames.last().timestampMs
+        val durationMs = (lastTimestampMs - firstTimestampMs).coerceAtLeast(0L)
+
+        val frameBudgetMs = sortedFrames.size * EXPORT_TIMEOUT_PER_FRAME_MS
+        val durationBudgetMs = durationMs / EXPORT_TIMEOUT_DURATION_DIVISOR
+
+        return maxOf(
+            exportTimeoutMs,
+            frameBudgetMs.toLong(),
+            durationBudgetMs,
+        ).coerceAtMost(MAX_EXPORT_TIMEOUT_MS)
+    }
 
     private fun normalizedTimelineForExport(overlayTimeline: OverlayTimeline): OverlayTimeline {
         if (overlayTimeline.frames.isEmpty()) return overlayTimeline
@@ -195,7 +218,7 @@ class AnnotatedExportPipeline(
         persistAnnotatedVideo: suspend (Long, String) -> String?,
         updateExportStatus: suspend (Long, AnnotatedExportStatus) -> Unit,
         verifyMedia: (String?) -> MediaVerificationResult = { uri -> MediaVerificationHelper.verify(uri) },
-        exportTimeoutMs: Long = EXPORT_TIMEOUT_MS,
+        exportTimeoutMs: Long = BASE_EXPORT_TIMEOUT_MS,
         renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, OverlayTimeline, ExportPreset, (Int, Int) -> Unit, (AnnotatedExportTelemetry) -> Unit) -> ComposerResult,
     ) : this(
         compositor = throw IllegalStateException("Test constructor requires renderAnnotatedVideo"),
@@ -234,6 +257,7 @@ class AnnotatedExportPipeline(
             )
         }
         val exportTimeline = normalizedTimelineForExport(overlayTimeline)
+        val effectiveTimeoutMs = computeExportTimeoutMs(exportTimeline)
         if (exportTimeline.frames.isEmpty()) {
             updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
             Log.w(TAG, "export_failure sessionId=$sessionId reason=normalized_overlay_frames_empty")
@@ -249,6 +273,7 @@ class AnnotatedExportPipeline(
             "export_start sessionId=$sessionId rawVideoUri=$rawVideoUri " +
                 "timelineFrames=${overlayTimeline.frames.size} " +
                 "normalizedTimelineFrames=${exportTimeline.frames.size} " +
+                "effectiveTimeoutMs=$effectiveTimeoutMs " +
                 "firstFrameTs=${exportTimeline.frames.first().timestampMs} " +
                 "lastFrameTs=${exportTimeline.frames.last().timestampMs}",
         )
@@ -267,7 +292,7 @@ class AnnotatedExportPipeline(
                 var timedOut = false
                 while (!renderJob.isCompleted) {
                     val startedAt = exportWorkStartedAtMs
-                    if (startedAt != null && System.currentTimeMillis() - startedAt >= exportTimeoutMs) {
+                    if (startedAt != null && System.currentTimeMillis() - startedAt >= effectiveTimeoutMs) {
                         timedOut = true
                         renderJob.cancel(CancellationException("export_timeout_after_work_started"))
                         break
@@ -339,9 +364,5 @@ class AnnotatedExportPipeline(
                 telemetry = telemetry,
             )
         }
-    }
-
-    companion object {
-        private const val EXPORT_TIMEOUT_MS = 25_000L
     }
 }
