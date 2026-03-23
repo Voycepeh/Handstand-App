@@ -106,8 +106,6 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     val sessionRecorder = remember(context) { SessionRecorder(context) }
     val currentSessionTitle by rememberUpdatedState(newValue = vm.sessionTitle)
     val currentUiState by rememberUpdatedState(newValue = uiState)
-    val currentAudioVolume by rememberUpdatedState(newValue = settings.audioVolume)
-    val voiceEnabled by rememberUpdatedState(newValue = options.voiceEnabled)
     val showDetailedStats = rememberSaveable { mutableStateOf(false) }
     val diagnosticsExpanded = rememberSaveable { mutableStateOf(false) }
     val clipboardManager = LocalClipboardManager.current
@@ -197,45 +195,38 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
 
     LaunchedEffect(uiState.cameraPermissionGranted, uiState.cameraReady, settings.startupCountdownSeconds) {
         if (!uiState.cameraPermissionGranted || !uiState.cameraReady) return@LaunchedEffect
-        if (currentUiState.startupState != SessionStartupState.IDLE) return@LaunchedEffect
-        val started = vm.beginStartupCountdown(settings.startupCountdownSeconds)
-        if (!started) return@LaunchedEffect
-        val countdownSeconds = settings.startupCountdownSeconds
-        if (countdownSeconds > 0) {
-            for (remaining in countdownSeconds downTo 1) {
-                if (currentUiState.startupState != SessionStartupState.COUNTDOWN) return@LaunchedEffect
-                vm.onSessionCountdownTick(remaining)
-                if (voiceEnabled && currentAudioVolume > 0f) {
-                    voiceCoach.speak(
-                        cue = com.inversioncoach.app.model.CoachingCue(
-                            id = "session_countdown_$remaining",
-                            text = remaining.toString(),
-                            severity = 0,
-                            generatedAtMs = System.currentTimeMillis(),
-                        ),
-                        volume = currentAudioVolume,
-                    )
-                }
-                kotlinx.coroutines.delay(1000L)
-                if (currentUiState.startupState != SessionStartupState.COUNTDOWN) return@LaunchedEffect
-            }
-        }
-        vm.onSessionCountdownTick(0)
-        if (!options.recordingEnabled) {
-            val activated = vm.activateSessionIfStartupReady()
-            if (!activated) return@LaunchedEffect
-            if (voiceEnabled && currentAudioVolume > 0f) {
-                voiceCoach.speak(
-                    cue = com.inversioncoach.app.model.CoachingCue(
-                        id = "session_initiated",
-                        text = "Session initiated.",
-                        severity = 0,
-                        generatedAtMs = System.currentTimeMillis(),
-                    ),
-                    volume = currentAudioVolume,
-                )
-            }
-        }
+        if (uiState.startupState != SessionStartupState.IDLE) return@LaunchedEffect
+        vm.launchStartupCountdown(settings.startupCountdownSeconds)
+    }
+
+    LaunchedEffect(uiState.startupState, uiState.sessionCountdownRemainingSeconds, options.voiceEnabled, settings.audioVolume) {
+        if (!options.voiceEnabled || settings.audioVolume <= 0f) return@LaunchedEffect
+        if (uiState.startupState != SessionStartupState.COUNTDOWN) return@LaunchedEffect
+        val remaining = uiState.sessionCountdownRemainingSeconds ?: return@LaunchedEffect
+        if (remaining <= 0) return@LaunchedEffect
+        voiceCoach.speak(
+            cue = com.inversioncoach.app.model.CoachingCue(
+                id = "session_countdown_$remaining",
+                text = remaining.toString(),
+                severity = 0,
+                generatedAtMs = System.currentTimeMillis(),
+            ),
+            volume = settings.audioVolume,
+        )
+    }
+
+    LaunchedEffect(uiState.startupState, options.voiceEnabled, settings.audioVolume) {
+        if (uiState.startupState != SessionStartupState.ACTIVE) return@LaunchedEffect
+        if (!options.voiceEnabled || settings.audioVolume <= 0f) return@LaunchedEffect
+        voiceCoach.speak(
+            cue = com.inversioncoach.app.model.CoachingCue(
+                id = "session_initiated",
+                text = "Session initiated.",
+                severity = 0,
+                generatedAtMs = System.currentTimeMillis(),
+            ),
+            volume = settings.audioVolume,
+        )
     }
 
     LaunchedEffect(
@@ -244,21 +235,16 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
         uiState.cameraReady,
         uiState.isRecording,
         uiState.startupState,
-        uiState.sessionCountdownRemainingSeconds,
     ) {
         if (!options.recordingEnabled) return@LaunchedEffect
         if (!uiState.cameraPermissionGranted || !uiState.cameraReady || uiState.isRecording) return@LaunchedEffect
-        if (uiState.startupState != SessionStartupState.COUNTDOWN) return@LaunchedEffect
-        if (uiState.sessionCountdownRemainingSeconds != 0) return@LaunchedEffect
+        if (uiState.startupState != SessionStartupState.ACTIVE) return@LaunchedEffect
 
         val capture = cameraManager.videoCapture()
         if (capture == null) {
             vm.onAnalyzerWarning("Recording unavailable until camera is ready")
             return@LaunchedEffect
         }
-        val activated = vm.activateSessionIfStartupReady()
-        if (!activated) return@LaunchedEffect
-
         sessionRecorder.startRecording(
             capture = capture,
             title = currentSessionTitle,
@@ -275,17 +261,6 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             },
         )
         vm.setRecording(true)
-        if (voiceEnabled && currentAudioVolume > 0f) {
-            voiceCoach.speak(
-                cue = com.inversioncoach.app.model.CoachingCue(
-                    id = "session_initiated",
-                    text = "Session initiated.",
-                    severity = 0,
-                    generatedAtMs = System.currentTimeMillis(),
-                ),
-                volume = currentAudioVolume,
-            )
-        }
     }
 
     Box(Modifier.fillMaxSize()) {

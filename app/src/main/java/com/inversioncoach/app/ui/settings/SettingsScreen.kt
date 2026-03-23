@@ -48,7 +48,6 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
     var localOnlyPrivacyMode by remember { mutableStateOf(true) }
     var maxStorageMb by remember { mutableIntStateOf(1024) }
     var startupCountdownSeconds by remember { mutableIntStateOf(10) }
-    var minSessionDurationSeconds by remember { mutableIntStateOf(3) }
     var alignmentStrictness by remember { mutableStateOf(AlignmentStrictness.BEGINNER) }
     var customLineDeviation by remember { mutableFloatStateOf(0.14f) }
     var customGoodForm by remember { mutableIntStateOf(72) }
@@ -65,7 +64,6 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
             localOnlyPrivacyMode = s.localOnlyPrivacyMode
             maxStorageMb = s.maxStorageMb
             startupCountdownSeconds = s.startupCountdownSeconds
-            minSessionDurationSeconds = s.minSessionDurationSeconds
             alignmentStrictness = s.alignmentStrictness
             customLineDeviation = s.customLineDeviation
             customGoodForm = s.customMinimumGoodFormScore
@@ -100,12 +98,7 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
                 onValueChange = { startupCountdownSeconds = it.toInt().coerceIn(0, 30) },
                 valueRange = 0f..30f,
             )
-            Text("Minimum session length to keep (without video): ${minSessionDurationSeconds}s")
-            Slider(
-                value = minSessionDurationSeconds.toFloat(),
-                onValueChange = { minSessionDurationSeconds = it.toInt().coerceIn(0, 30) },
-                valueRange = 0f..30f,
-            )
+            Text("Time before recording starts. Also used as the minimum valid session duration.")
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Debug overlay (raw metrics/angles)")
                 Checkbox(checked = debug, onCheckedChange = { debug = it })
@@ -189,7 +182,7 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
                                         localOnlyPrivacyMode = localOnlyPrivacyMode,
                                         maxStorageMb = maxStorageMb,
                                         startupCountdownSeconds = startupCountdownSeconds,
-                                        minSessionDurationSeconds = minSessionDurationSeconds,
+                                        minSessionDurationSeconds = startupCountdownSeconds,
                                         alignmentStrictness = alignmentStrictness,
                                         customLineDeviation = customLineDeviation,
                                         customMinimumGoodFormScore = customGoodForm,

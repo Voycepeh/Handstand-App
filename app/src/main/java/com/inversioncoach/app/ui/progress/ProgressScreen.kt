@@ -67,7 +67,7 @@ fun ProgressScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     var weekOffset by remember { mutableStateOf(0) }
     var zoom by remember { mutableStateOf(HeatmapZoom.FourHours) }
 
-    val minimumDurationMs = settings.minSessionDurationSeconds * 1000L
+    val minimumDurationMs = settings.startupCountdownSeconds * 1000L
     val filteredSessions = remember(sessions, selectedDrill, minimumDurationMs) {
         sessions.filter { session ->
             val meetsDuration = computeSessionDurationMs(session.startedAtMs, session.completedAtMs) >= minimumDurationMs
@@ -101,7 +101,7 @@ fun ProgressScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Progress at a glance", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Activity heatmap counts only sessions >= ${settings.minSessionDurationSeconds}s", style = MaterialTheme.typography.bodySmall)
+            Text("Activity heatmap counts only sessions >= ${settings.startupCountdownSeconds}s", style = MaterialTheme.typography.bodySmall)
 
             FilterChips(
                 selectedDrill = selectedDrill,

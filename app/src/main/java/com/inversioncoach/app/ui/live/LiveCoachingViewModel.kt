@@ -158,6 +158,7 @@ class LiveCoachingViewModel(
     private var annotatedExportJob: Job? = null
     private var compressionJob: Job? = null
     private var cleanupJob: Job? = null
+    private var startupJob: Job? = null
     private val overlayFrames = mutableListOf<com.inversioncoach.app.recording.AnnotatedOverlayFrame>()
     private var overlayTimelineRecorder: OverlayTimelineRecorder? = null
     private var overlayTimelineUri: String? = null
@@ -211,7 +212,6 @@ class LiveCoachingViewModel(
             overlayFrameCount = 0,
             failureReason = "analyzer=${metricsEngine::class.simpleName};movementPattern=$movementPattern",
         )
-        startSession()
     }
 
     fun onCameraPermissionChanged(granted: Boolean) {
@@ -646,12 +646,39 @@ class LiveCoachingViewModel(
     }
 
     fun beginStartupCountdown(countdownSeconds: Int): Boolean {
-        if (_uiState.value.startupState != SessionStartupState.IDLE) return false
+        if (_uiState.value.startupState != SessionStartupState.IDLE || startupJob?.isActive == true) return false
         startupCancelled = false
         _uiState.value = _uiState.value.copy(
             startupState = SessionStartupState.COUNTDOWN,
-            sessionCountdownRemainingSeconds = if (countdownSeconds > 0) countdownSeconds else 0,
+            sessionCountdownRemainingSeconds = countdownSeconds.coerceAtLeast(0),
+            warningMessage = null,
         )
+        return true
+    }
+
+    fun launchStartupCountdown(countdownSeconds: Int): Boolean {
+        val started = beginStartupCountdown(countdownSeconds)
+        if (!started) return false
+
+        startupJob?.cancel()
+        startupJob = viewModelScope.launch {
+            try {
+                val normalizedCountdown = countdownSeconds.coerceAtLeast(0)
+                if (normalizedCountdown > 0) {
+                    for (remaining in normalizedCountdown downTo 1) {
+                        if (_uiState.value.startupState != SessionStartupState.COUNTDOWN || startupCancelled) return@launch
+                        onSessionCountdownTick(remaining)
+                        delay(1000L)
+                    }
+                }
+
+                if (_uiState.value.startupState != SessionStartupState.COUNTDOWN || startupCancelled) return@launch
+                onSessionCountdownTick(0)
+                activateSessionIfStartupReady()
+            } finally {
+                startupJob = null
+            }
+        }
         return true
     }
 
@@ -677,10 +704,13 @@ class LiveCoachingViewModel(
             sessionCountdownRemainingSeconds = null,
             warningMessage = null,
         )
+        startSession()
         return true
     }
 
     fun cancelStartup() {
+        startupJob?.cancel()
+        startupJob = null
         if (_uiState.value.startupState == SessionStartupState.ACTIVE) return
         startupCancelled = true
         _uiState.value = _uiState.value.copy(
@@ -692,6 +722,9 @@ class LiveCoachingViewModel(
 
     fun stopSession(onSessionFinalized: (SessionStopResult) -> Unit) {
         viewModelScope.launch {
+            startupJob?.cancel()
+            startupJob = null
+            val minimumValidSessionSeconds = activeSettings.startupCountdownSeconds.coerceAtLeast(0)
             if (_uiState.value.startupState != SessionStartupState.ACTIVE) {
                 cancelStartup()
                 val currentSessionId = sessionId
@@ -703,7 +736,7 @@ class LiveCoachingViewModel(
                         sessionId = currentSessionId ?: 0L,
                         wasDiscardedForShortDuration = true,
                         elapsedSessionMs = 0L,
-                        minSessionDurationSeconds = activeSettings.minSessionDurationSeconds,
+                        minSessionDurationSeconds = minimumValidSessionSeconds,
                     ),
                 )
                 return@launch
@@ -754,12 +787,12 @@ class LiveCoachingViewModel(
                 val elapsedSessionSeconds = elapsedSessionMs / 1000.0
                 val shouldDeleteSession = shouldDiscardSessionForShortDuration(
                     elapsedSessionMs = elapsedSessionMs,
-                    minSessionDurationSeconds = activeSettings.minSessionDurationSeconds,
+                    minSessionDurationSeconds = minimumValidSessionSeconds,
                 )
                 SessionDiagnostics.log(
                     "session_finalize drill=$drillType validFrames=$validFrameCount invalidFrames=$invalidFrameCount invalidReasons={$invalidReasonSummary} " +
                         "aggregatedIssues=${aggregatedIssues.size} savedRaw=$rawVideoUri exportedAnnotated=$annotatedVideoUri elapsed=${"%.2f".format(elapsedSessionSeconds)}s " +
-                        "minSessionDuration=${activeSettings.minSessionDurationSeconds}s shouldDelete=$shouldDeleteSession",
+                        "minSessionDuration=${minimumValidSessionSeconds}s (from countdown) shouldDelete=$shouldDeleteSession",
                 )
                 if (shouldDeleteSession) {
                     repository.deleteSession(activeSessionId)
@@ -767,7 +800,7 @@ class LiveCoachingViewModel(
                         sessionId = activeSessionId,
                         wasDiscardedForShortDuration = true,
                         elapsedSessionMs = elapsedSessionMs,
-                        minSessionDurationSeconds = activeSettings.minSessionDurationSeconds,
+                        minSessionDurationSeconds = minimumValidSessionSeconds,
                     )
                     return@launch
                 }
@@ -892,7 +925,7 @@ class LiveCoachingViewModel(
                     sessionId = activeSessionId,
                     wasDiscardedForShortDuration = false,
                     elapsedSessionMs = elapsedSessionMs,
-                    minSessionDurationSeconds = activeSettings.minSessionDurationSeconds,
+                    minSessionDurationSeconds = minimumValidSessionSeconds,
                 )
                 SessionDiagnostics.logStructured(
                     event = "session_finalized",
@@ -918,7 +951,7 @@ class LiveCoachingViewModel(
                     sessionId = activeSessionId,
                     wasDiscardedForShortDuration = false,
                     elapsedSessionMs = elapsedSessionMs,
-                    minSessionDurationSeconds = activeSettings.minSessionDurationSeconds,
+                    minSessionDurationSeconds = minimumValidSessionSeconds,
                 )
             } finally {
                 isSessionFinalizing = false
@@ -926,7 +959,7 @@ class LiveCoachingViewModel(
                     sessionId = activeSessionId,
                     wasDiscardedForShortDuration = false,
                     elapsedSessionMs = (System.currentTimeMillis() - sessionStartedAtMs).coerceAtLeast(0L),
-                    minSessionDurationSeconds = activeSettings.minSessionDurationSeconds,
+                    minSessionDurationSeconds = minimumValidSessionSeconds,
                 )
                 completePendingStopCallbacks(result)
             }
@@ -1814,6 +1847,8 @@ class LiveCoachingViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        startupJob?.cancel()
+        startupJob = null
         smoother.reset()
         correctionEngine.reset()
         finalizeSessionSilentlyIfActive()
