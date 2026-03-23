@@ -349,7 +349,7 @@ class AnnotatedVideoCompositor(
         overlay: AnnotatedOverlayFrame?,
         drillType: DrillType,
         drillCameraSide: DrillCameraSide,
-        transform: ExportTransform,
+        private val transform: ExportTransform,
     ): RenderInstruction {
         if (overlay == null) return RenderInstruction()
         val joints = overlay.smoothedLandmarks.ifEmpty { overlay.landmarks }
@@ -497,7 +497,7 @@ class AnnotatedVideoCompositor(
     private class GlSurfaceCompositor(
         sourceWidth: Int,
         sourceHeight: Int,
-        transform: ExportTransform,
+        private val transform: ExportTransform,
         encoderSurface: Surface,
     ) {
         private val width: Int = transform.outputWidth
