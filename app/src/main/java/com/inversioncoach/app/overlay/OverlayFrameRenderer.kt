@@ -2,6 +2,7 @@ package com.inversioncoach.app.overlay
 
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.util.Log
 import androidx.compose.ui.geometry.Rect
 import com.inversioncoach.app.pose.PoseCoordinateMapper
 import com.inversioncoach.app.pose.PoseProjectionInput
@@ -15,9 +16,12 @@ data class OverlayDrawingFrame(
     val sourceRotationDegrees: Int = 0,
     val mirrored: Boolean = false,
     val previewContentRect: Rect? = null,
+    val scaleMode: PoseScaleMode = PoseScaleMode.FIT,
+    val debugProjection: Boolean = false,
 )
 
 object OverlayFrameRenderer {
+    private const val TAG = "OverlayFrameRenderer"
     private val mapper = PoseCoordinateMapper()
     private val skeletonPaint = Paint().apply {
         color = 0xFF7CF0A9.toInt()
@@ -45,17 +49,28 @@ object OverlayFrameRenderer {
         model: OverlayRenderModel,
         frame: OverlayDrawingFrame,
     ) {
-        if (frame.drawSkeleton) {
-            val projection = PoseProjectionInput(
-                sourceWidth = frame.sourceWidth.coerceAtLeast(1),
-                sourceHeight = frame.sourceHeight.coerceAtLeast(1),
-                previewWidth = width.toFloat(),
-                previewHeight = height.toFloat(),
-                previewContentRect = frame.previewContentRect,
-                rotationDegrees = frame.sourceRotationDegrees,
-                mirrored = frame.mirrored,
-                scaleMode = PoseScaleMode.FIT,
+        val projection = PoseProjectionInput(
+            sourceWidth = frame.sourceWidth.coerceAtLeast(1),
+            sourceHeight = frame.sourceHeight.coerceAtLeast(1),
+            previewWidth = width.toFloat(),
+            previewHeight = height.toFloat(),
+            previewContentRect = frame.previewContentRect,
+            rotationDegrees = frame.sourceRotationDegrees,
+            mirrored = frame.mirrored,
+            scaleMode = frame.scaleMode,
+        )
+        val projectionDiagnostics = mapper.diagnostics(projection)
+        val projectedJointBounds = projectedJointBounds(model = model, projection = projection)
+        if (frame.debugProjection) {
+            Log.d(
+                TAG,
+                "Projection diagnostics canvas=0,0,${width}x${height} " +
+                    "baseContentRect=${frame.previewContentRect ?: Rect(0f, 0f, width.toFloat(), height.toFloat())} " +
+                    "projectedContentRect=${projectionDiagnostics.contentRect} " +
+                    "scaleMode=${frame.scaleMode} skeletonBounds=${projectedJointBounds ?: "none"}",
             )
+        }
+        if (frame.drawSkeleton) {
             model.connections.forEach { (from, to) ->
                 val start = model.joints.firstOrNull { it.name == from } ?: return@forEach
                 val end = model.joints.firstOrNull { it.name == to } ?: return@forEach
@@ -85,21 +100,31 @@ object OverlayFrameRenderer {
         }
 
         if (frame.drawIdealLine) {
-            val projection = PoseProjectionInput(
-                sourceWidth = frame.sourceWidth.coerceAtLeast(1),
-                sourceHeight = frame.sourceHeight.coerceAtLeast(1),
-                previewWidth = width.toFloat(),
-                previewHeight = height.toFloat(),
-                previewContentRect = frame.previewContentRect,
-                rotationDegrees = frame.sourceRotationDegrees,
-                mirrored = frame.mirrored,
-                scaleMode = PoseScaleMode.FIT,
-            )
             val (lineStart, lineEnd) = model.idealLine
             val mappedStart = mapper.map(lineStart.x, lineStart.y, projection)
             val mappedEnd = mapper.map(lineEnd.x, lineEnd.y, projection)
             canvas.drawLine(mappedStart.x, mappedStart.y, mappedEnd.x, mappedEnd.y, idealLinePaint)
         }
+    }
+
+    private fun projectedJointBounds(
+        model: OverlayRenderModel,
+        projection: PoseProjectionInput,
+    ): Rect? {
+        if (model.joints.isEmpty()) return null
+        var minX = Float.POSITIVE_INFINITY
+        var minY = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY
+        var maxY = Float.NEGATIVE_INFINITY
+        model.joints.forEach { joint ->
+            val mapped = mapper.map(joint.x, joint.y, projection)
+            minX = minOf(minX, mapped.x)
+            minY = minOf(minY, mapped.y)
+            maxX = maxOf(maxX, mapped.x)
+            maxY = maxOf(maxY, mapped.y)
+        }
+        if (!minX.isFinite() || !minY.isFinite() || !maxX.isFinite() || !maxY.isFinite()) return null
+        return Rect(minX, minY, maxX, maxY)
     }
 }
 

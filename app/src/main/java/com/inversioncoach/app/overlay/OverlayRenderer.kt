@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.nativeCanvas
@@ -13,6 +14,7 @@ import com.inversioncoach.app.model.AngleDebugMetric
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.model.SmoothedPoseFrame
+import com.inversioncoach.app.pose.PoseScaleMode
 
 @Composable
 fun OverlayRenderer(
@@ -20,6 +22,8 @@ fun OverlayRenderer(
     drillType: DrillType,
     sessionMode: SessionMode,
     modifier: Modifier = Modifier,
+    previewContentRect: Rect? = null,
+    scaleMode: PoseScaleMode = PoseScaleMode.FIT,
     showIdealLine: Boolean,
     showDebugOverlay: Boolean = false,
     debugMetrics: List<AlignmentMetric> = emptyList(),
@@ -41,8 +45,13 @@ fun OverlayRenderer(
             frame = OverlayDrawingFrame(
                 drawSkeleton = joints.isNotEmpty(),
                 drawIdealLine = showIdealLine,
-                // Live analyzer joints are already normalized into preview orientation,
-                // so overlay projection must stay in neutral mode here.
+                sourceWidth = frame?.analysisWidth ?: 0,
+                sourceHeight = frame?.analysisHeight ?: 0,
+                sourceRotationDegrees = frame?.analysisRotationDegrees ?: 0,
+                mirrored = frame?.mirrored ?: false,
+                previewContentRect = previewContentRect,
+                scaleMode = scaleMode,
+                debugProjection = showDebugOverlay,
             ),
         )
 

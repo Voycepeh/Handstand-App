@@ -61,6 +61,7 @@ import com.inversioncoach.app.motion.RepMode
 import com.inversioncoach.app.overlay.FreestyleViewMode
 import com.inversioncoach.app.overlay.OverlayRenderer
 import com.inversioncoach.app.pose.PoseAnalyzer
+import com.inversioncoach.app.pose.PoseScaleMode
 import com.inversioncoach.app.recording.SessionRecorder
 import com.inversioncoach.app.recording.AnnotatedExportPipeline
 import com.inversioncoach.app.recording.AnnotatedVideoCompositor
@@ -72,6 +73,7 @@ import java.util.concurrent.Executors
 
 private const val TAG = "LiveCoachingScreen"
 private val overlayPanelShape = RoundedCornerShape(14.dp)
+private val livePreviewScaleType = ScaleType.FILL_CENTER
 
 @Composable
 fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop: (SessionStopResult) -> Unit) {
@@ -269,7 +271,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
                     PreviewView(ctx).apply {
-                        scaleType = ScaleType.FIT_CENTER
+                        scaleType = livePreviewScaleType
                         post {
                             cameraManager.bind(lifecycleOwner, this, analyzer, options.zoomOutCamera) { ready, error ->
                                 vm.onCameraReady(ready, error)
@@ -284,6 +286,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                     drillType = drillType,
                     sessionMode = uiState.sessionMode,
                     modifier = Modifier.fillMaxSize(),
+                    scaleMode = livePreviewScaleType.toPoseScaleMode(),
                     showIdealLine = options.showIdealLine,
                     showDebugOverlay = uiState.showDebugOverlay,
                     debugMetrics = uiState.debugMetrics,
@@ -369,6 +372,14 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             }
         }
     }
+}
+
+private fun ScaleType.toPoseScaleMode(): PoseScaleMode = when (this) {
+    ScaleType.FILL_CENTER,
+    ScaleType.FILL_START,
+    ScaleType.FILL_END,
+    -> PoseScaleMode.FILL
+    else -> PoseScaleMode.FIT
 }
 
 @Composable
