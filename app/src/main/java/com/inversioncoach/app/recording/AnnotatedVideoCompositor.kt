@@ -24,7 +24,6 @@ import android.opengl.GLES20
 import android.opengl.GLUtils
 import android.util.Log
 import android.view.Surface
-import androidx.compose.ui.geometry.Rect
 import com.inversioncoach.app.model.AnnotatedExportFailureReason
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.overlay.DrillCameraSide
@@ -254,7 +253,7 @@ class AnnotatedVideoCompositor(
                                 val presentationTimeMs = decoderInfo.presentationTimeUs / 1000L
                                 val overlay = resolver.overlayAt(presentationTimeMs)
                                 if (overlay != null) telemetry.overlayFramesConsumed += 1
-                                val instruction = buildRenderInstruction(overlay, drillType, drillCameraSide, transform)
+                                val instruction = buildRenderInstruction(overlay, drillType, drillCameraSide)
                                 val result = glCompositorInstance.renderFrame(decoderInfo.presentationTimeUs, instruction, FRAME_SYNC_TIMEOUT_MS)
                                 telemetry.frameAvailableWaitMs += result.frameWaitMs
                                 telemetry.compositorRenderMs += result.renderMs
@@ -350,11 +349,9 @@ class AnnotatedVideoCompositor(
         overlay: AnnotatedOverlayFrame?,
         drillType: DrillType,
         drillCameraSide: DrillCameraSide,
-        transform: ExportTransform,
     ): RenderInstruction {
         if (overlay == null) return RenderInstruction()
         val joints = overlay.smoothedLandmarks.ifEmpty { overlay.landmarks }
-            .map { mapOverlayPointToExportSpace(it, transform) }
         val model = OverlayGeometry.build(
             drillType = drillType,
             sessionMode = overlay.sessionMode,
@@ -514,7 +511,6 @@ class AnnotatedVideoCompositor(
         private val videoQuad: FloatBuffer
         private val videoTex: FloatBuffer = createBaseTextureCoordinateBuffer()
         private val overlayTex: FloatBuffer = createOverlayTextureCoordinateBuffer()
-        private val overlayContentRect: Rect
 
         val decoderSurface: Surface
         private val decoderTextureId: Int
@@ -586,12 +582,6 @@ class AnnotatedVideoCompositor(
                 containerHeight = height,
             )
             videoQuad = createQuadForRect(contentRect, width, height)
-            overlayContentRect = Rect(
-                left = contentRect.left,
-                top = contentRect.top,
-                right = contentRect.right,
-                bottom = contentRect.bottom,
-            )
         }
 
         fun renderFrame(presentationTimeUs: Long, instruction: RenderInstruction, frameTimeoutMs: Long): RenderSubmissionResult {
@@ -708,11 +698,6 @@ class AnnotatedVideoCompositor(
                 frame = OverlayDrawingFrame(
                     drawSkeleton = instruction.drawSkeleton,
                     drawIdealLine = instruction.drawIdealLine,
-                    sourceWidth = width,
-                    sourceHeight = height,
-                    sourceRotationDegrees = 0,
-                    mirrored = false,
-                    previewContentRect = overlayContentRect,
                 ),
             )
         }
