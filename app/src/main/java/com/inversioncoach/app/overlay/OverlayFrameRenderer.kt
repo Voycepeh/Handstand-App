@@ -2,6 +2,7 @@ package com.inversioncoach.app.overlay
 
 import android.graphics.Canvas
 import android.graphics.Paint
+import androidx.compose.ui.geometry.Rect
 import com.inversioncoach.app.pose.PoseCoordinateMapper
 import com.inversioncoach.app.pose.PoseProjectionInput
 import com.inversioncoach.app.pose.PoseScaleMode
@@ -13,6 +14,7 @@ data class OverlayDrawingFrame(
     val sourceHeight: Int = 0,
     val sourceRotationDegrees: Int = 0,
     val mirrored: Boolean = false,
+    val previewContentRect: Rect? = null,
 )
 
 object OverlayFrameRenderer {
@@ -49,6 +51,7 @@ object OverlayFrameRenderer {
                 sourceHeight = frame.sourceHeight.coerceAtLeast(1),
                 previewWidth = width.toFloat(),
                 previewHeight = height.toFloat(),
+                previewContentRect = frame.previewContentRect,
                 rotationDegrees = frame.sourceRotationDegrees,
                 mirrored = frame.mirrored,
                 scaleMode = PoseScaleMode.FIT,
@@ -87,6 +90,7 @@ object OverlayFrameRenderer {
                 sourceHeight = frame.sourceHeight.coerceAtLeast(1),
                 previewWidth = width.toFloat(),
                 previewHeight = height.toFloat(),
+                previewContentRect = frame.previewContentRect,
                 rotationDegrees = frame.sourceRotationDegrees,
                 mirrored = frame.mirrored,
                 scaleMode = PoseScaleMode.FIT,

@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.RectF
 import android.graphics.SurfaceTexture
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
@@ -23,6 +24,7 @@ import android.opengl.GLES20
 import android.opengl.GLUtils
 import android.util.Log
 import android.view.Surface
+import androidx.compose.ui.geometry.Rect
 import com.inversioncoach.app.model.AnnotatedExportFailureReason
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.overlay.DrillCameraSide
@@ -506,11 +508,13 @@ class AnnotatedVideoCompositor(
         private val eglSurface: EGLSurface
         private val frameSync = Object()
         @Volatile private var frameAvailable: Boolean = false
-        private val quad: FloatBuffer = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
+        private val overlayQuad: FloatBuffer = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
             put(floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)); position(0)
         }
-        private val videoTex: FloatBuffer = createOverlayTextureCoordinateBuffer()
+        private val videoQuad: FloatBuffer
+        private val videoTex: FloatBuffer = createBaseTextureCoordinateBuffer()
         private val overlayTex: FloatBuffer = createOverlayTextureCoordinateBuffer()
+        private val overlayContentRect: Rect
 
         val decoderSurface: Surface
         private val decoderTextureId: Int
@@ -574,6 +578,20 @@ class AnnotatedVideoCompositor(
             overlayTextureId = create2dTexture()
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, overlayTextureId)
             GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, overlayBitmap, 0)
+            val displaySize = sourceDisplaySize(sourceWidth, sourceHeight, transform.renderRotationDegrees)
+            val contentRect = calculateAspectFitRect(
+                contentWidth = displaySize.first,
+                contentHeight = displaySize.second,
+                containerWidth = width,
+                containerHeight = height,
+            )
+            videoQuad = createQuadForRect(contentRect, width, height)
+            overlayContentRect = Rect(
+                left = contentRect.left,
+                top = contentRect.top,
+                right = contentRect.right,
+                bottom = contentRect.bottom,
+            )
         }
 
         fun renderFrame(presentationTimeUs: Long, instruction: RenderInstruction, frameTimeoutMs: Long): RenderSubmissionResult {
@@ -636,7 +654,7 @@ class AnnotatedVideoCompositor(
             GLES20.glUseProgram(videoProgram)
             val matrixLoc = GLES20.glGetUniformLocation(videoProgram, "uTexMatrix")
             GLES20.glUniformMatrix4fv(matrixLoc, 1, false, texMatrix, 0)
-            drawQuad(videoProgram, GLES11Ext.GL_TEXTURE_EXTERNAL_OES, decoderTextureId, videoTex)
+            drawQuad(videoProgram, GLES11Ext.GL_TEXTURE_EXTERNAL_OES, decoderTextureId, videoTex, videoQuad)
         }
 
         private fun inferTextureMatrixRotationDegrees(matrix: FloatArray): Int {
@@ -646,6 +664,22 @@ class AnnotatedVideoCompositor(
             val normalized = ((angleDegrees % 360) + 360) % 360
             val snapped = (normalized / 90f).roundToInt() * 90
             return normalizedRotationDegrees(snapped)
+        }
+
+        private fun createBaseTextureCoordinateBuffer(): FloatBuffer {
+            val coordinates = floatArrayOf(
+                0f, 0f,
+                1f, 0f,
+                0f, 1f,
+                1f, 1f,
+            )
+            return ByteBuffer.allocateDirect(coordinates.size * 4)
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer()
+                .apply {
+                    put(coordinates)
+                    position(0)
+                }
         }
 
         private fun createOverlayTextureCoordinateBuffer(): FloatBuffer {
@@ -674,6 +708,11 @@ class AnnotatedVideoCompositor(
                 frame = OverlayDrawingFrame(
                     drawSkeleton = instruction.drawSkeleton,
                     drawIdealLine = instruction.drawIdealLine,
+                    sourceWidth = width,
+                    sourceHeight = height,
+                    sourceRotationDegrees = 0,
+                    mirrored = false,
+                    previewContentRect = overlayContentRect,
                 ),
             )
         }
@@ -683,13 +722,14 @@ class AnnotatedVideoCompositor(
             textureTarget: Int,
             textureId: Int,
             textureCoordinates: FloatBuffer,
+            vertexCoordinates: FloatBuffer = overlayQuad,
         ) {
             val aPos = GLES20.glGetAttribLocation(program, "aPosition")
             val aTex = GLES20.glGetAttribLocation(program, "aTexCoord")
             val uTex = GLES20.glGetUniformLocation(program, "uTexture")
-            quad.position(0)
+            vertexCoordinates.position(0)
             textureCoordinates.position(0)
-            GLES20.glVertexAttribPointer(aPos, 2, GLES20.GL_FLOAT, false, 0, quad)
+            GLES20.glVertexAttribPointer(aPos, 2, GLES20.GL_FLOAT, false, 0, vertexCoordinates)
             GLES20.glEnableVertexAttribArray(aPos)
             GLES20.glVertexAttribPointer(aTex, 2, GLES20.GL_FLOAT, false, 0, textureCoordinates)
             GLES20.glEnableVertexAttribArray(aTex)
@@ -761,6 +801,53 @@ class AnnotatedVideoCompositor(
                 throw CompositorInitException(AnnotatedExportFailureReason.GL_SHADER_COMPILE_FAILED, GLES20.glGetShaderInfoLog(shader))
             }
             return shader
+        }
+
+        private fun sourceDisplaySize(width: Int, height: Int, rotationDegrees: Int): Pair<Int, Int> {
+            val normalized = normalizedRotationDegrees(rotationDegrees)
+            return if (normalized == 90 || normalized == 270) height to width else width to height
+        }
+
+        private fun calculateAspectFitRect(
+            contentWidth: Int,
+            contentHeight: Int,
+            containerWidth: Int,
+            containerHeight: Int,
+        ): RectF {
+            if (contentWidth <= 0 || contentHeight <= 0 || containerWidth <= 0 || containerHeight <= 0) {
+                return RectF(0f, 0f, containerWidth.toFloat(), containerHeight.toFloat())
+            }
+            val scale = minOf(
+                containerWidth.toFloat() / contentWidth.toFloat(),
+                containerHeight.toFloat() / contentHeight.toFloat(),
+            )
+            val fittedWidth = contentWidth * scale
+            val fittedHeight = contentHeight * scale
+            val left = (containerWidth - fittedWidth) / 2f
+            val top = (containerHeight - fittedHeight) / 2f
+            return RectF(left, top, left + fittedWidth, top + fittedHeight)
+        }
+
+        private fun createQuadForRect(rect: RectF, containerWidth: Int, containerHeight: Int): FloatBuffer {
+            fun toGlX(px: Float): Float = (px / containerWidth.toFloat()) * 2f - 1f
+            fun toGlY(py: Float): Float = 1f - (py / containerHeight.toFloat()) * 2f
+            val left = toGlX(rect.left)
+            val right = toGlX(rect.right)
+            val top = toGlY(rect.top)
+            val bottom = toGlY(rect.bottom)
+            val vertices = floatArrayOf(
+                left, bottom,
+                right, bottom,
+                left, top,
+                right, top,
+            )
+            return ByteBuffer.allocateDirect(vertices.size * 4)
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer()
+                .apply {
+                    put(vertices)
+                    position(0)
+                }
         }
 
         companion object {
