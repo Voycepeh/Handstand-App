@@ -59,7 +59,9 @@ internal fun buildExportTransform(
 }
 
 internal fun mapOverlayPointToExportSpace(point: JointPoint, transform: ExportTransform): JointPoint {
-    val (mappedX, mappedY) = mapNormalizedPointToExportSpace(point.x, point.y, transform.renderRotationDegrees)
+    // Overlay timeline points are captured from the same sampled texture space as decoded video frames.
+    // Route through texture-space mapping so overlays and video share one rotation/flip convention.
+    val (mappedX, mappedY) = mapTextureCoordinateToExportSpace(point.x, point.y, transform.renderRotationDegrees)
     return point.copy(
         x = mappedX.coerceIn(0f, 1f),
         y = mappedY.coerceIn(0f, 1f),
