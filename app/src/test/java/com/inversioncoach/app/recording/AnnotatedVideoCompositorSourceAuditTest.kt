@@ -60,9 +60,17 @@ class AnnotatedVideoCompositorSourceAuditTest {
     }
 
     @Test
+    fun exportOverlayProjectionDoesNotReplayCaptureRotationMetadata() {
+        val src = source()
+        assertFalse(src.contains("sourceRotationDegrees = overlay.sourceRotationDegrees"))
+        assertTrue(src.contains("sourceRotationDegrees = 0"))
+    }
+
+    @Test
     fun videoPathUsesTexMatrixOnlyAndDiagnosticsLogging() {
         val src = source()
-        assertTrue(src.contains("private val videoTex: FloatBuffer = createOverlayTextureCoordinateBuffer()"))
+        assertTrue(src.contains("private val videoTex: FloatBuffer = createBaseTextureCoordinateBuffer()"))
+        assertTrue(src.contains("createBaseTextureCoordinateBuffer()"))
         assertTrue(src.contains("createOverlayTextureCoordinateBuffer()"))
         assertTrue(src.contains("glUniformMatrix4fv(matrixLoc, 1, false, texMatrix, 0)"))
         assertTrue(src.contains("export_diagnostics_texture_transform"))

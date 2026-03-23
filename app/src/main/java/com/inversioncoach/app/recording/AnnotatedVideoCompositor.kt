@@ -364,9 +364,6 @@ class AnnotatedVideoCompositor(
             model = model,
             drawSkeleton = overlay.showSkeleton,
             drawIdealLine = overlay.showIdealLine,
-            sourceWidth = overlay.sourceWidth,
-            sourceHeight = overlay.sourceHeight,
-            sourceRotationDegrees = overlay.sourceRotationDegrees,
             mirrored = overlay.mirrorMode,
             scaleMode = overlay.scaleMode,
         )
@@ -488,9 +485,6 @@ class AnnotatedVideoCompositor(
         val model: OverlayRenderModel? = null,
         val drawSkeleton: Boolean = false,
         val drawIdealLine: Boolean = false,
-        val sourceWidth: Int = 0,
-        val sourceHeight: Int = 0,
-        val sourceRotationDegrees: Int = 0,
         val mirrored: Boolean = false,
         val scaleMode: PoseScaleMode = PoseScaleMode.FIT,
     )
@@ -725,9 +719,9 @@ class AnnotatedVideoCompositor(
                 frame = overlayProjectionFrame.copy(
                     drawSkeleton = instruction.drawSkeleton,
                     drawIdealLine = instruction.drawIdealLine,
-                    sourceWidth = instruction.sourceWidth,
-                    sourceHeight = instruction.sourceHeight,
-                    sourceRotationDegrees = instruction.sourceRotationDegrees,
+                    // Export video frames are already normalized into upright output space.
+                    // Keep overlay projection in this same export-upright coordinate system.
+                    sourceRotationDegrees = 0,
                     mirrored = instruction.mirrored,
                     scaleMode = instruction.scaleMode,
                 ),
