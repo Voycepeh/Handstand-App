@@ -77,8 +77,9 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 
 private const val TAG = "UploadVideoFlow"
-private const val ANALYSIS_PROGRESS_UPDATE_FRAME_INTERVAL = 3
-private const val ANALYSIS_PROGRESS_UPDATE_MS = 200L
+private const val ANALYSIS_PROGRESS_UPDATE_FRAME_INTERVAL = 1
+private const val ANALYSIS_PROGRESS_UPDATE_MS = 100L
+private const val UPLOADED_ANALYSIS_SAMPLE_FPS = 6
 
 enum class UploadStage(val label: String) {
     IDLE("Idle"),
@@ -204,6 +205,13 @@ class DefaultUploadVideoAnalysisRunner(
             ),
         )
         onSessionCreated(sessionId)
+        repository.updateUploadPipelineProgress(
+            sessionId = sessionId,
+            stageLabel = "Importing raw video",
+            processedFrames = 0,
+            totalFrames = 0,
+            detail = "Importing uploaded source video",
+        )
         Log.i(TAG, "analysis_start sessionId=$sessionId uri=$uri")
         SessionDiagnostics.record(
             sessionId = sessionId,
@@ -296,8 +304,15 @@ class DefaultUploadVideoAnalysisRunner(
                 etaSeconds = null,
                 elapsedMs = System.currentTimeMillis() - startedAt,
             )
+            repository.updateUploadPipelineProgress(
+                sessionId = sessionId,
+                stageLabel = "Analyzing uploaded video",
+                processedFrames = 0,
+                totalFrames = 0,
+                detail = "Preparing uploaded analysis",
+            )
             onProgress(UploadProgress(currentStage, 0.2f, detail = "Preparing uploaded analysis"))
-            val frameSource = frameSourceFactory(context.applicationContext, preset.analysisFps)
+            val frameSource = frameSourceFactory(context.applicationContext, UPLOADED_ANALYSIS_SAMPLE_FPS)
             val analyzer = analyzerFactory(frameSource)
 
             SessionDiagnostics.record(
@@ -305,16 +320,61 @@ class DefaultUploadVideoAnalysisRunner(
                 stage = SessionDiagnostics.Stage.OVERLAY_CAPTURE,
                 status = SessionDiagnostics.Status.STARTED,
                 message = "Uploaded frame analysis started",
-                metrics = mapOf("analysisFps" to preset.analysisFps.toString()),
+                metrics = mapOf("analysisFps" to UPLOADED_ANALYSIS_SAMPLE_FPS.toString()),
             )
             currentStage = UploadStage.ANALYZING_VIDEO
             logStage("ANALYZING_UPLOADED_VIDEO", "analysis_started=true")
+            repository.updateUploadPipelineProgress(
+                sessionId = sessionId,
+                stageLabel = "Analyzing uploaded video",
+                processedFrames = 0,
+                totalFrames = 0,
+                detail = "Sampling uploaded frames",
+            )
             onProgress(UploadProgress(currentStage, 0.25f, detail = "Analyzing uploaded frames"))
             val analysisStart = System.currentTimeMillis()
             val progressScope = CoroutineScope(coroutineContext)
             var lastAnalysisPercent = 25
             var lastAnalysisUiProcessed = 0
             var lastAnalysisUiAt = 0L
+            var analyzedFramesForUi = 0
+            var totalFramesForUi = 0
+            var lastPersistedStageLabel: String? = null
+            var lastPersistedProcessedFrames = -1
+            var lastPersistedTotalFrames = -1
+            var lastPersistedAtMs = 0L
+            fun persistUploadProgressThrottled(
+                stageLabel: String?,
+                processedFrames: Int,
+                totalFrames: Int,
+                timestampMs: Long? = null,
+                detail: String? = null,
+                force: Boolean = false,
+            ) {
+                val normalizedProcessed = processedFrames.coerceAtLeast(0)
+                val normalizedTotal = totalFrames.coerceAtLeast(0)
+                val now = System.currentTimeMillis()
+                val stageChanged = stageLabel != lastPersistedStageLabel
+                val advancedFrames = normalizedProcessed - lastPersistedProcessedFrames >= 3
+                val totalChanged = normalizedTotal != lastPersistedTotalFrames
+                val timeElapsed = now - lastPersistedAtMs >= 500L
+                val shouldPersist = force || stageChanged || advancedFrames || totalChanged || timeElapsed
+                if (!shouldPersist) return
+                lastPersistedStageLabel = stageLabel
+                lastPersistedProcessedFrames = normalizedProcessed
+                lastPersistedTotalFrames = normalizedTotal
+                lastPersistedAtMs = now
+                progressScope.launch {
+                    repository.updateUploadPipelineProgress(
+                        sessionId = sessionId,
+                        stageLabel = stageLabel,
+                        processedFrames = normalizedProcessed,
+                        totalFrames = normalizedTotal,
+                        timestampMs = timestampMs,
+                        detail = detail,
+                    )
+                }
+            }
             val analysis = analyzer.analyze(
                 Uri.parse(persistedRawUri),
                 profile,
@@ -322,27 +382,64 @@ class DefaultUploadVideoAnalysisRunner(
                     val estimatedTotal = event.estimatedTotalFrames?.coerceAtLeast(1)
                     val processed = event.processedFrames.coerceAtLeast(0)
                     val boundedProcessed = if (estimatedTotal != null) processed.coerceAtMost(estimatedTotal) else processed
-                    val movementPercent = if (estimatedTotal != null && estimatedTotal > 0) {
-                        ((boundedProcessed * 100f) / estimatedTotal.toFloat()).toInt().coerceIn(0, 100)
+                    val isAnalyzedFrameEvent = event.stage in setOf(
+                        "pose_detection_complete",
+                        "analysis_frame_processed",
+                        "analysis_frame_dropped",
+                        "analysis_complete",
+                    )
+                    if (isAnalyzedFrameEvent) {
+                        analyzedFramesForUi = maxOf(analyzedFramesForUi, boundedProcessed)
+                    }
+                    if (estimatedTotal != null && estimatedTotal > 0) {
+                        totalFramesForUi = maxOf(totalFramesForUi, estimatedTotal)
+                    }
+                    val movementPercent = if (totalFramesForUi > 0) {
+                        ((analyzedFramesForUi * 100f) / totalFramesForUi.toFloat()).toInt().coerceIn(0, 100)
                     } else {
                         null
                     }
 
                     val phaseLabel = when (event.stage) {
-                        "decode_start" -> "Preparing video..."
+                        "decode_start" -> "Analyzing uploaded video"
+                        "frame_sampled" -> "Sampling video frames"
                         "analysis_complete" -> "Finalizing results..."
                         else -> "Analyzing movement"
                     }
+                    val progressDetail = when (event.stage) {
+                        "decode_start" -> "Analyzing uploaded video"
+                        "frame_sampled" -> if (estimatedTotal != null && boundedProcessed > 0) {
+                            "Sampling uploaded frames: $boundedProcessed / $estimatedTotal"
+                        } else {
+                            "Sampling uploaded frames"
+                        }
+                        "analysis_complete" -> "Finalizing results..."
+                        else -> if (totalFramesForUi > 0 && analyzedFramesForUi > 0) {
+                            "Analyzing movement: $analyzedFramesForUi / $totalFramesForUi frames"
+                        } else {
+                            "Analyzing movement"
+                        }
+                    }
+                    val processedForPersistence = analyzedFramesForUi
+                    val totalForPersistence = totalFramesForUi.takeIf { it > 0 } ?: (estimatedTotal ?: 0)
+                    persistUploadProgressThrottled(
+                        stageLabel = phaseLabel,
+                        processedFrames = processedForPersistence,
+                        totalFrames = totalForPersistence,
+                        timestampMs = event.timestampMs,
+                        detail = progressDetail,
+                        force = event.stage in setOf("decode_start", "analysis_started", "decode_complete", "analysis_complete", "analysis_exception"),
+                    )
 
-                    if (estimatedTotal != null && boundedProcessed > 0) {
-                        val progressWindow = (boundedProcessed.toFloat() / estimatedTotal.toFloat()) * 35f
+                    if (totalFramesForUi > 0 && analyzedFramesForUi > 0) {
+                        val progressWindow = (analyzedFramesForUi.toFloat() / totalFramesForUi.toFloat()) * 35f
                         val percent = (25f + progressWindow).toInt().coerceIn(25, 60)
                         val now = System.currentTimeMillis()
                         val shouldEmitUi =
                             percent > lastAnalysisPercent ||
-                                boundedProcessed - lastAnalysisUiProcessed >= ANALYSIS_PROGRESS_UPDATE_FRAME_INTERVAL ||
+                                analyzedFramesForUi - lastAnalysisUiProcessed >= ANALYSIS_PROGRESS_UPDATE_FRAME_INTERVAL ||
                                 now - lastAnalysisUiAt >= ANALYSIS_PROGRESS_UPDATE_MS ||
-                                boundedProcessed == estimatedTotal
+                                analyzedFramesForUi == totalFramesForUi
                         if (percent > lastAnalysisPercent) {
                             lastAnalysisPercent = percent
                             progressScope.launch {
@@ -356,29 +453,29 @@ class DefaultUploadVideoAnalysisRunner(
                             }
                         }
                         if (shouldEmitUi) {
-                            lastAnalysisUiProcessed = boundedProcessed
+                            lastAnalysisUiProcessed = analyzedFramesForUi
                             lastAnalysisUiAt = now
                             onProgress(
                                 UploadProgress(
                                     currentStage,
                                     (lastAnalysisPercent / 100f).coerceIn(0f, 1f),
-                                    detail = "Analyzing movement: $boundedProcessed/$estimatedTotal frames",
+                                    detail = "Analyzing movement: $analyzedFramesForUi / $totalFramesForUi frames",
                                     phaseLabel = phaseLabel,
-                                    processedFrames = boundedProcessed,
-                                    totalFrames = estimatedTotal,
+                                    processedFrames = analyzedFramesForUi,
+                                    totalFrames = totalFramesForUi,
                                     phasePercent = movementPercent,
                                 ),
                             )
                         }
-                    } else if (event.stage == "decode_start") {
+                    } else if (event.stage == "decode_start" || event.stage == "frame_sampled") {
                         onProgress(
                             UploadProgress(
                                 currentStage,
                                 lastAnalysisPercent / 100f,
-                                detail = "Preparing video...",
+                                detail = progressDetail,
                                 phaseLabel = phaseLabel,
-                                processedFrames = 0,
-                                totalFrames = estimatedTotal ?: 0,
+                                processedFrames = analyzedFramesForUi,
+                                totalFrames = totalFramesForUi.takeIf { it > 0 } ?: (estimatedTotal ?: 0),
                                 phasePercent = 0,
                             ),
                         )
@@ -389,8 +486,8 @@ class DefaultUploadVideoAnalysisRunner(
                                 lastAnalysisPercent / 100f,
                                 detail = "Finalizing results...",
                                 phaseLabel = phaseLabel,
-                                processedFrames = estimatedTotal ?: boundedProcessed,
-                                totalFrames = estimatedTotal ?: boundedProcessed,
+                                processedFrames = analyzedFramesForUi.coerceAtLeast(totalFramesForUi),
+                                totalFrames = totalFramesForUi.coerceAtLeast(analyzedFramesForUi),
                                 phasePercent = 100,
                             ),
                         )
@@ -400,7 +497,7 @@ class DefaultUploadVideoAnalysisRunner(
                         log(
                             "analysis_progress stage=${event.stage} processed=${event.processedFrames} total=${event.estimatedTotalFrames ?: -1} dropped=${event.droppedFrames} timestampMs=${event.timestampMs ?: -1} detail=${event.detail ?: ""}",
                         )
-                    } else if (event.processedFrames % 15 == 0 && event.processedFrames > 0) {
+                    } else if (event.processedFrames % 2 == 0 && event.processedFrames > 0) {
                         log(
                             "analysis_progress stage=${event.stage} processed=${event.processedFrames} total=${event.estimatedTotalFrames ?: -1} dropped=${event.droppedFrames} timestampMs=${event.timestampMs ?: -1}",
                         )
@@ -492,10 +589,24 @@ class DefaultUploadVideoAnalysisRunner(
                 etaSeconds = null,
                 elapsedMs = System.currentTimeMillis() - startedAt,
             )
+            repository.updateUploadPipelineProgress(
+                sessionId = sessionId,
+                stageLabel = "Rendering annotated video",
+                processedFrames = analysis.overlayTimeline.size,
+                totalFrames = analysis.overlayTimeline.size + analysis.droppedFrames,
+                detail = "Rendering annotated video",
+            )
             currentStage = UploadStage.RENDERING_OVERLAY
             onProgress(UploadProgress(currentStage, 0.65f, detail = "Preparing overlay timeline"))
 
             currentStage = UploadStage.EXPORTING_ANNOTATED_VIDEO
+            repository.updateUploadPipelineProgress(
+                sessionId = sessionId,
+                stageLabel = "Exporting video",
+                processedFrames = analysis.overlayTimeline.size,
+                totalFrames = analysis.overlayTimeline.size + analysis.droppedFrames,
+                detail = "Exporting video",
+            )
             onProgress(UploadProgress(currentStage, 0.72f, detail = "Encoding annotated output"))
             logStage("EXPORTING_ANNOTATED_VIDEO", "export_started=true")
             repository.updateAnnotatedExportProgress(
@@ -526,6 +637,12 @@ class DefaultUploadVideoAnalysisRunner(
                 onRenderProgress = { rendered, total ->
                     val ratio = if (total <= 0) 0f else rendered.toFloat() / total.toFloat()
                     val percent = (72 + (ratio * 18f)).toInt()
+                    persistUploadProgressThrottled(
+                        stageLabel = "Rendering annotated video",
+                        processedFrames = rendered,
+                        totalFrames = total,
+                        detail = "Rendering annotated video",
+                    )
                     onProgress(UploadProgress(UploadStage.EXPORTING_ANNOTATED_VIDEO, percent / 100f, detail = "Rendered $rendered/$total"))
                 },
             )
@@ -617,6 +734,13 @@ class DefaultUploadVideoAnalysisRunner(
                     etaSeconds = 0,
                     elapsedMs = now - startedAt,
                 )
+                repository.updateUploadPipelineProgress(
+                    sessionId = sessionId,
+                    stageLabel = "Completed",
+                    processedFrames = analysis.overlayTimeline.size + analysis.droppedFrames,
+                    totalFrames = analysis.overlayTimeline.size + analysis.droppedFrames,
+                    detail = "Annotated replay ready",
+                )
                 currentStage = UploadStage.COMPLETED_ANNOTATED
                 onProgress(UploadProgress(currentStage, 1f, etaMs = 0L, detail = "Annotated replay ready"))
                 log("complete annotatedReady=true replayUri=$replayUri")
@@ -642,6 +766,13 @@ class DefaultUploadVideoAnalysisRunner(
                 elapsedMs = now - startedAt,
                 failureReason = failureReason,
                 failureDetail = "Raw ready, annotated export failed during ${currentStage.name}",
+            )
+            repository.updateUploadPipelineProgress(
+                sessionId = sessionId,
+                stageLabel = "Completed",
+                processedFrames = analysis.overlayTimeline.size + analysis.droppedFrames,
+                totalFrames = analysis.overlayTimeline.size + analysis.droppedFrames,
+                detail = "Raw replay ready; annotated export failed",
             )
             currentStage = UploadStage.COMPLETED_RAW_ONLY
             onProgress(UploadProgress(currentStage, 1f, etaMs = 0L, detail = "Raw replay ready; annotated export failed"))
@@ -681,6 +812,11 @@ class DefaultUploadVideoAnalysisRunner(
                 elapsedMs = System.currentTimeMillis() - startedAt,
                 failureReason = mappedFailure,
                 failureDetail = "Upload workflow failed during ${currentStage.name}",
+            )
+            repository.updateUploadPipelineProgress(
+                sessionId = sessionId,
+                stageLabel = "Failed",
+                detail = "Upload workflow failed",
             )
             repository.updateMediaPipelineState(sessionId) { session ->
                 session.copy(
@@ -758,9 +894,13 @@ class UploadVideoViewModel(
                             stage = stage,
                             currentProcessingStage = stage,
                             progressPercent = maxOf(persistedProgress, preservedProgress),
+                            stageText = session.uploadProgressDetail ?: current.stageText,
                             rawVideoStatus = session.rawPersistStatus,
                             annotatedVideoStatus = session.annotatedExportStatus,
                             etaMs = session.annotatedExportEtaSeconds?.times(1000L),
+                            analysisPhaseLabel = session.uploadPipelineStageLabel ?: current.analysisPhaseLabel,
+                            analysisProcessedFrames = session.uploadAnalysisProcessedFrames.coerceAtLeast(current.analysisProcessedFrames),
+                            analysisTotalFrames = maxOf(session.uploadAnalysisTotalFrames, current.analysisTotalFrames),
                         )
                     }
                 }

@@ -196,11 +196,32 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             if (isProcessing) {
+                                val uploadStageText = when (activeSession.annotatedExportStage) {
+                                    AnnotatedExportStage.PREPARING,
+                                    AnnotatedExportStage.DECODING_SOURCE,
+                                    -> "Analyzing uploaded video"
+
+                                    AnnotatedExportStage.LOADING_OVERLAYS,
+                                    AnnotatedExportStage.RENDERING,
+                                    -> "Rendering annotated video"
+
+                                    AnnotatedExportStage.ENCODING -> "Exporting video"
+                                    AnnotatedExportStage.VERIFYING -> "Verifying output"
+                                    else -> "Processing uploaded video"
+                                }
                                 LinearProgressIndicator(
                                     progress = { (activeSession.annotatedExportPercent.coerceIn(0, 100) / 100f).coerceAtLeast(0.05f) },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
-                                Text("Stage: ${activeSession.annotatedExportStage}")
+                                Text(activeSession.uploadPipelineStageLabel ?: uploadStageText)
+                                if (activeSession.uploadAnalysisTotalFrames > 0) {
+                                    Text(
+                                        "Analyzing movement: ${activeSession.uploadAnalysisProcessedFrames.coerceAtMost(activeSession.uploadAnalysisTotalFrames)} / ${activeSession.uploadAnalysisTotalFrames} frames",
+                                    )
+                                }
+                                activeSession.uploadProgressDetail
+                                    ?.takeIf { it.isNotBlank() && it != activeSession.uploadPipelineStageLabel }
+                                    ?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                 Text("Progress: ${activeSession.annotatedExportPercent}%")
                                 Text("ETA: ${activeSession.annotatedExportEtaSeconds?.let { "${it}s" } ?: "-"}")
                             } else if (isSkipped) {

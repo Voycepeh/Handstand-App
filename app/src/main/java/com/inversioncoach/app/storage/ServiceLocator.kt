@@ -20,6 +20,15 @@ object ServiceLocator {
             )
         }
     }
+    private val MIGRATION_12_13 = object : Migration(12, 13) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadPipelineStageLabel TEXT")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadAnalysisProcessedFrames INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadAnalysisTotalFrames INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadAnalysisTimestampMs INTEGER")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadProgressDetail TEXT")
+        }
+    }
 
     private fun db(context: Context): InversionCoachDatabase {
         return db ?: synchronized(this) {
@@ -27,7 +36,7 @@ object ServiceLocator {
                 context.applicationContext,
                 InversionCoachDatabase::class.java,
                 "inversion_coach.db",
-            ).addMigrations(MIGRATION_11_12)
+            ).addMigrations(MIGRATION_11_12, MIGRATION_12_13)
                 .fallbackToDestructiveMigration()
                 .build()
                 .also { db = it }

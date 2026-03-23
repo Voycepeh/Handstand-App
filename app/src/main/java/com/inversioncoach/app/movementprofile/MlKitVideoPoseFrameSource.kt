@@ -20,11 +20,11 @@ import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicInteger
 
 private const val TAG = "UploadPoseFrameSource"
-private const val MAX_ANALYSIS_DIMENSION = 960
+private const val MAX_ANALYSIS_DIMENSION = 720
 
 class MlKitVideoPoseFrameSource(
     private val context: Context,
-    private val sampleFps: Int = 12,
+    private val sampleFps: Int = 6,
     workerCount: Int = defaultWorkerCount(),
     private val queueCapacity: Int = 6,
 ) : VideoPoseFrameSource {
@@ -35,7 +35,7 @@ class MlKitVideoPoseFrameSource(
         val averageWorkerActive: Double,
     )
 
-    private val boundedWorkerCount = workerCount.coerceIn(1, 4)
+    private val boundedWorkerCount = workerCount.coerceIn(1, 2)
     @Volatile
     var lastDecodeTelemetry: DecodeTelemetry = DecodeTelemetry(0, boundedWorkerCount, 0, 0.0)
         private set
@@ -116,7 +116,7 @@ class MlKitVideoPoseFrameSource(
                         while (timestampMs <= durationMs) {
                             try {
                                 retriever.getFrameAtTime(timestampMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST)?.let { bitmap ->
-                                    if (index % 10 == 0) {
+                                    if (index % 2 == 0) {
                                         Log.i(TAG, "decode_sample frameIndex=$index timestampMs=$timestampMs/$durationMs")
                                     }
                                     frameQueue.send(FramePacket(index = index, timestampMs = timestampMs, bitmap = bitmap))
@@ -167,7 +167,7 @@ class MlKitVideoPoseFrameSource(
                     AnalysisProgressEvent(
                         stage = "decode_complete",
                         processedFrames = frames.size,
-                        estimatedTotalFrames = estimatedTotalFrames,
+                        estimatedTotalFrames = frames.size,
                         detail = "Decoded frames are ready for analysis",
                     ),
                 )
@@ -281,7 +281,7 @@ class MlKitVideoPoseFrameSource(
     companion object {
         private fun defaultWorkerCount(): Int {
             val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
-            return (cores - 2).coerceIn(1, 4)
+            return (cores - 2).coerceIn(1, 2)
         }
     }
 }

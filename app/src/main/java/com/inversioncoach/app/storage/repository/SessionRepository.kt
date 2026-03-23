@@ -119,6 +119,26 @@ class SessionRepository(
         sessionDao.upsert(session.copy(annotatedExportFailureReason = reason))
     }
 
+    suspend fun updateUploadPipelineProgress(
+        sessionId: Long,
+        stageLabel: String?,
+        processedFrames: Int = 0,
+        totalFrames: Int = 0,
+        timestampMs: Long? = null,
+        detail: String? = null,
+    ) {
+        val session = sessionDao.getById(sessionId) ?: return
+        sessionDao.upsert(
+            session.copy(
+                uploadPipelineStageLabel = stageLabel,
+                uploadAnalysisProcessedFrames = processedFrames.coerceAtLeast(0),
+                uploadAnalysisTotalFrames = totalFrames.coerceAtLeast(0),
+                uploadAnalysisTimestampMs = timestampMs,
+                uploadProgressDetail = detail,
+            ),
+        )
+    }
+
     suspend fun reconcileStaleProcessingState(sessionId: Long, hasActiveExportJob: Boolean): Boolean {
         val session = sessionDao.getById(sessionId) ?: return false
         val lastUpdatedAt = session.annotatedExportLastUpdatedAt ?: 0L

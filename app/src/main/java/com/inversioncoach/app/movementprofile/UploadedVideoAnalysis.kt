@@ -113,7 +113,7 @@ class UploadedVideoAnalyzer(
                 )
             )
             sourceFrames.forEachIndexed { index, frame ->
-                if (index % 10 == 0) {
+                if (index % 2 == 0) {
                     Log.i(
                         UPLOAD_ANALYSIS_TAG,
                         "analysis_sample frameIndex=$index total=${sourceFrames.size} timestampMs=${frame.timestampMs} dropped=$dropped",
