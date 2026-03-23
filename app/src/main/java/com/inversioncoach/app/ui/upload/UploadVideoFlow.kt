@@ -77,6 +77,8 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 
 private const val TAG = "UploadVideoFlow"
+private const val ANALYSIS_PROGRESS_UPDATE_FRAME_INTERVAL = 3
+private const val ANALYSIS_PROGRESS_UPDATE_MS = 200L
 
 enum class UploadStage(val label: String) {
     IDLE("Idle"),
@@ -99,6 +101,10 @@ data class UploadProgress(
     val percent: Float,
     val etaMs: Long? = null,
     val detail: String? = null,
+    val phaseLabel: String? = null,
+    val processedFrames: Int? = null,
+    val totalFrames: Int? = null,
+    val phasePercent: Int? = null,
 )
 
 enum class UploadTrackingMode {
@@ -121,6 +127,10 @@ data class UploadVideoUiState(
     val currentProcessingStage: UploadStage = UploadStage.IDLE,
     val technicalLog: String = "",
     val selectedTrackingMode: UploadTrackingMode? = null,
+    val analysisPhaseLabel: String = "",
+    val analysisProcessedFrames: Int = 0,
+    val analysisTotalFrames: Int = 0,
+    val analysisPhasePercent: Int? = null,
 )
 
 data class UploadFlowResult(
@@ -303,16 +313,36 @@ class DefaultUploadVideoAnalysisRunner(
             val analysisStart = System.currentTimeMillis()
             val progressScope = CoroutineScope(coroutineContext)
             var lastAnalysisPercent = 25
+            var lastAnalysisUiProcessed = 0
+            var lastAnalysisUiAt = 0L
             val analysis = analyzer.analyze(
                 Uri.parse(persistedRawUri),
                 profile,
                 progressObserver = AnalysisProgressObserver { event ->
                     val estimatedTotal = event.estimatedTotalFrames?.coerceAtLeast(1)
                     val processed = event.processedFrames.coerceAtLeast(0)
-                    if (estimatedTotal != null && processed > 0) {
-                        val bounded = processed.coerceAtMost(estimatedTotal)
-                        val progressWindow = (bounded.toFloat() / estimatedTotal.toFloat()) * 35f
+                    val boundedProcessed = if (estimatedTotal != null) processed.coerceAtMost(estimatedTotal) else processed
+                    val movementPercent = if (estimatedTotal != null && estimatedTotal > 0) {
+                        ((boundedProcessed * 100f) / estimatedTotal.toFloat()).toInt().coerceIn(0, 100)
+                    } else {
+                        null
+                    }
+
+                    val phaseLabel = when (event.stage) {
+                        "decode_start" -> "Preparing video..."
+                        "analysis_complete" -> "Finalizing results..."
+                        else -> "Analyzing movement"
+                    }
+
+                    if (estimatedTotal != null && boundedProcessed > 0) {
+                        val progressWindow = (boundedProcessed.toFloat() / estimatedTotal.toFloat()) * 35f
                         val percent = (25f + progressWindow).toInt().coerceIn(25, 60)
+                        val now = System.currentTimeMillis()
+                        val shouldEmitUi =
+                            percent > lastAnalysisPercent ||
+                                boundedProcessed - lastAnalysisUiProcessed >= ANALYSIS_PROGRESS_UPDATE_FRAME_INTERVAL ||
+                                now - lastAnalysisUiAt >= ANALYSIS_PROGRESS_UPDATE_MS ||
+                                boundedProcessed == estimatedTotal
                         if (percent > lastAnalysisPercent) {
                             lastAnalysisPercent = percent
                             progressScope.launch {
@@ -324,14 +354,46 @@ class DefaultUploadVideoAnalysisRunner(
                                     elapsedMs = System.currentTimeMillis() - startedAt,
                                 )
                             }
+                        }
+                        if (shouldEmitUi) {
+                            lastAnalysisUiProcessed = boundedProcessed
+                            lastAnalysisUiAt = now
                             onProgress(
                                 UploadProgress(
                                     currentStage,
-                                    percent / 100f,
-                                    detail = "Analyzing uploaded frames ($processed/${estimatedTotal})",
+                                    (lastAnalysisPercent / 100f).coerceIn(0f, 1f),
+                                    detail = "Analyzing movement: $boundedProcessed/$estimatedTotal frames",
+                                    phaseLabel = phaseLabel,
+                                    processedFrames = boundedProcessed,
+                                    totalFrames = estimatedTotal,
+                                    phasePercent = movementPercent,
                                 ),
                             )
                         }
+                    } else if (event.stage == "decode_start") {
+                        onProgress(
+                            UploadProgress(
+                                currentStage,
+                                lastAnalysisPercent / 100f,
+                                detail = "Preparing video...",
+                                phaseLabel = phaseLabel,
+                                processedFrames = 0,
+                                totalFrames = estimatedTotal ?: 0,
+                                phasePercent = 0,
+                            ),
+                        )
+                    } else if (event.stage == "analysis_complete") {
+                        onProgress(
+                            UploadProgress(
+                                currentStage,
+                                lastAnalysisPercent / 100f,
+                                detail = "Finalizing results...",
+                                phaseLabel = phaseLabel,
+                                processedFrames = estimatedTotal ?: boundedProcessed,
+                                totalFrames = estimatedTotal ?: boundedProcessed,
+                                phasePercent = 100,
+                            ),
+                        )
                     }
 
                     if (event.stage in setOf("decode_start", "analysis_started", "decode_complete", "analysis_complete", "analysis_exception")) {
@@ -755,6 +817,10 @@ class UploadVideoViewModel(
                     technicalLog = "",
                     rawVideoStatus = RawPersistStatus.PROCESSING,
                     annotatedVideoStatus = AnnotatedExportStatus.NOT_STARTED,
+                    analysisPhaseLabel = "",
+                    analysisProcessedFrames = 0,
+                    analysisTotalFrames = 0,
+                    analysisPhasePercent = null,
                 )
             }
             runCatching {
@@ -795,6 +861,10 @@ class UploadVideoViewModel(
                                 etaMs = progress.etaMs,
                                 rawVideoStatus = rawStatus,
                                 annotatedVideoStatus = annotatedStatus,
+                                analysisPhaseLabel = progress.phaseLabel ?: current.analysisPhaseLabel,
+                                analysisProcessedFrames = progress.processedFrames ?: current.analysisProcessedFrames,
+                                analysisTotalFrames = progress.totalFrames ?: current.analysisTotalFrames,
+                                analysisPhasePercent = progress.phasePercent ?: current.analysisPhasePercent,
                             )
                         }
                     },
@@ -827,6 +897,10 @@ class UploadVideoViewModel(
                         canCancel = false,
                         rawVideoStatus = if (result.rawReady) RawPersistStatus.SUCCEEDED else RawPersistStatus.FAILED,
                         annotatedVideoStatus = if (result.annotatedReady) AnnotatedExportStatus.ANNOTATED_READY else AnnotatedExportStatus.ANNOTATED_FAILED,
+                        analysisPhaseLabel = "",
+                        analysisProcessedFrames = 0,
+                        analysisTotalFrames = 0,
+                        analysisPhasePercent = null,
                     )
                 }
             }.onFailure { error ->
@@ -840,6 +914,10 @@ class UploadVideoViewModel(
                         progressPercent = if (it.rawVideoStatus == RawPersistStatus.SUCCEEDED) 1f else 0f,
                         canCancel = false,
                         annotatedVideoStatus = AnnotatedExportStatus.ANNOTATED_FAILED,
+                        analysisPhaseLabel = "",
+                        analysisProcessedFrames = 0,
+                        analysisTotalFrames = 0,
+                        analysisPhasePercent = null,
                     )
                 }
             }
@@ -861,7 +939,16 @@ class UploadVideoViewModel(
             }
         }
         _state.update {
-            it.copy(stage = UploadStage.CANCELLED, currentProcessingStage = UploadStage.CANCELLED, stageText = "Analysis cancelled", canCancel = false)
+            it.copy(
+                stage = UploadStage.CANCELLED,
+                currentProcessingStage = UploadStage.CANCELLED,
+                stageText = "Analysis cancelled",
+                canCancel = false,
+                analysisPhaseLabel = "",
+                analysisProcessedFrames = 0,
+                analysisTotalFrames = 0,
+                analysisPhasePercent = null,
+            )
         }
     }
 }
@@ -980,6 +1067,18 @@ fun UploadVideoScreen(
                 CircularProgressIndicator()
                 LinearProgressIndicator(progress = { state.progressPercent }, modifier = Modifier.fillMaxWidth())
                 Text("${(state.progressPercent * 100).toInt()}%")
+                state.analysisPhaseLabel.takeIf { it.isNotBlank() }?.let { phase ->
+                    Text(phase, style = MaterialTheme.typography.bodySmall)
+                }
+                if (state.analysisTotalFrames > 0) {
+                    Text(
+                        "Analyzing movement: ${state.analysisProcessedFrames.coerceAtMost(state.analysisTotalFrames)} / ${state.analysisTotalFrames} frames",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                state.analysisPhasePercent?.let { phasePercent ->
+                    Text("Analyzing movement (${phasePercent}%)", style = MaterialTheme.typography.bodySmall)
+                }
                 state.etaMs?.let { eta -> Text("ETA: ${eta / 1000}s", style = MaterialTheme.typography.bodySmall) }
             }
 
