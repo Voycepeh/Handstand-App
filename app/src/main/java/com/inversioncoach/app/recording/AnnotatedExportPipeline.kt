@@ -17,6 +17,8 @@ import kotlinx.coroutines.delay
 import kotlin.math.abs
 
 private const val TAG = "AnnotatedExportPipeline"
+private const val MAX_EXPORT_FPS = 12
+private const val LONG_EXPORT_SESSION_MS = 30_000L
 
 data class AnnotatedOverlayFrame(
     val timestampMs: Long,
@@ -103,6 +105,57 @@ class AnnotatedExportPipeline(
         },
 ) {
 
+    private fun normalizedTimelineForExport(overlayTimeline: OverlayTimeline): OverlayTimeline {
+        if (overlayTimeline.frames.isEmpty()) return overlayTimeline
+
+        val sortedFrames = overlayTimeline.frames.sortedBy { it.timestampMs }
+        val durationMs =
+            (sortedFrames.last().timestampMs - sortedFrames.first().timestampMs).coerceAtLeast(0L)
+
+        val targetFps =
+            when {
+                durationMs >= LONG_EXPORT_SESSION_MS -> MAX_EXPORT_FPS
+                else -> MAX_EXPORT_FPS
+            }
+
+        val minSpacingMs = (1000L / targetFps).coerceAtLeast(1L)
+        val normalizedFrames = ArrayList<OverlayTimelineFrame>(sortedFrames.size)
+        var lastAcceptedTimestampMs = Long.MIN_VALUE
+
+        for (frame in sortedFrames) {
+            if (normalizedFrames.isEmpty()) {
+                normalizedFrames += frame
+                lastAcceptedTimestampMs = frame.timestampMs
+                continue
+            }
+
+            val sameTimestamp = frame.timestampMs == lastAcceptedTimestampMs
+            val tooClose = frame.timestampMs - lastAcceptedTimestampMs < minSpacingMs
+            if (sameTimestamp || tooClose) continue
+
+            normalizedFrames += frame
+            lastAcceptedTimestampMs = frame.timestampMs
+        }
+
+        val finalFrames =
+            when {
+                normalizedFrames.isEmpty() -> listOf(sortedFrames.first())
+                normalizedFrames.last().timestampMs != sortedFrames.last().timestampMs ->
+                    normalizedFrames + sortedFrames.last()
+                else -> normalizedFrames
+            }
+
+        Log.d(
+            TAG,
+            "export_timeline_normalized " +
+                "inputFrames=${overlayTimeline.frames.size} " +
+                "outputFrames=${finalFrames.size} " +
+                "durationMs=$durationMs targetFps=$targetFps minSpacingMs=$minSpacingMs",
+        )
+
+        return overlayTimeline.copy(frames = finalFrames)
+    }
+
     enum class VerificationStatus {
         PASSED,
         FAILED,
@@ -170,18 +223,30 @@ class AnnotatedExportPipeline(
                 verificationStatus = VerificationStatus.FAILED,
             )
         }
+        val exportTimeline = normalizedTimelineForExport(overlayTimeline)
+        if (exportTimeline.frames.isEmpty()) {
+            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
+            Log.w(TAG, "export_failure sessionId=$sessionId reason=normalized_overlay_frames_empty")
+            return ExportResult(
+                failureReason = AnnotatedExportFailureReason.OVERLAY_TIMELINE_EMPTY.name,
+                verificationStatus = VerificationStatus.FAILED,
+            )
+        }
         var telemetry: AnnotatedExportTelemetry? = null
         updateExportStatus(sessionId, AnnotatedExportStatus.PROCESSING)
         Log.d(
             TAG,
-            "export_start sessionId=$sessionId rawVideoUri=$rawVideoUri timelineFrames=${overlayTimeline.frames.size} " +
-                "firstFrameTs=${overlayTimeline.frames.first().timestampMs} lastFrameTs=${overlayTimeline.frames.last().timestampMs}",
+            "export_start sessionId=$sessionId rawVideoUri=$rawVideoUri " +
+                "timelineFrames=${overlayTimeline.frames.size} " +
+                "normalizedTimelineFrames=${exportTimeline.frames.size} " +
+                "firstFrameTs=${exportTimeline.frames.first().timestampMs} " +
+                "lastFrameTs=${exportTimeline.frames.last().timestampMs}",
         )
         val composeResult = try {
             coroutineScope {
                 var exportWorkStartedAtMs: Long? = null
                 val renderJob = async {
-                    renderAnnotatedVideo(rawVideoUri, drillType, drillCameraSide, overlayTimeline, preset, onRenderProgress) {
+                    renderAnnotatedVideo(rawVideoUri, drillType, drillCameraSide, exportTimeline, preset, onRenderProgress) {
                         telemetry = it
                         if (it.decoderInitializedAtMs != null && exportWorkStartedAtMs == null) {
                             exportWorkStartedAtMs = System.currentTimeMillis()
