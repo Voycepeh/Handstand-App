@@ -26,9 +26,9 @@ fun SessionTooShortScreen(elapsedSessionMs: Long, minSessionDurationSeconds: Int
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Session is not recorded", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Session is shorter than the minimum session length.")
+            Text("Session must last at least the configured startup countdown duration.")
             Text("Your session duration: ${formatSessionDuration(elapsedSessionMs)}")
-            Text("Minimum session length from settings: ${minSessionDurationSeconds}s")
+            Text("Configured threshold: ${minSessionDurationSeconds}s")
             Button(onClick = onBackToHome, modifier = Modifier.fillMaxWidth()) {
                 Text("Back to main app page")
             }
