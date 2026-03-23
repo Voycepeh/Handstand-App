@@ -41,10 +41,8 @@ fun OverlayRenderer(
             frame = OverlayDrawingFrame(
                 drawSkeleton = joints.isNotEmpty(),
                 drawIdealLine = showIdealLine,
-                sourceWidth = frame?.analysisWidth ?: 0,
-                sourceHeight = frame?.analysisHeight ?: 0,
-                sourceRotationDegrees = frame?.analysisRotationDegrees ?: 0,
-                mirrored = frame?.mirrored ?: false,
+                // Live analyzer joints are already normalized into preview orientation,
+                // so overlay projection must stay in neutral mode here.
             ),
         )
 
