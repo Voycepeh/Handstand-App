@@ -31,6 +31,7 @@ import com.inversioncoach.app.overlay.OverlayDrawingFrame
 import com.inversioncoach.app.overlay.OverlayFrameRenderer
 import com.inversioncoach.app.overlay.OverlayGeometry
 import com.inversioncoach.app.overlay.OverlayRenderModel
+import com.inversioncoach.app.pose.PoseScaleMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -520,6 +521,7 @@ class AnnotatedVideoCompositor(
         private val overlayTextureId: Int
         private val overlayBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         private val overlayCanvas = Canvas(overlayBitmap)
+        private lateinit var overlayProjectionFrame: OverlayDrawingFrame
         private val texMatrix = FloatArray(16)
         private var loggedTextureTransformDiagnostics = false
 
@@ -582,6 +584,21 @@ class AnnotatedVideoCompositor(
                 containerHeight = height,
             )
             videoQuad = createQuadForRect(contentRect, width, height)
+            overlayProjectionFrame = OverlayDrawingFrame(
+                drawSkeleton = false,
+                drawIdealLine = false,
+                sourceWidth = displaySize.first,
+                sourceHeight = displaySize.second,
+                sourceRotationDegrees = 0,
+                mirrored = false,
+                previewContentRect = androidx.compose.ui.geometry.Rect(
+                    left = contentRect.left,
+                    top = contentRect.top,
+                    right = contentRect.right,
+                    bottom = contentRect.bottom,
+                ),
+                scaleMode = PoseScaleMode.FIT,
+            )
         }
 
         fun renderFrame(presentationTimeUs: Long, instruction: RenderInstruction, frameTimeoutMs: Long): RenderSubmissionResult {
@@ -695,7 +712,7 @@ class AnnotatedVideoCompositor(
                 width = width,
                 height = height,
                 model = model,
-                frame = OverlayDrawingFrame(
+                frame = overlayProjectionFrame.copy(
                     drawSkeleton = instruction.drawSkeleton,
                     drawIdealLine = instruction.drawIdealLine,
                 ),
