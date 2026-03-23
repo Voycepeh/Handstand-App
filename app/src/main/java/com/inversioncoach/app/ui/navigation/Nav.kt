@@ -38,8 +38,8 @@ sealed class Route(val value: String) {
     data object Results : Route("results/{sessionId}") {
         fun create(sessionId: Long) = "results/$sessionId"
     }
-    data object SessionTooShort : Route("session-too-short/{elapsedMs}/{minSeconds}") {
-        fun create(elapsedMs: Long, minSeconds: Int) = "session-too-short/$elapsedMs/$minSeconds"
+    data object SessionTooShort : Route("session-too-short/{elapsedMs}/{thresholdSeconds}") {
+        fun create(elapsedMs: Long, thresholdSeconds: Int) = "session-too-short/$elapsedMs/$thresholdSeconds"
     }
     data object History : Route("history")
     data object Progress : Route("progress")
@@ -113,7 +113,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 options = options,
                 onStop = { result ->
                     if (result.wasDiscardedForShortDuration) {
-                        navController.navigate(Route.SessionTooShort.create(result.elapsedSessionMs, result.minSessionDurationSeconds))
+                        navController.navigate(Route.SessionTooShort.create(result.elapsedSessionMs, result.validationThresholdSeconds))
                     } else {
                         navController.navigate(Route.Results.create(result.sessionId))
                     }
@@ -141,13 +141,13 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         }
         composable(Route.SessionTooShort.value, arguments = listOf(
             navArgument("elapsedMs") { type = NavType.LongType },
-            navArgument("minSeconds") { type = NavType.IntType },
+            navArgument("thresholdSeconds") { type = NavType.IntType },
         )) { backStack ->
             val elapsedMs = backStack.arguments?.getLong("elapsedMs") ?: 0L
-            val minSeconds = backStack.arguments?.getInt("minSeconds") ?: 0
+            val thresholdSeconds = backStack.arguments?.getInt("thresholdSeconds") ?: 0
             SessionTooShortScreen(
                 elapsedSessionMs = elapsedMs,
-                minSessionDurationSeconds = minSeconds,
+                validationThresholdSeconds = thresholdSeconds,
                 onBackToHome = { navController.popBackStack(Route.Home.value, false) },
             )
         }

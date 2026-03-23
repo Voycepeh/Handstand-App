@@ -73,13 +73,8 @@ data class SessionStopResult(
     val sessionId: Long,
     val wasDiscardedForShortDuration: Boolean,
     val elapsedSessionMs: Long,
-    val minSessionDurationSeconds: Int,
+    val validationThresholdSeconds: Int,
 )
-
-internal fun shouldDiscardSessionForShortDuration(elapsedSessionMs: Long, minSessionDurationSeconds: Int): Boolean {
-    if (minSessionDurationSeconds <= 0) return false
-    return elapsedSessionMs.coerceAtLeast(0L) < minSessionDurationSeconds * 1000L
-}
 
 class LiveCoachingViewModel(
     private val drillType: DrillType,
@@ -724,7 +719,8 @@ class LiveCoachingViewModel(
         viewModelScope.launch {
             startupJob?.cancel()
             startupJob = null
-            val minimumValidSessionSeconds = activeSettings.startupCountdownSeconds.coerceAtLeast(0)
+            val startupGuardSeconds = activeSettings.startupCountdownSeconds.coerceAtLeast(0)
+            val postActivationMinimumSessionSeconds = 0
             if (_uiState.value.startupState != SessionStartupState.ACTIVE) {
                 cancelStartup()
                 val currentSessionId = sessionId
@@ -736,7 +732,7 @@ class LiveCoachingViewModel(
                         sessionId = currentSessionId ?: 0L,
                         wasDiscardedForShortDuration = true,
                         elapsedSessionMs = 0L,
-                        minSessionDurationSeconds = minimumValidSessionSeconds,
+                        validationThresholdSeconds = startupGuardSeconds,
                     ),
                 )
                 return@launch
@@ -785,25 +781,11 @@ class LiveCoachingViewModel(
                 val completedAtMs = System.currentTimeMillis()
                 val elapsedSessionMs = (completedAtMs - sessionStartedAtMs).coerceAtLeast(0L)
                 val elapsedSessionSeconds = elapsedSessionMs / 1000.0
-                val shouldDeleteSession = shouldDiscardSessionForShortDuration(
-                    elapsedSessionMs = elapsedSessionMs,
-                    minSessionDurationSeconds = minimumValidSessionSeconds,
-                )
                 SessionDiagnostics.log(
                     "session_finalize drill=$drillType validFrames=$validFrameCount invalidFrames=$invalidFrameCount invalidReasons={$invalidReasonSummary} " +
                         "aggregatedIssues=${aggregatedIssues.size} savedRaw=$rawVideoUri exportedAnnotated=$annotatedVideoUri elapsed=${"%.2f".format(elapsedSessionSeconds)}s " +
-                        "minSessionDuration=${minimumValidSessionSeconds}s (from countdown) shouldDelete=$shouldDeleteSession",
+                        "postActivationMinSessionDuration=${postActivationMinimumSessionSeconds}s shouldDelete=false",
                 )
-                if (shouldDeleteSession) {
-                    repository.deleteSession(activeSessionId)
-                    stopResult = SessionStopResult(
-                        sessionId = activeSessionId,
-                        wasDiscardedForShortDuration = true,
-                        elapsedSessionMs = elapsedSessionMs,
-                        minSessionDurationSeconds = minimumValidSessionSeconds,
-                    )
-                    return@launch
-                }
                 val hasActiveExportJob = AnnotatedExportJobTracker.isActive(activeSessionId)
                 resolveTerminalAnnotatedExportStatus(hasActiveExportJob)
                 val (reconciledStatus, reconciledFailureReason) = reconcileMediaStateForPersistence(hasActiveExportJob)
@@ -925,7 +907,7 @@ class LiveCoachingViewModel(
                     sessionId = activeSessionId,
                     wasDiscardedForShortDuration = false,
                     elapsedSessionMs = elapsedSessionMs,
-                    minSessionDurationSeconds = minimumValidSessionSeconds,
+                    validationThresholdSeconds = postActivationMinimumSessionSeconds,
                 )
                 SessionDiagnostics.logStructured(
                     event = "session_finalized",
@@ -951,7 +933,7 @@ class LiveCoachingViewModel(
                     sessionId = activeSessionId,
                     wasDiscardedForShortDuration = false,
                     elapsedSessionMs = elapsedSessionMs,
-                    minSessionDurationSeconds = minimumValidSessionSeconds,
+                    validationThresholdSeconds = postActivationMinimumSessionSeconds,
                 )
             } finally {
                 isSessionFinalizing = false
@@ -959,7 +941,7 @@ class LiveCoachingViewModel(
                     sessionId = activeSessionId,
                     wasDiscardedForShortDuration = false,
                     elapsedSessionMs = (System.currentTimeMillis() - sessionStartedAtMs).coerceAtLeast(0L),
-                    minSessionDurationSeconds = minimumValidSessionSeconds,
+                    validationThresholdSeconds = postActivationMinimumSessionSeconds,
                 )
                 completePendingStopCallbacks(result)
             }

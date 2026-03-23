@@ -98,7 +98,7 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
                 onValueChange = { startupCountdownSeconds = it.toInt().coerceIn(0, 30) },
                 valueRange = 0f..30f,
             )
-            Text("Time before recording starts. Also used as the minimum valid session duration.")
+            Text("Time before recording starts.")
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Debug overlay (raw metrics/angles)")
                 Checkbox(checked = debug, onCheckedChange = { debug = it })
@@ -182,7 +182,7 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
                                         localOnlyPrivacyMode = localOnlyPrivacyMode,
                                         maxStorageMb = maxStorageMb,
                                         startupCountdownSeconds = startupCountdownSeconds,
-                                        minSessionDurationSeconds = startupCountdownSeconds,
+                                        minSessionDurationSeconds = 0,
                                         alignmentStrictness = alignmentStrictness,
                                         customLineDeviation = customLineDeviation,
                                         customMinimumGoodFormScore = customGoodForm,

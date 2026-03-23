@@ -16,7 +16,7 @@ import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 
 @Composable
-fun SessionTooShortScreen(elapsedSessionMs: Long, minSessionDurationSeconds: Int, onBackToHome: () -> Unit) {
+fun SessionTooShortScreen(elapsedSessionMs: Long, validationThresholdSeconds: Int, onBackToHome: () -> Unit) {
     ScaffoldedScreen(title = "Session not recorded") { padding ->
         Column(
             modifier = Modifier
@@ -28,7 +28,7 @@ fun SessionTooShortScreen(elapsedSessionMs: Long, minSessionDurationSeconds: Int
             Text("Session is not recorded", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text("Session must last at least the configured startup countdown duration.")
             Text("Your session duration: ${formatSessionDuration(elapsedSessionMs)}")
-            Text("Configured threshold: ${minSessionDurationSeconds}s")
+            Text("Configured threshold: ${validationThresholdSeconds}s")
             Button(onClick = onBackToHome, modifier = Modifier.fillMaxWidth()) {
                 Text("Back to main app page")
             }
