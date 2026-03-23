@@ -82,8 +82,19 @@ object OverlayFrameRenderer {
         }
 
         if (frame.drawIdealLine) {
-            val x = model.idealLineX * width
-            canvas.drawLine(x, 0f, x, height.toFloat(), idealLinePaint)
+            val projection = PoseProjectionInput(
+                sourceWidth = frame.sourceWidth.coerceAtLeast(1),
+                sourceHeight = frame.sourceHeight.coerceAtLeast(1),
+                previewWidth = width.toFloat(),
+                previewHeight = height.toFloat(),
+                rotationDegrees = frame.sourceRotationDegrees,
+                mirrored = frame.mirrored,
+                scaleMode = PoseScaleMode.FIT,
+            )
+            val (lineStart, lineEnd) = model.idealLine
+            val mappedStart = mapper.map(lineStart.x, lineStart.y, projection)
+            val mappedEnd = mapper.map(lineEnd.x, lineEnd.y, projection)
+            canvas.drawLine(mappedStart.x, mappedStart.y, mappedEnd.x, mappedEnd.y, idealLinePaint)
         }
     }
 }

@@ -24,7 +24,7 @@ private val BILATERAL_CONNECTORS = listOf(
 data class OverlayRenderModel(
     val joints: List<JointPoint>,
     val connections: List<Pair<String, String>>,
-    val idealLineX: Float,
+    val idealLine: Pair<JointPoint, JointPoint>,
 )
 
 object OverlayGeometry {
@@ -44,7 +44,7 @@ object OverlayGeometry {
             freestyleStrategy.build(joints, mode)
         } else {
             val base = drillStrategy.build(joints, drillCameraSide)
-            base.copy(idealLineX = idealLineXForDrill(drillType, joints))
+            base.copy(idealLine = buildSupportLine(idealLineXForDrill(drillType, joints)))
         }
     }
 
@@ -139,7 +139,7 @@ private class FreestyleOverlayStrategy {
             -> 0.5f
         }
 
-        return OverlayRenderModel(filtered, connections, idealLineX = idealLineX)
+        return OverlayRenderModel(filtered, connections, idealLine = buildSupportLine(idealLineX))
     }
 
     private fun profileLineX(joints: List<JointPoint>, side: String): Float {
@@ -156,7 +156,7 @@ private class FixedDrillSideOverlayStrategy {
         val names = listOf("nose") + SELECTED_JOINTS.filter { it != "nose" }.map { "${sidePrefix}_$it" }
         val filtered = names.mapNotNull { visible[it] }
         val connections = sideConnections(sidePrefix).filter { (from, to) -> visible[from] != null && visible[to] != null }
-        return OverlayRenderModel(filtered, connections, idealLineX = 0.5f)
+        return OverlayRenderModel(filtered, connections, idealLine = buildSupportLine(0.5f))
     }
 }
 
@@ -164,3 +164,10 @@ private fun sideConnections(side: String): List<Pair<String, String>> =
     SIDE_CONNECTIONS.map { (from, to) ->
         from.replace("{side}", side) to to.replace("{side}", side)
     }
+
+
+private fun buildSupportLine(x: Float): Pair<JointPoint, JointPoint> {
+    val clampedX = x.coerceIn(0.1f, 0.9f)
+    return JointPoint(name = "support_line_top", x = clampedX, y = 0f, z = 0f, visibility = 1f) to
+        JointPoint(name = "support_line_bottom", x = clampedX, y = 1f, z = 0f, visibility = 1f)
+}

@@ -63,7 +63,8 @@ class AnnotatedVideoCompositorSourceAuditTest {
     fun videoPathUsesSingleExplicitRotationAndDiagnosticsLogging() {
         val src = source()
         assertTrue(src.contains("createTextureCoordinateBuffer(transform.renderRotationDegrees)"))
-        assertTrue(src.contains("glUniformMatrix4fv(matrixLoc, 1, false, identityTexMatrix, 0)"))
+        assertTrue(src.contains("createOverlayTextureCoordinateBuffer()"))
+        assertTrue(src.contains("glUniformMatrix4fv(matrixLoc, 1, false, texMatrix, 0)"))
         assertTrue(src.contains("export_diagnostics_texture_transform"))
     }
 }

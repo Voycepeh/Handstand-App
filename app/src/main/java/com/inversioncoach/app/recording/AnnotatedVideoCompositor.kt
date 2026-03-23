@@ -21,7 +21,6 @@ import android.opengl.EGLSurface
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.opengl.GLUtils
-import android.opengl.Matrix
 import android.util.Log
 import android.view.Surface
 import com.inversioncoach.app.model.AnnotatedExportFailureReason
@@ -510,7 +509,8 @@ class AnnotatedVideoCompositor(
         private val quad: FloatBuffer = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
             put(floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)); position(0)
         }
-        private val tex: FloatBuffer = createTextureCoordinateBuffer(transform.renderRotationDegrees)
+        private val videoTex: FloatBuffer = createTextureCoordinateBuffer(transform.renderRotationDegrees)
+        private val overlayTex: FloatBuffer = createOverlayTextureCoordinateBuffer()
 
         val decoderSurface: Surface
         private val decoderTextureId: Int
@@ -520,7 +520,6 @@ class AnnotatedVideoCompositor(
         private val overlayTextureId: Int
         private val overlayBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         private val overlayCanvas = Canvas(overlayBitmap)
-        private val identityTexMatrix = FloatArray(16).apply { Matrix.setIdentityM(this, 0) }
         private val texMatrix = FloatArray(16)
         private var loggedTextureTransformDiagnostics = false
 
@@ -608,7 +607,7 @@ class AnnotatedVideoCompositor(
             GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D, 0, 0, 0, overlayBitmap)
             GLES20.glEnable(GLES20.GL_BLEND)
             GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
-            drawQuad(overlayProgram, GLES20.GL_TEXTURE_2D, overlayTextureId)
+            drawQuad(overlayProgram, GLES20.GL_TEXTURE_2D, overlayTextureId, overlayTex)
             GLES20.glDisable(GLES20.GL_BLEND)
 
             EGLExt.eglPresentationTimeANDROID(eglDisplay, eglSurface, presentationTimeUs * 1000L)
@@ -636,8 +635,8 @@ class AnnotatedVideoCompositor(
         private fun drawVideo() {
             GLES20.glUseProgram(videoProgram)
             val matrixLoc = GLES20.glGetUniformLocation(videoProgram, "uTexMatrix")
-            GLES20.glUniformMatrix4fv(matrixLoc, 1, false, identityTexMatrix, 0)
-            drawQuad(videoProgram, GLES11Ext.GL_TEXTURE_EXTERNAL_OES, decoderTextureId)
+            GLES20.glUniformMatrix4fv(matrixLoc, 1, false, texMatrix, 0)
+            drawQuad(videoProgram, GLES11Ext.GL_TEXTURE_EXTERNAL_OES, decoderTextureId, videoTex)
         }
 
         private fun inferTextureMatrixRotationDegrees(matrix: FloatArray): Int {
@@ -677,6 +676,23 @@ class AnnotatedVideoCompositor(
                 }
         }
 
+
+        private fun createOverlayTextureCoordinateBuffer(): FloatBuffer {
+            val coordinates = floatArrayOf(
+                0f, 1f,
+                1f, 1f,
+                0f, 0f,
+                1f, 0f,
+            )
+            return ByteBuffer.allocateDirect(coordinates.size * 4)
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer()
+                .apply {
+                    put(coordinates)
+                    position(0)
+                }
+        }
+
         private fun drawOverlay(instruction: RenderInstruction) {
             val model = instruction.model ?: return
             OverlayFrameRenderer.drawAndroid(
@@ -691,15 +707,20 @@ class AnnotatedVideoCompositor(
             )
         }
 
-        private fun drawQuad(program: Int, textureTarget: Int, textureId: Int) {
+        private fun drawQuad(
+            program: Int,
+            textureTarget: Int,
+            textureId: Int,
+            textureCoordinates: FloatBuffer,
+        ) {
             val aPos = GLES20.glGetAttribLocation(program, "aPosition")
             val aTex = GLES20.glGetAttribLocation(program, "aTexCoord")
             val uTex = GLES20.glGetUniformLocation(program, "uTexture")
             quad.position(0)
-            tex.position(0)
+            textureCoordinates.position(0)
             GLES20.glVertexAttribPointer(aPos, 2, GLES20.GL_FLOAT, false, 0, quad)
             GLES20.glEnableVertexAttribArray(aPos)
-            GLES20.glVertexAttribPointer(aTex, 2, GLES20.GL_FLOAT, false, 0, tex)
+            GLES20.glVertexAttribPointer(aTex, 2, GLES20.GL_FLOAT, false, 0, textureCoordinates)
             GLES20.glEnableVertexAttribArray(aTex)
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
             GLES20.glBindTexture(textureTarget, textureId)
