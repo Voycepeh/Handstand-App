@@ -166,8 +166,8 @@ class AnnotatedExportNormalizationTest {
                 outputHeight = 1280,
             ),
         )
-        assertEquals(0.25f, rotated.x, 0.0001f)
-        assertEquals(0.25f, rotated.y, 0.0001f)
+        assertEquals(0.75f, rotated.x, 0.0001f)
+        assertEquals(0.75f, rotated.y, 0.0001f)
     }
 
     @Test
@@ -205,7 +205,7 @@ class AnnotatedExportNormalizationTest {
     }
 
     @Test
-    fun normalizedPointMappingMatchesOverlayPointMappingForUprightCompositionSpace() {
+    fun texturePointMappingMatchesOverlayPointMappingForUprightCompositionSpace() {
         val overlayPoint = JointPoint(
             name = "left_hip",
             x = 0.3f,
@@ -221,14 +221,14 @@ class AnnotatedExportNormalizationTest {
         )
 
         val mappedOverlay = mapOverlayPointToExportSpace(overlayPoint, transform)
-        val mappedNormalized = mapNormalizedPointToExportSpace(
+        val mappedTexture = mapTextureCoordinateToExportSpace(
             x = overlayPoint.x,
             y = overlayPoint.y,
             rotationDegrees = transform.renderRotationDegrees,
         )
 
-        assertEquals(mappedNormalized.first, mappedOverlay.x, 0.0001f)
-        assertEquals(mappedNormalized.second, mappedOverlay.y, 0.0001f)
+        assertEquals(mappedTexture.first, mappedOverlay.x, 0.0001f)
+        assertEquals(mappedTexture.second, mappedOverlay.y, 0.0001f)
     }
 
     @Test
