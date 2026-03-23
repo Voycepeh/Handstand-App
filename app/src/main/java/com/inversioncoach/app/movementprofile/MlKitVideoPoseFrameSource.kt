@@ -20,6 +20,7 @@ import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicInteger
 
 private const val TAG = "UploadPoseFrameSource"
+private const val MAX_ANALYSIS_DIMENSION = 960
 
 class MlKitVideoPoseFrameSource(
     private val context: Context,
@@ -48,8 +49,6 @@ class MlKitVideoPoseFrameSource(
             try {
                 retriever.setDataSource(context, videoUri)
                 val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-                val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 720
-                val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 1280
                 if (durationMs <= 0L) {
                     Log.w(TAG, "decode_failed reason=missing_duration uri=$videoUri")
                     observer.onProgress(AnalysisProgressEvent(stage = "decode_failed", detail = "missing_duration"))
@@ -88,7 +87,7 @@ class MlKitVideoPoseFrameSource(
                                 for (packet in frameQueue) {
                                     activeWorkers.incrementAndGet()
                                     try {
-                                        val poseFrame = mapBitmapToPoseFrame(packet.bitmap, detector, packet.index, packet.timestampMs, width, height)
+                                        val poseFrame = mapBitmapToPoseFrame(packet.bitmap, detector, packet.index, packet.timestampMs)
                                         resultQueue.send(packet.index to poseFrame)
                                         observer.onProgress(
                                             AnalysisProgressEvent(
@@ -188,15 +187,20 @@ class MlKitVideoPoseFrameSource(
         bitmap: Bitmap,
         detector: com.google.mlkit.vision.pose.PoseDetector,
         frameIndex: Int,
-        timestampMs: Long,
-        width: Int,
-        height: Int,
+        timestampMs: Long
     ): PoseFrame {
+        val analysisBitmap = downscaleForAnalysis(bitmap)
+        val analysisWidth = analysisBitmap.width.toFloat()
+        val analysisHeight = analysisBitmap.height.toFloat()
         val pose = try {
-            Tasks.await(detector.process(InputImage.fromBitmap(bitmap, 0)))
+            Tasks.await(detector.process(InputImage.fromBitmap(analysisBitmap, 0)))
         } catch (e: Exception) {
             Log.e(TAG, "pose_detection_failed frameIndex=$frameIndex timestampMs=$timestampMs message=${e.message}", e)
             throw e
+        } finally {
+            if (analysisBitmap !== bitmap) {
+                analysisBitmap.recycle()
+            }
         }
         val landmarks = pose.allPoseLandmarks
         if (landmarks.isEmpty()) {
@@ -207,8 +211,8 @@ class MlKitVideoPoseFrameSource(
         val joints = landmarks.map { landmark ->
             JointPoint(
                 name = landmarkName(landmark.landmarkType),
-                x = (landmark.position.x / width.toFloat()).coerceIn(0f, 1f),
-                y = (landmark.position.y / height.toFloat()).coerceIn(0f, 1f),
+                x = (landmark.position.x / analysisWidth).coerceIn(0f, 1f),
+                y = (landmark.position.y / analysisHeight).coerceIn(0f, 1f),
                 z = 0f,
                 visibility = landmark.inFrameLikelihood,
             )
@@ -223,6 +227,18 @@ class MlKitVideoPoseFrameSource(
             droppedFrames = 0,
             rejectionReason = if (landmarks.isEmpty()) "no_person_detected" else "none",
         )
+    }
+
+    private fun downscaleForAnalysis(bitmap: Bitmap): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+        val maxDimension = maxOf(width, height)
+        if (maxDimension <= MAX_ANALYSIS_DIMENSION) return bitmap
+
+        val scale = MAX_ANALYSIS_DIMENSION.toFloat() / maxDimension.toFloat()
+        val targetWidth = (width * scale).toInt().coerceAtLeast(1)
+        val targetHeight = (height * scale).toInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
     }
 
     private fun landmarkName(type: Int): String = when (type) {
