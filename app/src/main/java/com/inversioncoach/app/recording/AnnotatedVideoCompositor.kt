@@ -31,6 +31,7 @@ import com.inversioncoach.app.overlay.OverlayDrawingFrame
 import com.inversioncoach.app.overlay.OverlayFrameRenderer
 import com.inversioncoach.app.overlay.OverlayGeometry
 import com.inversioncoach.app.overlay.OverlayRenderModel
+import com.inversioncoach.app.overlay.OverlayRenderTarget
 import com.inversioncoach.app.pose.PoseScaleMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -602,6 +603,8 @@ class AnnotatedVideoCompositor(
                     bottom = contentRect.bottom,
                 ),
                 scaleMode = PoseScaleMode.FIT,
+                renderTarget = OverlayRenderTarget.ANNOTATED_EXPORT,
+                styleScaleMultiplier = 0.9f,
             )
         }
 
@@ -724,6 +727,7 @@ class AnnotatedVideoCompositor(
                     sourceRotationDegrees = 0,
                     mirrored = instruction.mirrored,
                     scaleMode = instruction.scaleMode,
+                    renderTarget = OverlayRenderTarget.ANNOTATED_EXPORT,
                 ),
             )
         }

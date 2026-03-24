@@ -18,21 +18,26 @@ data class OverlayDrawingFrame(
     val previewContentRect: Rect? = null,
     val scaleMode: PoseScaleMode = PoseScaleMode.FIT,
     val debugProjection: Boolean = false,
+    val renderTarget: OverlayRenderTarget = OverlayRenderTarget.LIVE_PREVIEW,
+    val styleScaleMultiplier: Float = 1f,
 )
+
+enum class OverlayRenderTarget {
+    LIVE_PREVIEW,
+    ANNOTATED_EXPORT,
+}
 
 object OverlayFrameRenderer {
     private const val TAG = "OverlayFrameRenderer"
     private val mapper = PoseCoordinateMapper()
     private val skeletonPaint = Paint().apply {
         color = 0xFF7CF0A9.toInt()
-        strokeWidth = 6f
         isAntiAlias = true
         style = Paint.Style.STROKE
     }
 
     private val idealLinePaint = Paint().apply {
         color = 0x7300FFFF
-        strokeWidth = 2f
         isAntiAlias = true
         style = Paint.Style.STROKE
     }
@@ -49,6 +54,10 @@ object OverlayFrameRenderer {
         model: OverlayRenderModel,
         frame: OverlayDrawingFrame,
     ) {
+        val style = styleForFrame(width = width, height = height, frame = frame)
+        skeletonPaint.strokeWidth = style.skeletonStrokeWidth
+        idealLinePaint.strokeWidth = style.idealLineStrokeWidth
+
         val projection = PoseProjectionInput(
             sourceWidth = frame.sourceWidth.coerceAtLeast(1),
             sourceHeight = frame.sourceHeight.coerceAtLeast(1),
@@ -86,14 +95,14 @@ object OverlayFrameRenderer {
             }
 
             model.joints.forEach { joint ->
-                val style = jointStyle(joint.name, androidx.compose.ui.graphics.Color(0xFF7CF0A9), 6f)
-                val alphaColor = style.color.copy(alpha = style.color.alpha * joint.visibility.coerceIn(0.2f, 1f))
+                val jointStyle = jointStyle(joint.name, androidx.compose.ui.graphics.Color(0xFF7CF0A9), style.jointRadius)
+                val alphaColor = jointStyle.color.copy(alpha = jointStyle.color.alpha * joint.visibility.coerceIn(0.2f, 1f))
                 jointFillPaint.color = alphaColor.toArgbCompat()
                 val mapped = mapper.map(joint.x, joint.y, projection)
                 canvas.drawCircle(
                     mapped.x,
                     mapped.y,
-                    style.radius,
+                    jointStyle.radius,
                     jointFillPaint,
                 )
             }
@@ -105,6 +114,30 @@ object OverlayFrameRenderer {
             val mappedEnd = mapper.map(lineEnd.x, lineEnd.y, projection)
             canvas.drawLine(mappedStart.x, mappedStart.y, mappedEnd.x, mappedEnd.y, idealLinePaint)
         }
+    }
+
+    internal data class OverlayStrokeStyle(
+        val skeletonStrokeWidth: Float,
+        val idealLineStrokeWidth: Float,
+        val jointRadius: Float,
+    )
+
+    internal fun styleForFrame(
+        width: Int,
+        height: Int,
+        frame: OverlayDrawingFrame,
+    ): OverlayStrokeStyle {
+        val minDimension = minOf(width, height).toFloat().coerceAtLeast(1f)
+        val normalizedScale = (minDimension / 720f).coerceIn(0.75f, 1.6f)
+        val targetScale = when (frame.renderTarget) {
+            OverlayRenderTarget.LIVE_PREVIEW -> normalizedScale
+            OverlayRenderTarget.ANNOTATED_EXPORT -> (normalizedScale * 0.72f).coerceAtMost(1f)
+        } * frame.styleScaleMultiplier.coerceIn(0.5f, 2f)
+        return OverlayStrokeStyle(
+            skeletonStrokeWidth = (4.5f * targetScale).coerceAtLeast(2f),
+            idealLineStrokeWidth = (1.6f * targetScale).coerceAtLeast(1f),
+            jointRadius = (4.8f * targetScale).coerceAtLeast(2.4f),
+        )
     }
 
     private fun projectedJointBounds(

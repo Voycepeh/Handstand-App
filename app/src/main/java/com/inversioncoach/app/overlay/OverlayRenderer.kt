@@ -47,11 +47,14 @@ fun OverlayRenderer(
                 drawIdealLine = showIdealLine,
                 sourceWidth = frame?.analysisWidth ?: 0,
                 sourceHeight = frame?.analysisHeight ?: 0,
-                sourceRotationDegrees = frame?.analysisRotationDegrees ?: 0,
+                // Live analyzer coordinates are already normalized to preview-upright space.
+                // Keep live projection in preview space and avoid an extra rotation.
+                sourceRotationDegrees = 0,
                 mirrored = frame?.mirrored ?: false,
                 previewContentRect = previewContentRect,
                 scaleMode = scaleMode,
                 debugProjection = showDebugOverlay,
+                renderTarget = OverlayRenderTarget.LIVE_PREVIEW,
             ),
         )
 
