@@ -8,10 +8,12 @@ import android.util.Log
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.pose.PoseDetection
-import com.google.mlkit.vision.pose.PoseLandmark
 import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
-import com.inversioncoach.app.model.JointPoint
 import com.inversioncoach.app.model.PoseFrame
+import com.inversioncoach.app.pose.model.JointLandmark
+import com.inversioncoach.app.pose.model.JointType
+import com.inversioncoach.app.pose.model.MlKitPoseMapper
+import com.inversioncoach.app.pose.model.PoseFrame as InternalPoseFrame
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -46,6 +48,8 @@ class MlKitVideoPoseFrameSource(
     @Volatile
     var lastDecodeTelemetry: DecodeTelemetry = DecodeTelemetry(0, boundedWorkerCount, 0, 0.0, 0.0, 0L, 0.0, 0L)
         private set
+
+    private val poseMapper = MlKitPoseMapper()
 
     override fun decode(videoUri: Uri): Sequence<PoseFrame> = decode(videoUri, observer = AnalysisProgressObserver { })
 
@@ -256,8 +260,8 @@ class MlKitVideoPoseFrameSource(
             Log.i(TAG, "pose_detection_success timestampMs=$timestampMs landmarks=${landmarks.size}")
         }
         val joints = landmarks.map { landmark ->
-            JointPoint(
-                name = landmarkName(landmark.landmarkType),
+            JointLandmark(
+                jointType = poseMapper.landmarkType(landmark.landmarkType),
                 x = (landmark.position.x / analysisWidth).coerceIn(0f, 1f),
                 y = (landmark.position.y / analysisHeight).coerceIn(0f, 1f),
                 z = 0f,
@@ -265,7 +269,7 @@ class MlKitVideoPoseFrameSource(
             )
         }
         val confidence = if (landmarks.isEmpty()) 0f else landmarks.map { it.inFrameLikelihood }.average().toFloat()
-        return PoseFrame(
+        val internalFrame = InternalPoseFrame(
             timestampMs = timestampMs,
             joints = joints,
             confidence = confidence,
@@ -274,6 +278,7 @@ class MlKitVideoPoseFrameSource(
             droppedFrames = 0,
             rejectionReason = if (landmarks.isEmpty()) "no_person_detected" else "none",
         )
+        return poseMapper.toLegacy(internalFrame)
     }
 
     private fun computeDecodeTargetDimensions(sourceWidth: Int, sourceHeight: Int): Pair<Int, Int> {
@@ -302,42 +307,7 @@ class MlKitVideoPoseFrameSource(
         return Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
     }
 
-    private fun landmarkName(type: Int): String = when (type) {
-        PoseLandmark.NOSE -> "nose"
-        PoseLandmark.LEFT_EYE_INNER -> "left_eye_inner"
-        PoseLandmark.LEFT_EYE -> "left_eye"
-        PoseLandmark.LEFT_EYE_OUTER -> "left_eye_outer"
-        PoseLandmark.RIGHT_EYE_INNER -> "right_eye_inner"
-        PoseLandmark.RIGHT_EYE -> "right_eye"
-        PoseLandmark.RIGHT_EYE_OUTER -> "right_eye_outer"
-        PoseLandmark.LEFT_EAR -> "left_ear"
-        PoseLandmark.RIGHT_EAR -> "right_ear"
-        PoseLandmark.LEFT_MOUTH -> "mouth_left"
-        PoseLandmark.RIGHT_MOUTH -> "mouth_right"
-        PoseLandmark.LEFT_SHOULDER -> "left_shoulder"
-        PoseLandmark.RIGHT_SHOULDER -> "right_shoulder"
-        PoseLandmark.LEFT_ELBOW -> "left_elbow"
-        PoseLandmark.RIGHT_ELBOW -> "right_elbow"
-        PoseLandmark.LEFT_WRIST -> "left_wrist"
-        PoseLandmark.RIGHT_WRIST -> "right_wrist"
-        PoseLandmark.LEFT_PINKY -> "left_pinky"
-        PoseLandmark.RIGHT_PINKY -> "right_pinky"
-        PoseLandmark.LEFT_INDEX -> "left_index"
-        PoseLandmark.RIGHT_INDEX -> "right_index"
-        PoseLandmark.LEFT_THUMB -> "left_thumb"
-        PoseLandmark.RIGHT_THUMB -> "right_thumb"
-        PoseLandmark.LEFT_HIP -> "left_hip"
-        PoseLandmark.RIGHT_HIP -> "right_hip"
-        PoseLandmark.LEFT_KNEE -> "left_knee"
-        PoseLandmark.RIGHT_KNEE -> "right_knee"
-        PoseLandmark.LEFT_ANKLE -> "left_ankle"
-        PoseLandmark.RIGHT_ANKLE -> "right_ankle"
-        PoseLandmark.LEFT_HEEL -> "left_heel"
-        PoseLandmark.RIGHT_HEEL -> "right_heel"
-        PoseLandmark.LEFT_FOOT_INDEX -> "left_foot_index"
-        PoseLandmark.RIGHT_FOOT_INDEX -> "right_foot_index"
-        else -> "joint_$type"
-    }
+
 
     companion object {
         private fun defaultWorkerCount(): Int {

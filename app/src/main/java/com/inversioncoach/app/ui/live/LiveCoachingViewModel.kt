@@ -28,7 +28,7 @@ import com.inversioncoach.app.model.RetainedAssetType
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.model.UserSettings
-import com.inversioncoach.app.motion.DrillCatalog
+import com.inversioncoach.app.drills.core.DrillRegistry
 import com.inversioncoach.app.motion.MotionAnalysisPipeline
 import com.inversioncoach.app.motion.QualityThresholds
 import com.inversioncoach.app.motion.UserCalibrationSettings
@@ -100,7 +100,8 @@ class LiveCoachingViewModel(
     }
 
     private val sessionMode = drillType.sessionMode()
-    private val drillDefinition = DrillCatalog.byType(drillType)
+    private val drillRegistry = DrillRegistry()
+    private val drillDefinition = drillRegistry.definitionFor(drillType)
 
     private val _uiState = MutableStateFlow(
         LiveSessionUiState(
@@ -191,7 +192,7 @@ class LiveCoachingViewModel(
         get() = sessionId
 
     init {
-        val movementPattern = runCatching { drillDefinition.movementPattern.name }.getOrDefault("GENERIC")
+        val movementPattern = runCatching { drillDefinition.movementType.name }.getOrDefault("GENERIC")
         SessionDiagnostics.record(
             sessionId = sessionId,
             stage = SessionDiagnostics.Stage.SESSION_START,

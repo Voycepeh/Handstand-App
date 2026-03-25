@@ -1,12 +1,15 @@
 package com.inversioncoach.app.biomechanics
 
+import com.inversioncoach.app.drills.core.DrillRegistry
 import com.inversioncoach.app.model.AlignmentMetric
 import com.inversioncoach.app.model.AngleDebugMetric
 import com.inversioncoach.app.model.DrillScore
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.PoseFrame
 
-class AlignmentMetricsEngine {
+class AlignmentMetricsEngine(
+    private val drillRegistry: DrillRegistry = DrillRegistry(),
+) {
 
     data class AnalysisResult(
         val metrics: List<AlignmentMetric>,
@@ -15,10 +18,8 @@ class AlignmentMetricsEngine {
         val fault: String?,
     )
 
-    private val analyzers = mutableMapOf<DrillType, DrillAnalyzer>()
-
     fun analyze(config: DrillModeConfig, frame: PoseFrame): AnalysisResult {
-        val analyzer = analyzers.getOrPut(config.type) { ConfiguredDrillAnalyzer(config) }
+        val analyzer = drillRegistry.analyzerFor(config)
         val result = analyzer.analyzeFrame(frame) ?: return AnalysisResult(
             metrics = emptyList(),
             score = DrillScore(

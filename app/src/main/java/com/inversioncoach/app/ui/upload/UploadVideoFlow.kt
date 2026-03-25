@@ -38,6 +38,7 @@ import androidx.lifecycle.viewModelScope
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.AnnotatedExportFailureReason
+import com.inversioncoach.app.drills.core.DrillRegistry
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.RawPersistStatus
@@ -166,6 +167,7 @@ class DefaultUploadVideoAnalysisRunner(
     },
 ) : UploadVideoAnalysisRunner {
     private val preset = ExportPreset.BALANCED
+    private val drillRegistry = DrillRegistry()
 
     private data class UploadSourceMetadata(
         val durationMs: Long,
@@ -182,7 +184,7 @@ class DefaultUploadVideoAnalysisRunner(
         onLog: (String) -> Unit,
     ): UploadFlowResult = withContext(Dispatchers.IO) {
         val startedAt = System.currentTimeMillis()
-        val drillType = DrillType.FREESTYLE
+        val drillType = drillRegistry.definitionFor(DrillType.FREESTYLE).drillType
         val sessionId = repository.saveSession(
             SessionRecord(
                 title = "Uploaded Video Analysis",

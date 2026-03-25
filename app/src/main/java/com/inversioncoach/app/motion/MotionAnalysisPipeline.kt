@@ -2,13 +2,18 @@ package com.inversioncoach.app.motion
 
 import com.inversioncoach.app.model.AlignmentStrictness
 import com.inversioncoach.app.model.DrillType
+import com.inversioncoach.app.motion.features.AngleFeatureExtractor
+import com.inversioncoach.app.motion.features.DefaultAlignmentFeatureExtractor
+import com.inversioncoach.app.motion.features.DefaultAngleFeatureExtractor
+import com.inversioncoach.app.motion.features.DefaultStabilityFeatureExtractor
+import com.inversioncoach.app.motion.features.StabilityFeatureExtractor
 import com.inversioncoach.app.model.PoseFrame as LegacyPoseFrame
 
 class MotionAnalysisPipeline(
     drillType: DrillType = DrillType.FREE_HANDSTAND,
 ) {
     private val smoother = TemporalPoseSmoother()
-    private val angleEngine = AngleEngine()
+    private val angleExtractor: AngleFeatureExtractor = DefaultAngleFeatureExtractor()
     private val drillDefinition = DrillCatalog.byType(drillType)
     private val profile = DrillQualityProfiles.byType(drillType)
     private val phaseDetector = MovementPhaseDetector(
@@ -20,7 +25,7 @@ class MotionAnalysisPipeline(
         ),
         trackedAngle = trackedAngleFor(drillDefinition.movementPattern),
     )
-    private var alignmentEngine = AlignmentScoringEngine(profile, UserCalibrationSettings(AlignmentStrictness.BEGINNER))
+    private var alignmentExtractor = DefaultAlignmentFeatureExtractor(profile, UserCalibrationSettings(AlignmentStrictness.BEGINNER))
     private var holdQualityTracker = HoldQualityTracker(UserCalibrationSettings(AlignmentStrictness.BEGINNER).resolvedThresholds())
     private var repQualityEvaluator = RepQualityEvaluator(profile, UserCalibrationSettings(AlignmentStrictness.BEGINNER).resolvedThresholds())
     private val holdTrackerCompat = HoldAlignmentTracker()
@@ -29,7 +34,7 @@ class MotionAnalysisPipeline(
         allowedFaultCodes = drillDefinition.commonFaults,
     )
     private val feedbackEngine = FeedbackEngine()
-    private val stabilityEngine = StabilityAnalysisEngine()
+    private val stabilityExtractor: StabilityFeatureExtractor = DefaultStabilityFeatureExtractor()
     private var configuredStrictness: AlignmentStrictness = AlignmentStrictness.BEGINNER
 
     private companion object {
@@ -68,10 +73,10 @@ class MotionAnalysisPipeline(
         )
 
         val smoothed = smoother.smooth(motionFrame)
-        val angles = angleEngine.compute(smoothed)
+        val angles = angleExtractor.compute(smoothed)
         val movementProbe = MovementState(MovementPhase.HOLD, 0f, 0f, frame.timestampMs, 0)
         val preliminaryFaults = faultEngine.detect(angles, movementProbe)
-        val alignment = alignmentEngine.score(angles, preliminaryFaults)
+        val alignment = alignmentExtractor.score(angles, preliminaryFaults)
         val thresholds = effectiveCalibration.resolvedThresholds()
         val minimalAlignmentThreshold = (thresholds.minimumGoodFormScore - MINIMAL_ALIGNMENT_DELTA).coerceAtLeast(50)
         val isAligned = alignment.smoothedScore >= thresholds.minimumGoodFormScore
@@ -83,7 +88,7 @@ class MotionAnalysisPipeline(
         }
         val faults = faultEngine.detect(angles, movement)
         val cue = feedbackEngine.selectCue(faults, frame.timestampMs)
-        val stability = stabilityEngine.analyze(smoothed)
+        val stability = stabilityExtractor.analyze(smoothed)
 
         val repTracking = if (drillDefinition.repMode == RepMode.REP_BASED) phaseDetector.snapshot() else null
         val holdTracking = if (drillDefinition.repMode == RepMode.HOLD_BASED) holdTrackerCompat.update(frame.timestampMs, isMinimallyAligned) else null
@@ -130,7 +135,7 @@ class MotionAnalysisPipeline(
     private fun configureStrictnessIfNeeded(calibration: UserCalibrationSettings) {
         if (calibration.strictness == configuredStrictness && calibration.strictness != AlignmentStrictness.CUSTOM) return
         configuredStrictness = calibration.strictness
-        alignmentEngine = AlignmentScoringEngine(profile, calibration)
+        alignmentExtractor.reconfigure(calibration)
         holdQualityTracker = HoldQualityTracker(calibration.resolvedThresholds())
         repQualityEvaluator = RepQualityEvaluator(profile, calibration.resolvedThresholds())
     }
