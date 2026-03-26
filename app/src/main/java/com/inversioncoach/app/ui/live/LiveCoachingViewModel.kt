@@ -50,6 +50,8 @@ import com.inversioncoach.app.recording.VideoCompressionPipeline
 import com.inversioncoach.app.storage.SessionBlobStorage
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.summary.SummaryGenerator
+import com.inversioncoach.app.calibration.CalibrationProfileProvider
+import com.inversioncoach.app.calibration.DrillMovementProfile
 import com.inversioncoach.app.calibration.UserBodyProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -82,6 +84,7 @@ class LiveCoachingViewModel(
     private val metricsEngine: AlignmentMetricsEngine,
     private val cueEngine: CueEngine,
     private val repository: SessionRepository,
+    private val calibrationProfileProvider: CalibrationProfileProvider,
     private val options: LiveSessionOptions,
     private val summaryGenerator: SummaryGenerator = SummaryGenerator(com.inversioncoach.app.summary.RecommendationEngine()),
     private val smoother: PoseSmoothingEngine = PoseSmoothingEngine(),
@@ -173,6 +176,7 @@ class LiveCoachingViewModel(
     private var frozenOverlayTimeline: com.inversioncoach.app.recording.OverlayTimeline? = null
     private var activeSettings: UserSettings = UserSettings()
     private var sessionHadAnyVideo = false
+    private var activeMovementProfile: DrillMovementProfile? = null
     private var startupCancelled = false
     private val drillConfig = DrillConfigs.byTypeOrNull(drillType)
     private val readinessEngine = drillConfig?.let { SharedReadinessEngine(drillType, it, options.drillCameraSide) }
@@ -829,7 +833,7 @@ class LiveCoachingViewModel(
                         limitingFactor = latestScore.limitingFactor,
                         issues = topIssues,
                         wins = wins,
-                        metricsJson = "",
+                        metricsJson = calibrationMetadataJson(),
                         annotatedVideoUri = finalVideos.annotatedVideoUri,
                         rawVideoUri = finalVideos.rawVideoUri,
                         rawMasterUri = rawMasterUri,
@@ -871,7 +875,7 @@ class LiveCoachingViewModel(
                         limitingFactor = latestScore.limitingFactor,
                         issues = topIssues,
                         wins = wins,
-                        metricsJson = "",
+                        metricsJson = calibrationMetadataJson(),
                         annotatedVideoUri = finalVideos.annotatedVideoUri,
                         rawVideoUri = finalVideos.rawVideoUri,
                         rawMasterUri = rawMasterUri,
@@ -896,6 +900,8 @@ class LiveCoachingViewModel(
                         retainedAssetType = finalVideos.retainedAssetType,
                         overlayFrameCount = overlayFrames.size,
                         overlayTimelineUri = overlayTimelineUri,
+                        calibrationProfileVersion = activeMovementProfile?.profileVersion,
+                        calibrationUpdatedAtMs = activeMovementProfile?.updatedAtMs,
                         notesUri = null,
                         bestFrameTimestampMs = bestFrame,
                         worstFrameTimestampMs = worstFrame,
@@ -976,6 +982,7 @@ class LiveCoachingViewModel(
         viewModelScope.launch {
             smoother.reset()
             correctionEngine.reset()
+            activeMovementProfile = calibrationProfileProvider.resolve(drillType)
             val now = System.currentTimeMillis()
             sessionStartedAtMs = now
             val newSessionId = repository.saveSession(
@@ -990,7 +997,7 @@ class LiveCoachingViewModel(
                     limitingFactor = "pending",
                     issues = "",
                     wins = "",
-                    metricsJson = "",
+                    metricsJson = calibrationMetadataJson(),
                     annotatedVideoUri = null,
                     rawVideoUri = null,
                     rawMasterUri = null,
@@ -1010,6 +1017,8 @@ class LiveCoachingViewModel(
                     retainedAssetType = RetainedAssetType.NONE,
                     overlayFrameCount = 0,
                     overlayTimelineUri = null,
+                    calibrationProfileVersion = activeMovementProfile?.profileVersion,
+                    calibrationUpdatedAtMs = activeMovementProfile?.updatedAtMs,
                     notesUri = null,
                     bestFrameTimestampMs = null,
                     worstFrameTimestampMs = null,
@@ -1051,6 +1060,11 @@ class LiveCoachingViewModel(
         analysisRotationDegrees = analysisRotationDegrees,
         mirrored = mirrored,
     )
+
+    private fun calibrationMetadataJson(): String {
+        val profile = activeMovementProfile ?: return ""
+        return "calibrationProfileVersion:${profile.profileVersion};calibrationUpdatedAtMs:${profile.updatedAtMs}"
+    }
 
     private fun setRawPersistState(status: RawPersistStatus, failureReason: String?) {
         rawPersistStatus = status

@@ -92,6 +92,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             metricsEngine = ServiceLocator.metricsEngine(),
             cueEngine = ServiceLocator.cueEngine(),
             repository = repository,
+            calibrationProfileProvider = ServiceLocator.calibrationProfileProvider(context),
             options = options,
             annotatedExportPipeline = AnnotatedExportPipeline(
                 repository = repository,

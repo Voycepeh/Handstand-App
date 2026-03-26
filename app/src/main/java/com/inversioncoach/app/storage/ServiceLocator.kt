@@ -2,33 +2,21 @@ package com.inversioncoach.app.storage
 
 import android.content.Context
 import androidx.room.Room
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import com.inversioncoach.app.biomechanics.AlignmentMetricsEngine
+import com.inversioncoach.app.calibration.CalibrationProfileProvider
+import com.inversioncoach.app.calibration.DefaultCalibrationProfileProvider
 import com.inversioncoach.app.coaching.CueEngine
+import com.inversioncoach.app.calibration.storage.DrillMovementProfileJson
+import com.inversioncoach.app.calibration.storage.RoomDrillMovementProfileRepository
+import com.inversioncoach.app.storage.db.DatabaseMigrations
 import com.inversioncoach.app.storage.db.InversionCoachDatabase
 import com.inversioncoach.app.storage.repository.SessionRepository
 
 object ServiceLocator {
     @Volatile
     private var db: InversionCoachDatabase? = null
-
-    private val MIGRATION_11_12 = object : Migration(11, 12) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL(
-                "ALTER TABLE user_settings ADD COLUMN startupCountdownSeconds INTEGER NOT NULL DEFAULT 10",
-            )
-        }
-    }
-    private val MIGRATION_12_13 = object : Migration(12, 13) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadPipelineStageLabel TEXT")
-            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadAnalysisProcessedFrames INTEGER NOT NULL DEFAULT 0")
-            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadAnalysisTotalFrames INTEGER NOT NULL DEFAULT 0")
-            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadAnalysisTimestampMs INTEGER")
-            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadProgressDetail TEXT")
-        }
-    }
+    @Volatile
+    private var calibrationProvider: CalibrationProfileProvider? = null
 
     private fun db(context: Context): InversionCoachDatabase {
         return db ?: synchronized(this) {
@@ -36,7 +24,7 @@ object ServiceLocator {
                 context.applicationContext,
                 InversionCoachDatabase::class.java,
                 "inversion_coach.db",
-            ).addMigrations(MIGRATION_11_12, MIGRATION_12_13)
+            ).addMigrations(*DatabaseMigrations.ALL)
                 .fallbackToDestructiveMigration()
                 .build()
                 .also { db = it }
@@ -56,4 +44,15 @@ object ServiceLocator {
     fun metricsEngine(): AlignmentMetricsEngine = AlignmentMetricsEngine()
 
     fun cueEngine(): CueEngine = CueEngine()
+
+    fun calibrationProfileProvider(context: Context): CalibrationProfileProvider {
+        return calibrationProvider ?: synchronized(this) {
+            calibrationProvider ?: DefaultCalibrationProfileProvider(
+                RoomDrillMovementProfileRepository(
+                    dao = db(context).calibrationDao(),
+                    json = DrillMovementProfileJson(),
+                ),
+            ).also { calibrationProvider = it }
+        }
+    }
 }

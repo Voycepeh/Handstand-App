@@ -290,6 +290,8 @@ data class SessionRecord(
     val cleanupCompletedAtMs: Long? = null,
     val overlayFrameCount: Int = 0,
     val overlayTimelineUri: String? = null,
+    val calibrationProfileVersion: Int? = null,
+    val calibrationUpdatedAtMs: Long? = null,
     val notesUri: String?,
     val bestFrameTimestampMs: Long?,
     val worstFrameTimestampMs: Long?,
