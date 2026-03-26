@@ -4,6 +4,7 @@ import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.overlay.DrillCameraSide
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OverlayTimelineResolverTest {
@@ -55,7 +56,22 @@ class OverlayTimelineResolverTest {
         assertEquals(1.85f, decodedAt185!!.smoothedLandmarks.first().x, 0.03f)
     }
 
-    private fun frame(ts: Long, x: Float) = AnnotatedOverlayFrame(
+    @Test
+    fun interpolationCarriesForwardUnreliableJointNames() {
+        val resolver = OverlayTimelineResolver(
+            listOf(
+                frame(0L, x = 0.0f, unreliableJointNames = setOf("left_wrist")),
+                frame(100L, x = 1.0f, unreliableJointNames = setOf("left_elbow")),
+            ),
+        )
+
+        val mid = resolver.overlayAt(50L)
+        assertNotNull(mid)
+        assertTrue(mid!!.unreliableJointNames.contains("left_wrist"))
+        assertTrue(mid.unreliableJointNames.contains("left_elbow"))
+    }
+
+    private fun frame(ts: Long, x: Float, unreliableJointNames: Set<String> = emptySet()) = AnnotatedOverlayFrame(
         timestampMs = ts,
         landmarks = listOf(joint(x)),
         smoothedLandmarks = listOf(joint(x)),
@@ -66,6 +82,7 @@ class OverlayTimelineResolverTest {
         showSkeleton = true,
         showIdealLine = true,
         mirrorMode = false,
+        unreliableJointNames = unreliableJointNames,
     )
 
     private fun joint(x: Float) = com.inversioncoach.app.model.JointPoint(

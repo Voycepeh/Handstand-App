@@ -67,4 +67,19 @@ class PoseCoordinateMapperTest {
         assertTrue(diagnostics.contentRect.width >= 1920f)
         assertTrue(diagnostics.contentRect.height >= 1080f)
     }
+
+    @Test
+    fun mapPreservesOutOfBoundsCoordinatesForRendererSafetyGates() {
+        val input = PoseProjectionInput(
+            sourceWidth = 720,
+            sourceHeight = 1280,
+            previewWidth = 1080f,
+            previewHeight = 1920f,
+        )
+
+        val mapped = mapper.map(1.1f, 0.2f, input)
+
+        assertTrue(mapped.x > 1080f)
+        assertEquals(384f, mapped.y, 0.5f)
+    }
 }

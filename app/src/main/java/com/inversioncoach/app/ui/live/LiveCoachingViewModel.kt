@@ -391,6 +391,7 @@ class LiveCoachingViewModel(
                 showSkeleton = options.showSkeletonOverlay,
                 freestyleViewMode = freestyleViewMode,
                 scaleMode = PoseScaleMode.FILL,
+                unreliableJointNames = corrected.unreliableJointNames,
             )
             overlayFrames += overlayFrame
             if (overlayTimelineRecorder == null && sessionStartedAtMs > 0L) {
@@ -448,6 +449,7 @@ class LiveCoachingViewModel(
             debugInferenceTimeMs = frameForSession.inferenceTimeMs,
             debugFrameDrops = frameForSession.droppedFrames,
             debugRejectionReason = "$rejectionReason|$readinessSummary",
+            unreliableJointNames = corrected.unreliableJointNames,
             freestyleViewMode = freestyleViewMode,
         )
         SessionDiagnostics.log("readiness drill=$drillType $readinessSummary")

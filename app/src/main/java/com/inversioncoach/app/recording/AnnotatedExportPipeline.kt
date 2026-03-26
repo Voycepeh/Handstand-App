@@ -41,6 +41,7 @@ data class AnnotatedOverlayFrame(
     val sourceHeight: Int = 0,
     val sourceRotationDegrees: Int = 0,
     val scaleMode: PoseScaleMode = PoseScaleMode.FIT,
+    val unreliableJointNames: Set<String> = emptySet(),
 )
 
 class OverlayStabilizer {
@@ -55,6 +56,7 @@ class OverlayStabilizer {
         showSkeleton: Boolean,
         freestyleViewMode: FreestyleViewMode = FreestyleViewMode.UNKNOWN,
         scaleMode: PoseScaleMode = PoseScaleMode.FIT,
+        unreliableJointNames: Set<String> = emptySet(),
     ): AnnotatedOverlayFrame {
         val visibilityGood = frame.joints.count { it.visibility >= MIN_VISIBILITY } >= MIN_VISIBLE_JOINTS
         val confidenceGood = frame.confidence >= MIN_CONFIDENCE
@@ -84,6 +86,7 @@ class OverlayStabilizer {
             sourceHeight = frame.analysisHeight,
             sourceRotationDegrees = frame.analysisRotationDegrees,
             scaleMode = scaleMode,
+            unreliableJointNames = unreliableJointNames,
         )
     }
 

@@ -400,6 +400,7 @@ data class LiveSessionUiState(
     val debugInferenceTimeMs: Long = 0L,
     val debugFrameDrops: Int = 0,
     val debugRejectionReason: String = "none",
+    val unreliableJointNames: Set<String> = emptySet(),
     val drillCameraSide: DrillCameraSide? = null,
     val freestyleViewMode: FreestyleViewMode = FreestyleViewMode.UNKNOWN,
 )
