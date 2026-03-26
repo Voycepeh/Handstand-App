@@ -11,10 +11,17 @@ data class AnnotatedExportTelemetry(
     var decodedFrameCount: Int = 0,
     var renderedFrameCount: Int = 0,
     var encodedFrameCount: Int = 0,
+    var muxedFrameCount: Int = 0,
     var droppedFrameCount: Int = 0,
     var overlayFramesAvailable: Int = 0,
     var overlayFramesConsumed: Int = 0,
+    var usableOverlayFrameCount: Int = 0,
+    var rawOverlayFrameCount: Int = 0,
     var outputBytesWritten: Long = 0L,
+    var dynamicTimeoutMs: Long = 0L,
+    var stallWindowMs: Long = 0L,
+    var lastProgressAtMs: Long? = null,
+    var timeSinceLastProgressMs: Long = 0L,
     var muxFinalizeCompleted: Boolean = false,
     var exportCompletedAtMs: Long? = null,
     var failureReason: String? = null,
@@ -32,8 +39,9 @@ data class AnnotatedExportTelemetry(
     fun structuredLogLine(event: String): String =
         "event=$event exportStarted=$exportStartedAtMs decoderInitialized=$decoderInitializedAtMs compositorInitialized=$compositorInitializedAtMs firstFrameDecodedAt=$firstFrameDecodedAtMs " +
             "firstFrameRenderedAt=$firstFrameRenderedAtMs firstFrameEncodedAt=$firstFrameEncodedAtMs firstFrameSubmittedToEncoderAt=$firstFrameSubmittedToEncoderAtMs " +
-            "decodedFrameCount=$decodedFrameCount renderedFrameCount=$renderedFrameCount encodedFrameCount=$encodedFrameCount droppedFrameCount=$droppedFrameCount " +
-            "overlayFramesAvailable=$overlayFramesAvailable overlayFramesConsumed=$overlayFramesConsumed outputBytesWritten=$outputBytesWritten " +
+            "decodedFrameCount=$decodedFrameCount renderedFrameCount=$renderedFrameCount encodedFrameCount=$encodedFrameCount muxedFrameCount=$muxedFrameCount droppedFrameCount=$droppedFrameCount " +
+            "overlayFramesAvailable=$overlayFramesAvailable overlayFramesConsumed=$overlayFramesConsumed usableOverlayFrameCount=$usableOverlayFrameCount rawOverlayFrameCount=$rawOverlayFrameCount outputBytesWritten=$outputBytesWritten " +
+            "dynamicTimeoutMs=$dynamicTimeoutMs stallWindowMs=$stallWindowMs lastProgressAtMs=${lastProgressAtMs ?: -1L} timeSinceLastProgressMs=$timeSinceLastProgressMs " +
             "muxFinalizeCompleted=$muxFinalizeCompleted exportCompleted=$exportCompletedAtMs failureReason=${failureReason.orEmpty()} " +
             "elapsedMs.decode=$decodeElapsedMs elapsedMs.overlayResolve=$overlayResolveElapsedMs elapsedMs.render=$renderElapsedMs elapsedMs.compositorWait=$frameAvailableWaitMs elapsedMs.compositorRender=$compositorRenderMs elapsedMs.mux=$muxElapsedMs elapsedMs.verify=$verifyElapsedMs elapsedMs.total=$totalElapsedMs"
 }
