@@ -56,7 +56,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -1296,7 +1295,20 @@ class LiveCoachingViewModel(
                 persistAnnotatedExportFailed(activeSessionId, preflight.fatalReason)
                 return
             }
-            val exportSnapshot = preflight.snapshot
+            var exportSnapshot = preflight.snapshot
+            val frozenExportSnapshot = annotatedExportPipeline.freezeSnapshotForExport(
+                overlayTimeline = exportSnapshot.overlayTimeline,
+                rawDurationMsHint = exportSnapshot.rawDurationMs,
+            )
+            if (frozenExportSnapshot.usableOverlayFrameCount != exportSnapshot.overlayFrameCount) {
+                exportSnapshot = exportSnapshot.copy(
+                    overlayTimeline = frozenExportSnapshot.overlayTimeline,
+                    overlayFrameCount = frozenExportSnapshot.usableOverlayFrameCount,
+                )
+                repository.updateMediaPipelineState(activeSessionId) { session ->
+                    session.copy(overlayFrameCount = exportSnapshot.overlayFrameCount)
+                }
+            }
             if (exportSnapshot.overlayTimeline.frames.isEmpty()) {
                 val reason = if (snapshot.overlayFrameCount > 0) {
                     AnnotatedExportFailureReason.EXPORT_INPUT_CORRUPTED_AFTER_FREEZE.name
@@ -1361,26 +1373,25 @@ class LiveCoachingViewModel(
 
             val exportStartMs = System.currentTimeMillis()
             try {
-                val exportResult = withTimeout(ANNOTATED_EXPORT_TIMEOUT_MS) {
-                    annotatedExportPipeline.export(
-                        sessionId = activeSessionId,
-                        rawVideoUri = exportSnapshot.rawUri,
-                        drillType = drillType,
-                        drillCameraSide = options.drillCameraSide,
-                        overlayTimeline = exportSnapshot.overlayTimeline,
-                        onRenderProgress = { rendered, total ->
-                            val pct = 30 + (((rendered.toFloat() / total.coerceAtLeast(1).toFloat()) * 55f).toInt())
-                            val elapsed = (System.currentTimeMillis() - exportStartMs).coerceAtLeast(1L)
-                            val remainingFrames = (total - rendered).coerceAtLeast(0)
-                            val frameRate = rendered.toDouble() / (elapsed / 1000.0)
-                            val etaMs = if (frameRate > 0.01) ((remainingFrames / frameRate) * 1000.0).toLong() else null
-                            AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.RENDERING, pct, etaMs)
-                            kotlinx.coroutines.runBlocking {
-                                updateAnnotatedExportProgress(activeSessionId, AnnotatedExportStage.RENDERING, pct, etaMs, elapsed)
-                            }
-                        },
-                    )
-                }
+                val exportResult = annotatedExportPipeline.export(
+                    sessionId = activeSessionId,
+                    rawVideoUri = exportSnapshot.rawUri,
+                    drillType = drillType,
+                    drillCameraSide = options.drillCameraSide,
+                    overlayTimeline = exportSnapshot.overlayTimeline,
+                    rawDurationMsHint = exportSnapshot.rawDurationMs,
+                    onRenderProgress = { rendered, total ->
+                        val pct = 30 + (((rendered.toFloat() / total.coerceAtLeast(1).toFloat()) * 55f).toInt())
+                        val elapsed = (System.currentTimeMillis() - exportStartMs).coerceAtLeast(1L)
+                        val remainingFrames = (total - rendered).coerceAtLeast(0)
+                        val frameRate = rendered.toDouble() / (elapsed / 1000.0)
+                        val etaMs = if (frameRate > 0.01) ((remainingFrames / frameRate) * 1000.0).toLong() else null
+                        AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.RENDERING, pct, etaMs)
+                        kotlinx.coroutines.runBlocking {
+                            updateAnnotatedExportProgress(activeSessionId, AnnotatedExportStage.RENDERING, pct, etaMs, elapsed)
+                        }
+                    },
+                )
                 if (!exportResult.started) {
                     annotatedExportPercent = 0
                     annotatedExportEtaSeconds = null
@@ -1433,8 +1444,6 @@ class LiveCoachingViewModel(
                     overlayFrameCount = snapshot.overlayFrameCount,
                 )
                 AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.COMPLETED, 100, 0L)
-            } catch (_: TimeoutCancellationException) {
-                persistAnnotatedExportFailed(activeSessionId, "EXPORT_TIMEOUT")
             } catch (_: CancellationException) {
                 persistAnnotatedExportFailed(activeSessionId, "EXPORT_CANCELLED")
             } catch (t: Throwable) {
@@ -1844,7 +1853,6 @@ class LiveCoachingViewModel(
         private const val MAX_EXPORT_FRAME_INTERVAL_MS = 50L
         private const val OVERLAY_TIMELINE_SAMPLE_INTERVAL_MS = 80L
         private const val OVERLAY_FRAME_LOG_INTERVAL = 60
-        private const val ANNOTATED_EXPORT_TIMEOUT_MS = 120_000L
         private const val PROCESSING_SLOW_THRESHOLD_MS = 90_000L
         private const val EXPORT_SNAPSHOT_DURATION_TOLERANCE_MS = 600L
         private val RAW_FINALIZE_READINESS_BACKOFF_MS = listOf(200L, 350L, 550L, 800L)

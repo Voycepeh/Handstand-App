@@ -210,6 +210,7 @@ class AnnotatedVideoCompositor(
                                     data.position(encoderInfo.offset)
                                     data.limit(encoderInfo.offset + encoderInfo.size)
                                     muxerInstance.writeSampleData(muxTrack, data, encoderInfo)
+                                    telemetry.muxedFrameCount += 1
                                     telemetry.outputBytesWritten = output.length()
                                     telemetry.encodedFrameCount += 1
                                     if (telemetry.firstFrameEncodedAtMs == null) telemetry.firstFrameEncodedAtMs = System.currentTimeMillis()
