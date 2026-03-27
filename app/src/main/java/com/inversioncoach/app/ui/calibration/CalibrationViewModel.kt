@@ -9,6 +9,8 @@ import com.inversioncoach.app.calibration.CalibrationSession
 import com.inversioncoach.app.calibration.CalibrationStep
 import com.inversioncoach.app.calibration.DrillMovementProfileRepository
 import com.inversioncoach.app.calibration.StructuralCalibrationEngine
+import com.inversioncoach.app.calibration.hold.HoldTemplateBlender
+import com.inversioncoach.app.calibration.hold.HoldTemplateBuilder
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.PoseFrame
 import com.inversioncoach.app.model.SmoothedPoseFrame
@@ -25,6 +27,8 @@ class CalibrationViewModel(
     private val calibrationProfileProvider: CalibrationProfileProvider,
     private val drillMovementProfileRepository: DrillMovementProfileRepository,
     private val engine: StructuralCalibrationEngine = StructuralCalibrationEngine(),
+    private val holdTemplateBuilder: HoldTemplateBuilder = HoldTemplateBuilder(),
+    private val holdTemplateBlender: HoldTemplateBlender = HoldTemplateBlender(),
 ) : ViewModel() {
 
     private val steps = listOf(
@@ -131,9 +135,28 @@ class CalibrationViewModel(
             }
 
             val existing = calibrationProfileProvider.resolve(drillType)
+            val controlledHoldFrames = session.get(CalibrationStep.CONTROLLED_HOLD)?.acceptedFrames.orEmpty()
+            val nextVersion = existing.profileVersion + 1
+
+            val learnedHoldTemplate = holdTemplateBuilder.build(
+                drillType = drillType,
+                profileVersion = nextVersion,
+                bodyProfile = builtProfile,
+                frames = controlledHoldFrames,
+            )
+
+            val finalHoldTemplate = when {
+                existing.holdTemplate != null && learnedHoldTemplate != null ->
+                    holdTemplateBlender.blend(existing.holdTemplate, learnedHoldTemplate)
+
+                learnedHoldTemplate != null -> learnedHoldTemplate
+                else -> existing.holdTemplate
+            }
+
             val newProfile = existing.copy(
-                profileVersion = existing.profileVersion + 1,
+                profileVersion = nextVersion,
                 userBodyProfile = builtProfile,
+                holdTemplate = finalHoldTemplate,
                 updatedAtMs = System.currentTimeMillis(),
             )
             drillMovementProfileRepository.save(newProfile)
