@@ -1,6 +1,7 @@
 package com.inversioncoach.app.movementprofile
 
 import android.net.Uri
+import com.inversioncoach.app.calibration.DefaultDrillMovementProfiles
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.JointPoint
 import com.inversioncoach.app.model.PoseFrame
@@ -86,6 +87,23 @@ class UploadedVideoAnalysisTest {
         val profile = adapter.fromDrill(DrillType.FREESTYLE)
         assertEquals(DrillType.FREESTYLE, profile.drillType)
         assertTrue(profile.displayName.contains("Freestyle"))
+    }
+
+    @Test
+    fun analyzeIncludesCalibrationProfileVersionInTelemetryWhenProvided() {
+        val profile = ExistingDrillToProfileAdapter().fromDrill(DrillType.FREESTYLE)
+        val source = object : VideoPoseFrameSource {
+            override fun decode(videoUri: Uri): Sequence<PoseFrame> = sequence { yield(frame(0, 0.9f)) }
+        }
+        val calibrationProfile = DefaultDrillMovementProfiles.forDrill(DrillType.FREESTYLE, nowMs = 555L).copy(profileVersion = 7)
+
+        val result = UploadedVideoAnalyzer(source).analyze(
+            videoUri = Uri.parse("file:///tmp/with-calibration.mp4"),
+            profile = profile,
+            drillMovementProfile = calibrationProfile,
+        )
+
+        assertEquals(7L, result.telemetry["calibration_profile_version"])
     }
 
     private fun frame(ts: Long, confidence: Float): PoseFrame = PoseFrame(

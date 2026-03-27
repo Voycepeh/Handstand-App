@@ -75,6 +75,7 @@ class OverlayTimelineResolver(
             landmarks = interpolated,
             smoothedLandmarks = interpolated,
             confidence = lerp(previous.confidence, next.confidence, t),
+            unreliableJointNames = previous.unreliableJointNames + next.unreliableJointNames,
             bodyVisible = previous.bodyVisible || next.bodyVisible,
             showSkeleton = previous.showSkeleton || next.showSkeleton,
             showIdealLine = previous.showIdealLine || next.showIdealLine,

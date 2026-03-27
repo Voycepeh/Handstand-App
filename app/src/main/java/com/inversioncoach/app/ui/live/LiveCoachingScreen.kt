@@ -92,6 +92,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             metricsEngine = ServiceLocator.metricsEngine(),
             cueEngine = ServiceLocator.cueEngine(),
             repository = repository,
+            calibrationProfileProvider = ServiceLocator.calibrationProfileProvider(context),
             options = options,
             annotatedExportPipeline = AnnotatedExportPipeline(
                 repository = repository,
@@ -296,6 +297,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                     cueText = if (uiState.sessionMode == SessionMode.FREESTYLE) "" else uiState.currentCue,
                     drillCameraSide = options.drillCameraSide,
                     freestyleViewMode = uiState.freestyleViewMode,
+                    unreliableJointNames = uiState.unreliableJointNames,
                 )
             }
         }

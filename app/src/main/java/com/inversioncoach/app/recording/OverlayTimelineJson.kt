@@ -24,6 +24,7 @@ object OverlayTimelineJson {
                     put("captureHeight", frame.captureHeight)
                     put("captureRotationDegrees", frame.captureRotationDegrees)
                     put("scaleMode", frame.scaleMode.name)
+                    put("unreliableJointNames", JSONArray(frame.unreliableJointNames.toList()))
                     put("sourceFrameIndex", frame.sourceFrameIndex)
                     put("confidence", frame.confidence)
                     put("landmarks", encodeJoints(frame.landmarks))
@@ -65,6 +66,7 @@ object OverlayTimelineJson {
                             .takeIf { it.isNotBlank() }
                             ?.let { mode -> runCatching { PoseScaleMode.valueOf(mode) }.getOrDefault(PoseScaleMode.FIT) }
                             ?: PoseScaleMode.FIT,
+                        unreliableJointNames = decodeStringSet(frame.optJSONArray("unreliableJointNames")),
                         sourceFrameIndex = if (frame.has("sourceFrameIndex") && !frame.isNull("sourceFrameIndex")) frame.optLong("sourceFrameIndex") else null,
                         confidence = frame.optDouble("confidence", 0.0).toFloat(),
                         landmarks = decodeJoints(frame.optJSONArray("landmarks")),
@@ -132,5 +134,13 @@ object OverlayTimelineJson {
     private fun decodeFloatMap(obj: JSONObject?): Map<String, Float> = buildMap {
         if (obj == null) return@buildMap
         obj.keys().forEach { put(it, obj.optDouble(it).toFloat()) }
+    }
+
+    private fun decodeStringSet(array: JSONArray?): Set<String> = buildSet {
+        if (array == null) return@buildSet
+        for (i in 0 until array.length()) {
+            val value = array.optString(i).trim()
+            if (value.isNotBlank()) add(value)
+        }
     }
 }

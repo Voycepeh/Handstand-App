@@ -290,6 +290,8 @@ data class SessionRecord(
     val cleanupCompletedAtMs: Long? = null,
     val overlayFrameCount: Int = 0,
     val overlayTimelineUri: String? = null,
+    val calibrationProfileVersion: Int? = null,
+    val calibrationUpdatedAtMs: Long? = null,
     val notesUri: String?,
     val bestFrameTimestampMs: Long?,
     val worstFrameTimestampMs: Long?,
@@ -398,6 +400,7 @@ data class LiveSessionUiState(
     val debugInferenceTimeMs: Long = 0L,
     val debugFrameDrops: Int = 0,
     val debugRejectionReason: String = "none",
+    val unreliableJointNames: Set<String> = emptySet(),
     val drillCameraSide: DrillCameraSide? = null,
     val freestyleViewMode: FreestyleViewMode = FreestyleViewMode.UNKNOWN,
 )

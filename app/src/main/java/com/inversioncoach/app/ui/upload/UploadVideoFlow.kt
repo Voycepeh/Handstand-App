@@ -45,6 +45,7 @@ import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SessionSource
+import com.inversioncoach.app.calibration.CalibrationProfileProvider
 import com.inversioncoach.app.movementprofile.ExistingDrillToProfileAdapter
 import com.inversioncoach.app.movementprofile.AnalysisProgressObserver
 import com.inversioncoach.app.movementprofile.MlKitVideoPoseFrameSource
@@ -158,6 +159,7 @@ interface UploadVideoAnalysisRunner {
 class DefaultUploadVideoAnalysisRunner(
     private val context: Context,
     private val repository: SessionRepository,
+    private val calibrationProfileProvider: CalibrationProfileProvider,
     private val frameSourceFactory: (Context, Int) -> VideoPoseFrameSource = { appContext, fps ->
         MlKitVideoPoseFrameSource(appContext, sampleFps = fps)
     },
@@ -185,6 +187,7 @@ class DefaultUploadVideoAnalysisRunner(
     ): UploadFlowResult = withContext(Dispatchers.IO) {
         val startedAt = System.currentTimeMillis()
         val drillType = drillRegistry.definitionFor(DrillType.FREESTYLE).drillType
+        val resolvedCalibrationProfile = calibrationProfileProvider.resolve(drillType)
         val sessionId = repository.saveSession(
             SessionRecord(
                 title = "Uploaded Video Analysis",
@@ -200,6 +203,8 @@ class DefaultUploadVideoAnalysisRunner(
                 metricsJson = "trackingMode:${trackingMode.name}",
                 annotatedVideoUri = null,
                 rawVideoUri = null,
+                calibrationProfileVersion = resolvedCalibrationProfile.profileVersion,
+                calibrationUpdatedAtMs = resolvedCalibrationProfile.updatedAtMs,
                 notesUri = null,
                 bestFrameTimestampMs = null,
                 worstFrameTimestampMs = null,
@@ -272,10 +277,14 @@ class DefaultUploadVideoAnalysisRunner(
                     completedAtMs = startedAt + sourceDurationMs,
                     rawVideoUri = persistedRawUri,
                     bestPlayableUri = persistedRawUri,
+                    calibrationProfileVersion = resolvedCalibrationProfile.profileVersion,
+                    calibrationUpdatedAtMs = resolvedCalibrationProfile.updatedAtMs,
                     metricsJson = mergeMetricsJson(
                         session.metricsJson,
                         mapOf(
                             "trackingMode" to trackingMode.name,
+                            "calibrationProfileVersion" to resolvedCalibrationProfile.profileVersion.toString(),
+                            "calibrationUpdatedAtMs" to resolvedCalibrationProfile.updatedAtMs.toString(),
                             "sourceDurationMs" to sourceDurationMs.toString(),
                             "sourceWidth" to metadata.width.toString(),
                             "sourceHeight" to metadata.height.toString(),
@@ -382,6 +391,7 @@ class DefaultUploadVideoAnalysisRunner(
             val analysis = analyzer.analyze(
                 Uri.parse(persistedRawUri),
                 profile,
+                drillMovementProfile = resolvedCalibrationProfile,
                 progressObserver = AnalysisProgressObserver { event ->
                     val estimatedTotal = event.estimatedTotalFrames?.coerceAtLeast(1)
                     val processed = event.processedFrames.coerceAtLeast(0)
@@ -712,10 +722,14 @@ class DefaultUploadVideoAnalysisRunner(
                     limitingFactor = if (isAnnotatedReady) "Consistency" else "Annotated export unavailable",
                     wins = "Processed uploaded video",
                     issues = if (analysis.droppedFrames > 0) "Dropped ${analysis.droppedFrames} low-confidence frames" else "",
+                    calibrationProfileVersion = resolvedCalibrationProfile.profileVersion,
+                    calibrationUpdatedAtMs = resolvedCalibrationProfile.updatedAtMs,
                     metricsJson = mergeMetricsJson(
                         session.metricsJson,
                         mapOf(
                             "trackingMode" to trackingMode.name,
+                            "calibrationProfileVersion" to resolvedCalibrationProfile.profileVersion.toString(),
+                            "calibrationUpdatedAtMs" to resolvedCalibrationProfile.updatedAtMs.toString(),
                             "validFrames" to analysis.overlayTimeline.size.toString(),
                             "invalidFrames" to analysis.droppedFrames.toString(),
                             "totalJobTimeMs" to (now - startedAt).toString(),
@@ -1143,7 +1157,14 @@ fun UploadVideoScreen(
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
     val viewModel = remember {
-        UploadVideoViewModel(DefaultUploadVideoAnalysisRunner(context.applicationContext, repository), repository)
+        UploadVideoViewModel(
+            DefaultUploadVideoAnalysisRunner(
+                context = context.applicationContext,
+                repository = repository,
+                calibrationProfileProvider = ServiceLocator.calibrationProfileProvider(context),
+            ),
+            repository,
+        )
     }
     val state by viewModel.state.collectAsState()
     var showTechLog by remember { mutableStateOf(false) }

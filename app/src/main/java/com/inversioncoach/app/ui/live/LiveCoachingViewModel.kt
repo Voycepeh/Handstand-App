@@ -50,13 +50,15 @@ import com.inversioncoach.app.recording.VideoCompressionPipeline
 import com.inversioncoach.app.storage.SessionBlobStorage
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.summary.SummaryGenerator
+import com.inversioncoach.app.calibration.CalibrationProfileProvider
+import com.inversioncoach.app.calibration.DrillMovementProfile
 import com.inversioncoach.app.calibration.UserBodyProfile
+import com.inversioncoach.app.calibration.rep.SessionRepTemplateUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -82,6 +84,7 @@ class LiveCoachingViewModel(
     private val metricsEngine: AlignmentMetricsEngine,
     private val cueEngine: CueEngine,
     private val repository: SessionRepository,
+    private val calibrationProfileProvider: CalibrationProfileProvider,
     private val options: LiveSessionOptions,
     private val summaryGenerator: SummaryGenerator = SummaryGenerator(com.inversioncoach.app.summary.RecommendationEngine()),
     private val smoother: PoseSmoothingEngine = PoseSmoothingEngine(),
@@ -91,6 +94,7 @@ class LiveCoachingViewModel(
     private val compressionPipeline: VideoCompressionPipeline = VideoCompressionPipeline(),
     private val annotatedExportPipeline: AnnotatedExportPipeline,
 ) : ViewModel() {
+    private val repTemplateUpdater = SessionRepTemplateUpdater()
 
     enum class ExportLifecycleState {
         IDLE,
@@ -173,6 +177,7 @@ class LiveCoachingViewModel(
     private var frozenOverlayTimeline: com.inversioncoach.app.recording.OverlayTimeline? = null
     private var activeSettings: UserSettings = UserSettings()
     private var sessionHadAnyVideo = false
+    private var activeMovementProfile: DrillMovementProfile? = null
     private var startupCancelled = false
     private val drillConfig = DrillConfigs.byTypeOrNull(drillType)
     private val readinessEngine = drillConfig?.let { SharedReadinessEngine(drillType, it, options.drillCameraSide) }
@@ -376,7 +381,16 @@ class LiveCoachingViewModel(
         }
         val motionEligible = sessionMode == SessionMode.DRILL && (readiness?.timerEligible ?: false)
         val freestyleViewMode = if (sessionMode == SessionMode.FREESTYLE) freestyleOrientationClassifier.classify(smoothed.joints) else FreestyleViewMode.UNKNOWN
-        val motion = if (motionEligible) motionPipeline.analyze(corrected.frame, settings.alignmentStrictness, calibration) else null
+        val motion = if (motionEligible) {
+            motionPipeline.analyze(
+                frame = corrected.frame,
+                strictness = settings.alignmentStrictness,
+                calibration = calibration,
+                movementProfile = activeMovementProfile,
+            )
+        } else {
+            null
+        }
         _smoothedFrame.value = smoothed
         if (!overlayCaptureFrozen && shouldCaptureOverlayFrame(smoothed.timestampMs)) {
             val overlayFrame = overlayStabilizer.stabilize(
@@ -387,6 +401,7 @@ class LiveCoachingViewModel(
                 showSkeleton = options.showSkeletonOverlay,
                 freestyleViewMode = freestyleViewMode,
                 scaleMode = PoseScaleMode.FILL,
+                unreliableJointNames = corrected.unreliableJointNames,
             )
             overlayFrames += overlayFrame
             if (overlayTimelineRecorder == null && sessionStartedAtMs > 0L) {
@@ -444,6 +459,7 @@ class LiveCoachingViewModel(
             debugInferenceTimeMs = frameForSession.inferenceTimeMs,
             debugFrameDrops = frameForSession.droppedFrames,
             debugRejectionReason = "$rejectionReason|$readinessSummary",
+            unreliableJointNames = corrected.unreliableJointNames,
             freestyleViewMode = freestyleViewMode,
         )
         SessionDiagnostics.log("readiness drill=$drillType $readinessSummary")
@@ -829,7 +845,7 @@ class LiveCoachingViewModel(
                         limitingFactor = latestScore.limitingFactor,
                         issues = topIssues,
                         wins = wins,
-                        metricsJson = "",
+                        metricsJson = calibrationMetadataJson(),
                         annotatedVideoUri = finalVideos.annotatedVideoUri,
                         rawVideoUri = finalVideos.rawVideoUri,
                         rawMasterUri = rawMasterUri,
@@ -858,6 +874,8 @@ class LiveCoachingViewModel(
                     message = "Replay selection=${replaySelection.label}",
                     metrics = mapOf("replayUri" to replaySelection.uri.orEmpty()),
                 )
+                val learnedProfile = maybePersistLearnedRepTemplate(completedAtMs)
+                val calibrationProfileForSession = learnedProfile ?: activeMovementProfile
                 repository.saveSession(
                     SessionRecord(
                         id = activeSessionId,
@@ -871,7 +889,7 @@ class LiveCoachingViewModel(
                         limitingFactor = latestScore.limitingFactor,
                         issues = topIssues,
                         wins = wins,
-                        metricsJson = "",
+                        metricsJson = calibrationMetadataJson(),
                         annotatedVideoUri = finalVideos.annotatedVideoUri,
                         rawVideoUri = finalVideos.rawVideoUri,
                         rawMasterUri = rawMasterUri,
@@ -896,6 +914,8 @@ class LiveCoachingViewModel(
                         retainedAssetType = finalVideos.retainedAssetType,
                         overlayFrameCount = overlayFrames.size,
                         overlayTimelineUri = overlayTimelineUri,
+                        calibrationProfileVersion = calibrationProfileForSession?.profileVersion,
+                        calibrationUpdatedAtMs = calibrationProfileForSession?.updatedAtMs,
                         notesUri = null,
                         bestFrameTimestampMs = bestFrame,
                         worstFrameTimestampMs = worstFrame,
@@ -976,6 +996,8 @@ class LiveCoachingViewModel(
         viewModelScope.launch {
             smoother.reset()
             correctionEngine.reset()
+            activeMovementProfile = calibrationProfileProvider.resolve(drillType)
+            motionPipeline.setRepTemplate(activeMovementProfile?.repTemplate)
             val now = System.currentTimeMillis()
             sessionStartedAtMs = now
             val newSessionId = repository.saveSession(
@@ -990,7 +1012,7 @@ class LiveCoachingViewModel(
                     limitingFactor = "pending",
                     issues = "",
                     wins = "",
-                    metricsJson = "",
+                    metricsJson = calibrationMetadataJson(),
                     annotatedVideoUri = null,
                     rawVideoUri = null,
                     rawMasterUri = null,
@@ -1010,6 +1032,8 @@ class LiveCoachingViewModel(
                     retainedAssetType = RetainedAssetType.NONE,
                     overlayFrameCount = 0,
                     overlayTimelineUri = null,
+                    calibrationProfileVersion = activeMovementProfile?.profileVersion,
+                    calibrationUpdatedAtMs = activeMovementProfile?.updatedAtMs,
                     notesUri = null,
                     bestFrameTimestampMs = null,
                     worstFrameTimestampMs = null,
@@ -1051,6 +1075,29 @@ class LiveCoachingViewModel(
         analysisRotationDegrees = analysisRotationDegrees,
         mirrored = mirrored,
     )
+
+    private fun calibrationMetadataJson(): String {
+        val profile = activeMovementProfile ?: return ""
+        return "calibrationProfileVersion:${profile.profileVersion};calibrationUpdatedAtMs:${profile.updatedAtMs}"
+    }
+
+    private suspend fun maybePersistLearnedRepTemplate(nowMs: Long): DrillMovementProfile? {
+        if (sessionMode != SessionMode.DRILL) return null
+
+        val currentProfile = activeMovementProfile ?: calibrationProfileProvider.resolve(drillType)
+        val updatedProfile = repTemplateUpdater.updateProfile(
+            profile = currentProfile,
+            repWindows = motionPipeline.completedRepFrames(),
+            minimumRepCount = 2,
+            minimumFramesPerRep = 10,
+            learnedWeight = 0.3f,
+            nowMs = nowMs,
+        ) ?: return null
+        calibrationProfileProvider.save(updatedProfile)
+        activeMovementProfile = updatedProfile
+        motionPipeline.setRepTemplate(updatedProfile.repTemplate)
+        return updatedProfile
+    }
 
     private fun setRawPersistState(status: RawPersistStatus, failureReason: String?) {
         rawPersistStatus = status
@@ -1296,7 +1343,20 @@ class LiveCoachingViewModel(
                 persistAnnotatedExportFailed(activeSessionId, preflight.fatalReason)
                 return
             }
-            val exportSnapshot = preflight.snapshot
+            var exportSnapshot = preflight.snapshot
+            val frozenExportSnapshot = annotatedExportPipeline.freezeSnapshotForExport(
+                overlayTimeline = exportSnapshot.overlayTimeline,
+                rawDurationMsHint = exportSnapshot.rawDurationMs,
+            )
+            if (frozenExportSnapshot.usableOverlayFrameCount != exportSnapshot.overlayFrameCount) {
+                exportSnapshot = exportSnapshot.copy(
+                    overlayTimeline = frozenExportSnapshot.overlayTimeline,
+                    overlayFrameCount = frozenExportSnapshot.usableOverlayFrameCount,
+                )
+                repository.updateMediaPipelineState(activeSessionId) { session ->
+                    session.copy(overlayFrameCount = exportSnapshot.overlayFrameCount)
+                }
+            }
             if (exportSnapshot.overlayTimeline.frames.isEmpty()) {
                 val reason = if (snapshot.overlayFrameCount > 0) {
                     AnnotatedExportFailureReason.EXPORT_INPUT_CORRUPTED_AFTER_FREEZE.name
@@ -1361,26 +1421,25 @@ class LiveCoachingViewModel(
 
             val exportStartMs = System.currentTimeMillis()
             try {
-                val exportResult = withTimeout(ANNOTATED_EXPORT_TIMEOUT_MS) {
-                    annotatedExportPipeline.export(
-                        sessionId = activeSessionId,
-                        rawVideoUri = exportSnapshot.rawUri,
-                        drillType = drillType,
-                        drillCameraSide = options.drillCameraSide,
-                        overlayTimeline = exportSnapshot.overlayTimeline,
-                        onRenderProgress = { rendered, total ->
-                            val pct = 30 + (((rendered.toFloat() / total.coerceAtLeast(1).toFloat()) * 55f).toInt())
-                            val elapsed = (System.currentTimeMillis() - exportStartMs).coerceAtLeast(1L)
-                            val remainingFrames = (total - rendered).coerceAtLeast(0)
-                            val frameRate = rendered.toDouble() / (elapsed / 1000.0)
-                            val etaMs = if (frameRate > 0.01) ((remainingFrames / frameRate) * 1000.0).toLong() else null
-                            AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.RENDERING, pct, etaMs)
-                            kotlinx.coroutines.runBlocking {
-                                updateAnnotatedExportProgress(activeSessionId, AnnotatedExportStage.RENDERING, pct, etaMs, elapsed)
-                            }
-                        },
-                    )
-                }
+                val exportResult = annotatedExportPipeline.export(
+                    sessionId = activeSessionId,
+                    rawVideoUri = exportSnapshot.rawUri,
+                    drillType = drillType,
+                    drillCameraSide = options.drillCameraSide,
+                    overlayTimeline = exportSnapshot.overlayTimeline,
+                    rawDurationMsHint = exportSnapshot.rawDurationMs,
+                    onRenderProgress = { rendered, total ->
+                        val pct = 30 + (((rendered.toFloat() / total.coerceAtLeast(1).toFloat()) * 55f).toInt())
+                        val elapsed = (System.currentTimeMillis() - exportStartMs).coerceAtLeast(1L)
+                        val remainingFrames = (total - rendered).coerceAtLeast(0)
+                        val frameRate = rendered.toDouble() / (elapsed / 1000.0)
+                        val etaMs = if (frameRate > 0.01) ((remainingFrames / frameRate) * 1000.0).toLong() else null
+                        AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.RENDERING, pct, etaMs)
+                        kotlinx.coroutines.runBlocking {
+                            updateAnnotatedExportProgress(activeSessionId, AnnotatedExportStage.RENDERING, pct, etaMs, elapsed)
+                        }
+                    },
+                )
                 if (!exportResult.started) {
                     annotatedExportPercent = 0
                     annotatedExportEtaSeconds = null
@@ -1433,8 +1492,6 @@ class LiveCoachingViewModel(
                     overlayFrameCount = snapshot.overlayFrameCount,
                 )
                 AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.COMPLETED, 100, 0L)
-            } catch (_: TimeoutCancellationException) {
-                persistAnnotatedExportFailed(activeSessionId, "EXPORT_TIMEOUT")
             } catch (_: CancellationException) {
                 persistAnnotatedExportFailed(activeSessionId, "EXPORT_CANCELLED")
             } catch (t: Throwable) {
@@ -1844,7 +1901,6 @@ class LiveCoachingViewModel(
         private const val MAX_EXPORT_FRAME_INTERVAL_MS = 50L
         private const val OVERLAY_TIMELINE_SAMPLE_INTERVAL_MS = 80L
         private const val OVERLAY_FRAME_LOG_INTERVAL = 60
-        private const val ANNOTATED_EXPORT_TIMEOUT_MS = 120_000L
         private const val PROCESSING_SLOW_THRESHOLD_MS = 90_000L
         private const val EXPORT_SNAPSHOT_DURATION_TOLERANCE_MS = 600L
         private val RAW_FINALIZE_READINESS_BACKOFF_MS = listOf(200L, 350L, 550L, 800L)

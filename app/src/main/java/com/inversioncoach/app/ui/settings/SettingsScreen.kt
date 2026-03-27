@@ -31,15 +31,24 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.model.AlignmentStrictness
+import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigateHome: () -> Unit) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onDeveloperTuning: () -> Unit,
+    onCalibration: () -> Unit,
+    onNavigateHome: () -> Unit,
+) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
+    val calibrationDrillType = DrillType.FREE_HANDSTAND
 
     val scope = rememberCoroutineScope()
     var cueFrequency by remember { mutableFloatStateOf(2f) }
@@ -55,6 +64,21 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
     var customHoldThreshold by remember { mutableIntStateOf(72) }
     var showSaveConfirmation by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var showClearCalibrationConfirmation by remember { mutableStateOf(false) }
+    var calibrationStatus by remember { mutableStateOf("Not calibrated yet") }
+    var calibrationSummary by remember { mutableStateOf<String?>(null) }
+    var calibrationUpdatedAt by remember { mutableStateOf<Long?>(null) }
+
+    suspend fun refreshCalibrationStatus() {
+        val profile = ServiceLocator.calibrationProfileProvider(context).resolve(calibrationDrillType)
+        calibrationUpdatedAt = profile.userBodyProfile?.let { profile.updatedAtMs }
+        calibrationSummary = profile.userBodyProfile?.let {
+            "v${profile.profileVersion} • symmetry ${(it.leftRightConsistency * 100f).toInt()}%"
+        }
+        calibrationStatus = profile.userBodyProfile?.let {
+            "Saved"
+        } ?: "Not calibrated yet"
+    }
 
     LaunchedEffect(Unit) {
         repository.observeSettings().collect { s ->
@@ -71,6 +95,8 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
             customHoldThreshold = s.customHoldAlignedThreshold
         }
     }
+
+    LaunchedEffect(Unit) { refreshCalibrationStatus() }
 
     ScaffoldedScreen(title = "Settings", onBack = onBack) { padding ->
         Column(
@@ -160,6 +186,21 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
             }
 
             Button(onClick = { showSaveConfirmation = true }, modifier = Modifier.fillMaxWidth()) { Text("Save settings") }
+            SettingsCard(title = "Structural calibration") {
+                Text("Scope: ${calibrationDrillType.displayName} profile")
+                Text("Status: $calibrationStatus")
+                calibrationUpdatedAt?.let {
+                    Text("Last calibrated on ${DateFormat.getDateTimeInstance().format(Date(it))}")
+                }
+                calibrationSummary?.let { Text("Profile: $it") }
+                Text("Capture front, side, overhead, and stable hold poses to build your body profile.")
+                Button(onClick = onCalibration, modifier = Modifier.fillMaxWidth()) { Text("Start calibration") }
+                Button(
+                    onClick = { showClearCalibrationConfirmation = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = calibrationUpdatedAt != null,
+                ) { Text("Clear calibration") }
+            }
             Button(onClick = onDeveloperTuning, modifier = Modifier.fillMaxWidth()) { Text("Developer threshold tuning") }
             Button(onClick = { showDeleteConfirmation = true }, modifier = Modifier.fillMaxWidth()) { Text("Delete all sessions") }
         }
@@ -219,6 +260,28 @@ fun SettingsScreen(onBack: () -> Unit, onDeveloperTuning: () -> Unit, onNavigate
                 },
                 dismissButton = {
                     Button(onClick = { showDeleteConfirmation = false }) { Text("Cancel") }
+                },
+            )
+        }
+
+        if (showClearCalibrationConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showClearCalibrationConfirmation = false },
+                title = { Text("Clear calibration?") },
+                text = { Text("This will remove your saved body profile for ${calibrationDrillType.displayName} calibration.") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showClearCalibrationConfirmation = false
+                            scope.launch {
+                                ServiceLocator.drillMovementProfileRepository(context).clear(calibrationDrillType)
+                                refreshCalibrationStatus()
+                            }
+                        },
+                    ) { Text("Clear") }
+                },
+                dismissButton = {
+                    Button(onClick = { showClearCalibrationConfirmation = false }) { Text("Cancel") }
                 },
             )
         }

@@ -30,9 +30,7 @@ data class PoseProjectionDiagnostics(
 class PoseCoordinateMapper {
     fun map(normalizedX: Float, normalizedY: Float, input: PoseProjectionInput): Offset {
         val diagnostics = diagnostics(input)
-        val clampedX = normalizedX.coerceIn(0f, 1f)
-        val clampedY = normalizedY.coerceIn(0f, 1f)
-        val (rotatedX, rotatedY) = rotate(clampedX, clampedY, diagnostics.rotationDegrees)
+        val (rotatedX, rotatedY) = rotate(normalizedX, normalizedY, diagnostics.rotationDegrees)
         val mappedX = if (diagnostics.mirrored) 1f - rotatedX else rotatedX
         return Offset(
             x = diagnostics.contentRect.left + mappedX * diagnostics.contentRect.width + input.overlayOffsetX,

@@ -31,6 +31,7 @@ class OverlayTimelineJsonTest {
                     captureHeight = 1280,
                     captureRotationDegrees = 90,
                     scaleMode = PoseScaleMode.FILL,
+                    unreliableJointNames = setOf("left_wrist"),
                     drillMetadata = OverlayDrillMetadata(
                         sessionMode = SessionMode.DRILL,
                         drillCameraSide = DrillCameraSide.LEFT,
@@ -53,5 +54,6 @@ class OverlayTimelineJsonTest {
         assertEquals(1280, decoded.frames.first().captureHeight)
         assertEquals(90, decoded.frames.first().captureRotationDegrees)
         assertEquals(PoseScaleMode.FILL, decoded.frames.first().scaleMode)
+        assertEquals(setOf("left_wrist"), decoded.frames.first().unreliableJointNames)
     }
 }

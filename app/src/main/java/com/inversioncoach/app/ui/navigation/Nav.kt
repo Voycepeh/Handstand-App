@@ -15,6 +15,7 @@ import com.inversioncoach.app.ui.history.HistoryScreen
 import com.inversioncoach.app.ui.home.HomeScreen
 import com.inversioncoach.app.ui.live.LiveCoachingScreen
 import com.inversioncoach.app.ui.progress.ProgressScreen
+import com.inversioncoach.app.ui.calibration.CalibrationScreen
 import com.inversioncoach.app.ui.results.ResultsScreen
 import com.inversioncoach.app.ui.results.SessionTooShortScreen
 import com.inversioncoach.app.ui.settings.DeveloperTuningScreen
@@ -46,6 +47,9 @@ sealed class Route(val value: String) {
     data object Settings : Route("settings")
     data object DevTuning : Route("settings/dev-tuning")
     data object UploadVideo : Route("upload-video")
+    data object Calibration : Route("calibration/{drill}") {
+        fun create(drillType: DrillType): String = "calibration/${drillType.name}"
+    }
 }
 
 @Composable
@@ -155,7 +159,21 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
                 onDeveloperTuning = { navController.navigate(Route.DevTuning.value) },
+                onCalibration = { navController.navigate(Route.Calibration.create(DrillType.FREE_HANDSTAND)) },
                 onNavigateHome = { navController.popBackStack(Route.Home.value, false) },
+            )
+        }
+        composable(
+            Route.Calibration.value,
+            arguments = listOf(navArgument("drill") { type = NavType.StringType }),
+        ) { backStack ->
+            val drill = parseDrillTypeOrDefault(
+                rawValue = backStack.arguments?.getString("drill"),
+                fallback = DrillType.FREE_HANDSTAND,
+            )
+            CalibrationScreen(
+                drillType = drill,
+                onBack = { navController.popBackStack() },
             )
         }
         composable(Route.DevTuning.value) { DeveloperTuningScreen(onBack = { navController.popBackStack() }) }

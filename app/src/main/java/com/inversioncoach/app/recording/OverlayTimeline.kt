@@ -28,6 +28,7 @@ data class OverlayTimelineFrame(
     val captureHeight: Int? = null,
     val captureRotationDegrees: Int? = null,
     val scaleMode: PoseScaleMode = PoseScaleMode.FIT,
+    val unreliableJointNames: Set<String> = emptySet(),
     val sourceFrameIndex: Long? = null,
 )
 
@@ -78,6 +79,7 @@ fun AnnotatedOverlayFrame.toTimelineFrame(sessionId: Long, sessionStartedAtMs: L
         captureHeight = sourceHeight.takeIf { it > 0 },
         captureRotationDegrees = sourceRotationDegrees,
         scaleMode = scaleMode,
+        unreliableJointNames = unreliableJointNames,
     )
 }
 
@@ -97,4 +99,5 @@ fun OverlayTimelineFrame.toAnnotatedOverlayFrame(): AnnotatedOverlayFrame = Anno
     sourceHeight = captureHeight ?: 0,
     sourceRotationDegrees = captureRotationDegrees ?: 0,
     scaleMode = scaleMode,
+    unreliableJointNames = unreliableJointNames,
 )

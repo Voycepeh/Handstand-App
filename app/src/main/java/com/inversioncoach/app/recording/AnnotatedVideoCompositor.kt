@@ -210,6 +210,7 @@ class AnnotatedVideoCompositor(
                                     data.position(encoderInfo.offset)
                                     data.limit(encoderInfo.offset + encoderInfo.size)
                                     muxerInstance.writeSampleData(muxTrack, data, encoderInfo)
+                                    telemetry.muxedFrameCount += 1
                                     telemetry.outputBytesWritten = output.length()
                                     telemetry.encodedFrameCount += 1
                                     if (telemetry.firstFrameEncodedAtMs == null) telemetry.firstFrameEncodedAtMs = System.currentTimeMillis()
@@ -367,6 +368,7 @@ class AnnotatedVideoCompositor(
             drawIdealLine = overlay.showIdealLine,
             mirrored = overlay.mirrorMode,
             scaleMode = overlay.scaleMode,
+            unreliableJointNames = overlay.unreliableJointNames,
         )
     }
 
@@ -488,6 +490,7 @@ class AnnotatedVideoCompositor(
         val drawIdealLine: Boolean = false,
         val mirrored: Boolean = false,
         val scaleMode: PoseScaleMode = PoseScaleMode.FIT,
+        val unreliableJointNames: Set<String> = emptySet(),
     )
 
     private class CompositorInitException(val reason: AnnotatedExportFailureReason, message: String) : IllegalStateException(message)
@@ -728,6 +731,7 @@ class AnnotatedVideoCompositor(
                     mirrored = instruction.mirrored,
                     scaleMode = instruction.scaleMode,
                     renderTarget = OverlayRenderTarget.ANNOTATED_EXPORT,
+                    unreliableJointNames = instruction.unreliableJointNames,
                 ),
             )
         }

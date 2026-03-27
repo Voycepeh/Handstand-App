@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Rect
 import com.inversioncoach.app.pose.PoseCoordinateMapper
 import com.inversioncoach.app.pose.PoseProjectionInput
 import com.inversioncoach.app.pose.PoseScaleMode
+import kotlin.math.hypot
 
 data class OverlayDrawingFrame(
     val drawSkeleton: Boolean,
@@ -20,6 +21,7 @@ data class OverlayDrawingFrame(
     val debugProjection: Boolean = false,
     val renderTarget: OverlayRenderTarget = OverlayRenderTarget.LIVE_PREVIEW,
     val styleScaleMultiplier: Float = 1f,
+    val unreliableJointNames: Set<String> = emptySet(),
 )
 
 enum class OverlayRenderTarget {
@@ -29,6 +31,8 @@ enum class OverlayRenderTarget {
 
 object OverlayFrameRenderer {
     private const val TAG = "OverlayFrameRenderer"
+    private const val MIN_RENDERABLE_VISIBILITY = 0.35f
+    private const val MAX_CONNECTION_NORMALIZED_LENGTH = 1.1f
     private val mapper = PoseCoordinateMapper()
     private val skeletonPaint = Paint().apply {
         color = 0xFF7CF0A9.toInt()
@@ -79,12 +83,20 @@ object OverlayFrameRenderer {
                     "scaleMode=${frame.scaleMode} skeletonBounds=${projectedJointBounds ?: "none"}",
             )
         }
+        val mappedJoints = mapJoints(
+            model = model,
+            projection = projection,
+            unreliableJointNames = frame.unreliableJointNames,
+            canvasWidth = width.toFloat(),
+            canvasHeight = height.toFloat(),
+        )
         if (frame.drawSkeleton) {
             model.connections.forEach { (from, to) ->
                 val start = model.joints.firstOrNull { it.name == from } ?: return@forEach
                 val end = model.joints.firstOrNull { it.name == to } ?: return@forEach
-                val startMapped = mapper.map(start.x, start.y, projection)
-                val endMapped = mapper.map(end.x, end.y, projection)
+                val startMapped = mappedJoints[from] ?: return@forEach
+                val endMapped = mappedJoints[to] ?: return@forEach
+                if (!shouldRenderConnection(start, end, startMapped, endMapped, frame, width.toFloat(), height.toFloat())) return@forEach
                 canvas.drawLine(
                     startMapped.x,
                     startMapped.y,
@@ -95,10 +107,11 @@ object OverlayFrameRenderer {
             }
 
             model.joints.forEach { joint ->
+                if (!isRenderableJoint(joint, frame.unreliableJointNames)) return@forEach
                 val jointStyle = jointStyle(joint.name, androidx.compose.ui.graphics.Color(0xFF7CF0A9), style.jointRadius)
                 val alphaColor = jointStyle.color.copy(alpha = jointStyle.color.alpha * joint.visibility.coerceIn(0.2f, 1f))
                 jointFillPaint.color = alphaColor.toArgbCompat()
-                val mapped = mapper.map(joint.x, joint.y, projection)
+                val mapped = mappedJoints[joint.name] ?: return@forEach
                 canvas.drawCircle(
                     mapped.x,
                     mapped.y,
@@ -158,6 +171,69 @@ object OverlayFrameRenderer {
         }
         if (!minX.isFinite() || !minY.isFinite() || !maxX.isFinite() || !maxY.isFinite()) return null
         return Rect(minX, minY, maxX, maxY)
+    }
+
+    private fun mapJoints(
+        model: OverlayRenderModel,
+        projection: PoseProjectionInput,
+        unreliableJointNames: Set<String>,
+        canvasWidth: Float,
+        canvasHeight: Float,
+    ): Map<String, androidx.compose.ui.geometry.Offset> = buildMap {
+        model.joints.forEach { joint ->
+            if (!isRenderableJoint(joint, frameUnreliableJointNames = unreliableJointNames)) return@forEach
+            val mapped = mapper.map(joint.x, joint.y, projection)
+            if (isSafeJointPoint(mapped.x, mapped.y, canvasWidth, canvasHeight)) {
+                put(joint.name, mapped)
+            }
+        }
+    }
+
+    private fun shouldRenderConnection(
+        startJoint: com.inversioncoach.app.model.JointPoint,
+        endJoint: com.inversioncoach.app.model.JointPoint,
+        start: androidx.compose.ui.geometry.Offset,
+        end: androidx.compose.ui.geometry.Offset,
+        frame: OverlayDrawingFrame,
+        canvasWidth: Float,
+        canvasHeight: Float,
+    ): Boolean {
+        if (!areConnectionEndpointsRenderable(startJoint, endJoint, frame.unreliableJointNames)) return false
+        if (!isSafeJointPoint(start.x, start.y, canvasWidth, canvasHeight)) return false
+        if (!isSafeJointPoint(end.x, end.y, canvasWidth, canvasHeight)) return false
+        return isConnectionLengthSafe(startJoint, endJoint)
+    }
+
+    internal fun areConnectionEndpointsRenderable(
+        startJoint: com.inversioncoach.app.model.JointPoint,
+        endJoint: com.inversioncoach.app.model.JointPoint,
+        unreliableJointNames: Set<String> = emptySet(),
+    ): Boolean = isRenderableJoint(startJoint, unreliableJointNames) && isRenderableJoint(endJoint, unreliableJointNames)
+
+    internal fun isRenderableJoint(
+        joint: com.inversioncoach.app.model.JointPoint,
+        frameUnreliableJointNames: Set<String> = emptySet(),
+    ): Boolean {
+        if (!joint.x.isFinite() || !joint.y.isFinite()) return false
+        if (joint.visibility < MIN_RENDERABLE_VISIBILITY) return false
+        if (joint.name in frameUnreliableJointNames) return false
+        return true
+    }
+
+    internal fun isConnectionLengthSafe(
+        startJoint: com.inversioncoach.app.model.JointPoint,
+        endJoint: com.inversioncoach.app.model.JointPoint,
+    ): Boolean {
+        val normalizedLength = hypot(startJoint.x - endJoint.x, startJoint.y - endJoint.y)
+        if (!normalizedLength.isFinite()) return false
+        return normalizedLength <= MAX_CONNECTION_NORMALIZED_LENGTH
+    }
+
+    internal fun isSafeJointPoint(x: Float, y: Float, canvasWidth: Float, canvasHeight: Float): Boolean {
+        if (!x.isFinite() || !y.isFinite()) return false
+        val marginX = canvasWidth * 0.5f
+        val marginY = canvasHeight * 0.5f
+        return x in (-marginX)..(canvasWidth + marginX) && y in (-marginY)..(canvasHeight + marginY)
     }
 }
 

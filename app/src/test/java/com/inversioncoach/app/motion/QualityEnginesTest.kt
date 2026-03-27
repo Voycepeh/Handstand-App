@@ -2,6 +2,8 @@ package com.inversioncoach.app.motion
 
 import com.inversioncoach.app.model.AlignmentStrictness
 import com.inversioncoach.app.model.DrillType
+import com.inversioncoach.app.model.PoseFrame as LegacyPoseFrame
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -54,10 +56,75 @@ class QualityEnginesTest {
             alignmentScore = 35,
             dominantFault = "body_line",
             angles = AngleFrame(1200L, mapOf("left_elbow_flexion" to 150f, "right_elbow_flexion" to 152f), 0f, 0f, 0.2f),
+            frame = LegacyPoseFrame(1200L, emptyList(), 0.9f),
         )
 
         assertTrue(result.totalRepsDetected == 1)
         assertTrue(result.rejectedReps >= 1)
+    }
+
+    @Test
+    fun repEvaluatorCollectsFramesOnlyAfterCycleStart() {
+        val evaluator = RepQualityEvaluator(
+            DrillQualityProfiles.byType(DrillType.PIKE_PUSH_UP),
+            UserCalibrationSettings(AlignmentStrictness.STANDARD).resolvedThresholds(),
+        )
+
+        repeat(3) { idx ->
+            evaluator.update(
+                timestampMs = idx * 33L,
+                movement = MovementState(MovementPhase.TOP, 0f, 1f, 0L, 0),
+                repTracking = RepTrackingSnapshot(rawRepAttempts = 0, validRepCount = 0, alignmentPassRatio = 1f),
+                alignmentScore = 80,
+                dominantFault = "",
+                angles = AngleFrame(idx * 33L, mapOf("left_elbow_flexion" to 170f, "right_elbow_flexion" to 170f), 0f, 0f, 0.05f),
+                frame = LegacyPoseFrame(idx * 33L, emptyList(), 0.9f),
+            )
+        }
+
+        val result = evaluator.update(
+            timestampMs = 200L,
+            movement = MovementState(MovementPhase.ECCENTRIC, 0.2f, 1f, 0L, 0),
+            repTracking = RepTrackingSnapshot(rawRepAttempts = 1, validRepCount = 0, alignmentPassRatio = 1f),
+            alignmentScore = 80,
+            dominantFault = "",
+            angles = AngleFrame(200L, mapOf("left_elbow_flexion" to 120f, "right_elbow_flexion" to 120f), 0f, 0f, 0.05f),
+            frame = LegacyPoseFrame(200L, emptyList(), 0.9f),
+        )
+
+        assertEquals(1, result.totalRepsDetected)
+        assertEquals(1, evaluator.completedRepWindows().first().frames.size)
+    }
+
+    @Test
+    fun repEvaluatorRestartsCycleAfterStaleGapWithoutDroppingCurrentFrame() {
+        val evaluator = RepQualityEvaluator(
+            DrillQualityProfiles.byType(DrillType.PIKE_PUSH_UP),
+            UserCalibrationSettings(AlignmentStrictness.STANDARD).resolvedThresholds(),
+        )
+
+        evaluator.update(
+            timestampMs = 100L,
+            movement = MovementState(MovementPhase.ECCENTRIC, 0.2f, 1f, 0L, 0),
+            repTracking = RepTrackingSnapshot(rawRepAttempts = 0, validRepCount = 0, alignmentPassRatio = 1f),
+            alignmentScore = 80,
+            dominantFault = "",
+            angles = AngleFrame(100L, mapOf("left_elbow_flexion" to 140f, "right_elbow_flexion" to 140f), 0f, 0f, 0.05f),
+            frame = LegacyPoseFrame(100L, emptyList(), 0.9f),
+        )
+
+        val result = evaluator.update(
+            timestampMs = 6200L,
+            movement = MovementState(MovementPhase.ECCENTRIC, 0.3f, 1f, 0L, 0),
+            repTracking = RepTrackingSnapshot(rawRepAttempts = 1, validRepCount = 0, alignmentPassRatio = 1f),
+            alignmentScore = 80,
+            dominantFault = "",
+            angles = AngleFrame(6200L, mapOf("left_elbow_flexion" to 130f, "right_elbow_flexion" to 130f), 0f, 0f, 0.05f),
+            frame = LegacyPoseFrame(6200L, emptyList(), 0.9f),
+        )
+
+        assertEquals(1, result.totalRepsDetected)
+        assertEquals(1, evaluator.completedRepWindows().first().frames.size)
     }
 
     @Test

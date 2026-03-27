@@ -2,6 +2,7 @@ package com.inversioncoach.app.movementprofile
 
 import android.net.Uri
 import android.util.Log
+import com.inversioncoach.app.calibration.DrillMovementProfile
 import com.inversioncoach.app.model.PoseFrame
 import java.io.File
 import java.io.ObjectInputStream
@@ -84,6 +85,7 @@ class UploadedVideoAnalyzer(
     fun analyze(
         videoUri: Uri,
         profile: MovementProfile,
+        drillMovementProfile: DrillMovementProfile? = null,
         progressObserver: AnalysisProgressObserver? = null,
     ): UploadedVideoAnalysisResult {
         try {
@@ -99,6 +101,7 @@ class UploadedVideoAnalyzer(
             val decodeDuration = System.currentTimeMillis() - decodeStart
 
             val analysisStart = System.currentTimeMillis()
+            val calibrationProfileVersion = drillMovementProfile?.profileVersion
             val phaseDetector = phaseDetectorFactory(profile)
             val timeline = mutableListOf<OverlayTimelinePoint>()
             val phaseTimeline = mutableListOf<Pair<Long, String>>()
@@ -166,7 +169,10 @@ class UploadedVideoAnalyzer(
                 overlayTimeline = timeline,
                 phaseTimeline = phaseTimeline,
             )
-            Log.i(UPLOAD_ANALYSIS_TAG, "decodeMs=$decodeDuration analyzeMs=$analysisDuration total=${sourceFrames.size} dropped=$dropped view=$view phases=${phaseTimeline.size} candidate=${template.status}")
+            Log.i(
+                UPLOAD_ANALYSIS_TAG,
+                "decodeMs=$decodeDuration analyzeMs=$analysisDuration total=${sourceFrames.size} dropped=$dropped view=$view phases=${phaseTimeline.size} candidate=${template.status} calibrationVersion=${calibrationProfileVersion ?: -1}",
+            )
             progressObserver?.onProgress(
                 AnalysisProgressEvent(
                     stage = "analysis_complete",
@@ -187,6 +193,7 @@ class UploadedVideoAnalyzer(
                     "total_frames_processed" to sourceFrames.size.toLong(),
                     "frames_dropped" to dropped.toLong(),
                     "candidate_phase_count" to phaseTimeline.map { it.second }.distinct().size.toLong(),
+                    "calibration_profile_version" to (calibrationProfileVersion?.toLong() ?: -1L),
                 ),
                 candidate = template,
             )

@@ -18,6 +18,10 @@ import kotlinx.coroutines.delay
 import kotlin.math.abs
 
 private const val TAG = "AnnotatedExportPipeline"
+private const val BASE_EXPORT_TIMEOUT_MS = 30_000L
+private const val MAX_EXPORT_TIMEOUT_MS = 300_000L
+private const val DEFAULT_STALL_WINDOW_MS = 20_000L
+private const val SOFT_SLOW_EXPORT_THRESHOLD_MS = 90_000L
 private const val MAX_EXPORT_FPS = 12
 private const val LONG_EXPORT_SESSION_MS = 30_000L
 private const val BASE_EXPORT_TIMEOUT_MS = 180_000L
@@ -41,6 +45,7 @@ data class AnnotatedOverlayFrame(
     val sourceHeight: Int = 0,
     val sourceRotationDegrees: Int = 0,
     val scaleMode: PoseScaleMode = PoseScaleMode.FIT,
+    val unreliableJointNames: Set<String> = emptySet(),
 )
 
 class OverlayStabilizer {
@@ -55,6 +60,7 @@ class OverlayStabilizer {
         showSkeleton: Boolean,
         freestyleViewMode: FreestyleViewMode = FreestyleViewMode.UNKNOWN,
         scaleMode: PoseScaleMode = PoseScaleMode.FIT,
+        unreliableJointNames: Set<String> = emptySet(),
     ): AnnotatedOverlayFrame {
         val visibilityGood = frame.joints.count { it.visibility >= MIN_VISIBILITY } >= MIN_VISIBLE_JOINTS
         val confidenceGood = frame.confidence >= MIN_CONFIDENCE
@@ -84,6 +90,7 @@ class OverlayStabilizer {
             sourceHeight = frame.analysisHeight,
             sourceRotationDegrees = frame.analysisRotationDegrees,
             scaleMode = scaleMode,
+            unreliableJointNames = unreliableJointNames,
         )
     }
 
@@ -113,6 +120,7 @@ class AnnotatedExportPipeline(
     private val updateExportStatus: suspend (Long, AnnotatedExportStatus) -> Unit,
     private val verifyMedia: (String?) -> MediaVerificationResult = { uri -> MediaVerificationHelper.verify(uri) },
     private val exportTimeoutMs: Long = BASE_EXPORT_TIMEOUT_MS,
+    private val stallWindowMs: Long = DEFAULT_STALL_WINDOW_MS,
     private val renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, OverlayTimeline, ExportPreset, (Int, Int) -> Unit, (AnnotatedExportTelemetry) -> Unit) -> ComposerResult =
         { rawUri, drill, side, timeline, preset, onProgress, onTelemetry ->
             composer.compose(rawUri, timeline, drill, side, preset, onProgress, onTelemetry)
@@ -120,73 +128,79 @@ class AnnotatedExportPipeline(
 ) {
     // Timeout scales with normalized timeline complexity so longer/denser sessions
     // receive more budget while still honoring a maximum cap.
-    private fun computeExportTimeoutMs(overlayTimeline: OverlayTimeline): Long {
-        if (overlayTimeline.frames.isEmpty()) return exportTimeoutMs
-
-        val sortedFrames = overlayTimeline.frames.sortedBy { it.timestampMs }
-        val firstTimestampMs = sortedFrames.first().timestampMs
-        val lastTimestampMs = sortedFrames.last().timestampMs
-        val durationMs = (lastTimestampMs - firstTimestampMs).coerceAtLeast(0L)
-
-        val frameBudgetMs = sortedFrames.size * EXPORT_TIMEOUT_PER_FRAME_MS
-        val durationBudgetMs = durationMs / EXPORT_TIMEOUT_DURATION_DIVISOR
-
-        return maxOf(
-            exportTimeoutMs,
-            frameBudgetMs.toLong(),
-            durationBudgetMs,
-        ).coerceAtMost(MAX_EXPORT_TIMEOUT_MS)
+    internal fun computeDynamicTimeoutMs(
+        rawDurationMs: Long,
+        width: Int,
+        height: Int,
+        overlayFrameCount: Int,
+    ): Long {
+        val durationBudgetMs = (rawDurationMs.coerceAtLeast(0L) * 2L)
+        val resolutionPixels = width.coerceAtLeast(0).toLong() * height.coerceAtLeast(0).toLong()
+        val resolutionBudgetMs = when {
+            resolutionPixels >= 3840L * 2160L -> 80_000L
+            resolutionPixels >= 1920L * 1080L -> 40_000L
+            resolutionPixels >= 1280L * 720L -> 20_000L
+            else -> 0L
+        }
+        val overlayBudgetMs = (overlayFrameCount.coerceAtLeast(0).toLong() * 30L).coerceAtMost(90_000L)
+        return (exportTimeoutMs + durationBudgetMs + resolutionBudgetMs + overlayBudgetMs)
+            .coerceAtMost(MAX_EXPORT_TIMEOUT_MS)
     }
 
-    private fun normalizedTimelineForExport(overlayTimeline: OverlayTimeline): OverlayTimeline {
-        if (overlayTimeline.frames.isEmpty()) return overlayTimeline
-
+    internal fun freezeSnapshotForExport(
+        overlayTimeline: OverlayTimeline,
+        rawDurationMsHint: Long? = null,
+    ): FrozenExportSnapshot {
         val sortedFrames = overlayTimeline.frames.sortedBy { it.timestampMs }
-        val durationMs =
-            (sortedFrames.last().timestampMs - sortedFrames.first().timestampMs).coerceAtLeast(0L)
-
-        val targetFps =
-            when {
-                durationMs >= LONG_EXPORT_SESSION_MS -> MAX_EXPORT_FPS
-                else -> MAX_EXPORT_FPS
-            }
-
-        val minSpacingMs = (1000L / targetFps).coerceAtLeast(1L)
-        val normalizedFrames = ArrayList<OverlayTimelineFrame>(sortedFrames.size)
+        val clampedFrames = if (rawDurationMsHint != null && rawDurationMsHint > 0L) {
+            sortedFrames.filter { it.timestampMs <= rawDurationMsHint }
+        } else {
+            sortedFrames
+        }
+        val minSpacingMs = (1_000L / MAX_EXPORT_FPS).coerceAtLeast(1L)
+        val normalizedFrames = ArrayList<OverlayTimelineFrame>(clampedFrames.size)
         var lastAcceptedTimestampMs = Long.MIN_VALUE
-
-        for (frame in sortedFrames) {
+        for (frame in clampedFrames) {
             if (normalizedFrames.isEmpty()) {
                 normalizedFrames += frame
                 lastAcceptedTimestampMs = frame.timestampMs
                 continue
             }
-
-            val sameTimestamp = frame.timestampMs == lastAcceptedTimestampMs
-            val tooClose = frame.timestampMs - lastAcceptedTimestampMs < minSpacingMs
-            if (sameTimestamp || tooClose) continue
-
+            val isDuplicateTs = frame.timestampMs == lastAcceptedTimestampMs
+            val isTooClose = (frame.timestampMs - lastAcceptedTimestampMs) < minSpacingMs
+            if (isDuplicateTs || isTooClose) continue
             normalizedFrames += frame
             lastAcceptedTimestampMs = frame.timestampMs
         }
-
-        val finalFrames =
-            when {
-                normalizedFrames.isEmpty() -> listOf(sortedFrames.first())
-                normalizedFrames.last().timestampMs != sortedFrames.last().timestampMs ->
-                    normalizedFrames + sortedFrames.last()
-                else -> normalizedFrames
-            }
-
-        Log.d(
-            TAG,
-            "export_timeline_normalized " +
-                "inputFrames=${overlayTimeline.frames.size} " +
-                "outputFrames=${finalFrames.size} " +
-                "durationMs=$durationMs targetFps=$targetFps minSpacingMs=$minSpacingMs",
+        if (normalizedFrames.isNotEmpty() && normalizedFrames.last().timestampMs != clampedFrames.lastOrNull()?.timestampMs) {
+            clampedFrames.lastOrNull()?.let { normalizedFrames += it }
+        }
+        val usableFrames = if (normalizedFrames.isNotEmpty()) normalizedFrames else clampedFrames
+        val timeline = overlayTimeline.copy(frames = usableFrames)
+        val first = usableFrames.firstOrNull()
+        val last = usableFrames.lastOrNull()
+        val resolvedRawDurationMs = rawDurationMsHint?.takeIf { it > 0L } ?: if (first != null && last != null) {
+            (last.timestampMs - first.timestampMs).coerceAtLeast(0L)
+        } else {
+            0L
+        }
+        val validMetadataFrame = usableFrames.firstOrNull {
+            (it.captureWidth ?: 0) > 0 &&
+                (it.captureHeight ?: 0) > 0 &&
+                ((it.captureRotationDegrees ?: 0) in setOf(0, 90, 180, 270))
+        }
+        val sourceWidth = validMetadataFrame?.captureWidth ?: 0
+        val sourceHeight = validMetadataFrame?.captureHeight ?: 0
+        val sourceRotationDegrees = validMetadataFrame?.captureRotationDegrees ?: 0
+        return FrozenExportSnapshot(
+            overlayTimeline = timeline,
+            usableOverlayFrameCount = usableFrames.size,
+            rawOverlayFrameCount = overlayTimeline.frames.size,
+            rawDurationMs = resolvedRawDurationMs,
+            sourceWidth = sourceWidth,
+            sourceHeight = sourceHeight,
+            sourceRotationDegrees = sourceRotationDegrees,
         )
-
-        return overlayTimeline.copy(frames = finalFrames)
     }
 
     enum class VerificationStatus {
@@ -219,6 +233,7 @@ class AnnotatedExportPipeline(
         updateExportStatus: suspend (Long, AnnotatedExportStatus) -> Unit,
         verifyMedia: (String?) -> MediaVerificationResult = { uri -> MediaVerificationHelper.verify(uri) },
         exportTimeoutMs: Long = BASE_EXPORT_TIMEOUT_MS,
+        stallWindowMs: Long = DEFAULT_STALL_WINDOW_MS,
         renderAnnotatedVideo: suspend (String, DrillType, DrillCameraSide, OverlayTimeline, ExportPreset, (Int, Int) -> Unit, (AnnotatedExportTelemetry) -> Unit) -> ComposerResult,
     ) : this(
         compositor = throw IllegalStateException("Test constructor requires renderAnnotatedVideo"),
@@ -227,8 +242,36 @@ class AnnotatedExportPipeline(
         updateExportStatus = updateExportStatus,
         verifyMedia = verifyMedia,
         exportTimeoutMs = exportTimeoutMs,
+        stallWindowMs = stallWindowMs,
         renderAnnotatedVideo = renderAnnotatedVideo,
     )
+
+    data class ExportProgressSnapshot(
+        val percent: Int,
+        val decodedFrames: Int,
+        val renderedFrames: Int,
+        val encodedFrames: Int,
+        val outputBytes: Long,
+    )
+
+    data class FrozenExportSnapshot(
+        val overlayTimeline: OverlayTimeline,
+        val usableOverlayFrameCount: Int,
+        val rawOverlayFrameCount: Int,
+        val rawDurationMs: Long,
+        val sourceWidth: Int,
+        val sourceHeight: Int,
+        val sourceRotationDegrees: Int,
+    )
+
+    private fun ExportProgressSnapshot.hasAdvancedSince(previous: ExportProgressSnapshot?): Boolean {
+        if (previous == null) return true
+        return percent > previous.percent ||
+            decodedFrames > previous.decodedFrames ||
+            renderedFrames > previous.renderedFrames ||
+            encodedFrames > previous.encodedFrames ||
+            outputBytes > previous.outputBytes
+    }
 
     suspend fun export(
         sessionId: Long,
@@ -236,6 +279,7 @@ class AnnotatedExportPipeline(
         drillType: DrillType,
         drillCameraSide: DrillCameraSide,
         overlayTimeline: OverlayTimeline,
+        rawDurationMsHint: Long? = null,
         preset: ExportPreset = ExportPreset.BALANCED,
         onRenderProgress: (Int, Int) -> Unit = { _, _ -> },
     ): ExportResult {
@@ -256,48 +300,96 @@ class AnnotatedExportPipeline(
                 verificationStatus = VerificationStatus.FAILED,
             )
         }
-        val exportTimeline = normalizedTimelineForExport(overlayTimeline)
-        val effectiveTimeoutMs = computeExportTimeoutMs(exportTimeline)
-        if (exportTimeline.frames.isEmpty()) {
+        val frozenSnapshot = freezeSnapshotForExport(
+            overlayTimeline = overlayTimeline,
+            rawDurationMsHint = rawDurationMsHint,
+        )
+        if (frozenSnapshot.overlayTimeline.frames.isEmpty()) {
             updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-            Log.w(TAG, "export_failure sessionId=$sessionId reason=normalized_overlay_frames_empty")
+            Log.w(TAG, "export_failure sessionId=$sessionId reason=frozen_overlay_frames_empty")
             return ExportResult(
                 failureReason = AnnotatedExportFailureReason.OVERLAY_TIMELINE_EMPTY.name,
                 verificationStatus = VerificationStatus.FAILED,
             )
         }
+        val dynamicTimeoutMs = computeDynamicTimeoutMs(
+            rawDurationMs = frozenSnapshot.rawDurationMs,
+            width = frozenSnapshot.sourceWidth,
+            height = frozenSnapshot.sourceHeight,
+            overlayFrameCount = frozenSnapshot.usableOverlayFrameCount,
+        )
         var telemetry: AnnotatedExportTelemetry? = null
         updateExportStatus(sessionId, AnnotatedExportStatus.PROCESSING)
         Log.d(
             TAG,
-            "export_start sessionId=$sessionId rawVideoUri=$rawVideoUri " +
+                "export_start sessionId=$sessionId rawVideoUri=$rawVideoUri " +
                 "timelineFrames=${overlayTimeline.frames.size} " +
-                "normalizedTimelineFrames=${exportTimeline.frames.size} " +
-                "effectiveTimeoutMs=$effectiveTimeoutMs " +
-                "firstFrameTs=${exportTimeline.frames.first().timestampMs} " +
-                "lastFrameTs=${exportTimeline.frames.last().timestampMs}",
+                "usableOverlayFrameCount=${frozenSnapshot.usableOverlayFrameCount} " +
+                "rawOverlayFrameCount=${frozenSnapshot.rawOverlayFrameCount} " +
+                "rawDurationMs=${frozenSnapshot.rawDurationMs} sourceWidth=${frozenSnapshot.sourceWidth} sourceHeight=${frozenSnapshot.sourceHeight} sourceRotationDegrees=${frozenSnapshot.sourceRotationDegrees} " +
+                "dynamicTimeoutMs=$dynamicTimeoutMs stallWindowMs=$stallWindowMs " +
+                "firstFrameTs=${frozenSnapshot.overlayTimeline.frames.first().timestampMs} " +
+                "lastFrameTs=${frozenSnapshot.overlayTimeline.frames.last().timestampMs}",
         )
         val composeResult = try {
             coroutineScope {
                 var exportWorkStartedAtMs: Long? = null
+                var lastMeaningfulProgressAtMs: Long? = null
+                var lastProgressSnapshot: ExportProgressSnapshot? = null
+                var latestPercent = 0
+                var markedSlow = false
                 val renderJob = async {
-                    renderAnnotatedVideo(rawVideoUri, drillType, drillCameraSide, exportTimeline, preset, onRenderProgress) {
+                    renderAnnotatedVideo(rawVideoUri, drillType, drillCameraSide, frozenSnapshot.overlayTimeline, preset, { rendered, total ->
+                        val pct = ((rendered.toFloat() / total.coerceAtLeast(1).toFloat()) * 100f).toInt().coerceIn(0, 100)
+                        latestPercent = maxOf(latestPercent, pct)
+                        onRenderProgress(rendered, total)
+                    }) {
                         telemetry = it
+                        val now = System.currentTimeMillis()
+                        it.usableOverlayFrameCount = frozenSnapshot.usableOverlayFrameCount
+                        it.rawOverlayFrameCount = frozenSnapshot.rawOverlayFrameCount
+                        it.dynamicTimeoutMs = dynamicTimeoutMs
+                        it.stallWindowMs = stallWindowMs
                         if (it.decoderInitializedAtMs != null && exportWorkStartedAtMs == null) {
-                            exportWorkStartedAtMs = System.currentTimeMillis()
+                            exportWorkStartedAtMs = now
+                            if (lastMeaningfulProgressAtMs == null) {
+                                lastMeaningfulProgressAtMs = now
+                            }
+                        }
+                        val progressSnapshot = ExportProgressSnapshot(
+                            percent = latestPercent,
+                            decodedFrames = it.decodedFrameCount,
+                            renderedFrames = it.renderedFrameCount,
+                            encodedFrames = it.encodedFrameCount,
+                            outputBytes = it.outputBytesWritten,
+                        )
+                        if (progressSnapshot.hasAdvancedSince(lastProgressSnapshot)) {
+                            lastMeaningfulProgressAtMs = now
+                            it.lastProgressAtMs = now
+                            lastProgressSnapshot = progressSnapshot
+                        }
+                        val lastProgressAt = lastMeaningfulProgressAtMs
+                        if (lastProgressAt != null) {
+                            it.timeSinceLastProgressMs = (now - lastProgressAt).coerceAtLeast(0L)
                         }
                         Log.d(TAG, it.structuredLogLine(event = "export_progress"))
                     }
                 }
                 var timedOut = false
                 while (!renderJob.isCompleted) {
+                    val now = System.currentTimeMillis()
                     val startedAt = exportWorkStartedAtMs
-                    if (startedAt != null && System.currentTimeMillis() - startedAt >= effectiveTimeoutMs) {
+                    if (!markedSlow && startedAt != null && now - startedAt >= SOFT_SLOW_EXPORT_THRESHOLD_MS) {
+                        updateExportStatus(sessionId, AnnotatedExportStatus.PROCESSING_SLOW)
+                        markedSlow = true
+                    }
+                    val stalledForMs = lastMeaningfulProgressAtMs?.let { now - it } ?: 0L
+                    if (startedAt != null && now - startedAt >= dynamicTimeoutMs && stalledForMs >= stallWindowMs) {
                         timedOut = true
                         renderJob.cancel(CancellationException("export_timeout_after_work_started"))
                         break
                     }
-                    delay(25)
+                    delay(100)
                 }
                 if (timedOut) null else renderJob.await()
             }
@@ -322,7 +414,7 @@ class AnnotatedExportPipeline(
         }
         if (composeResult == null) {
             updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-            Log.w(TAG, "export_failure sessionId=$sessionId reason=timeout")
+            Log.w(TAG, "export_failure sessionId=$sessionId reason=timeout_without_progress dynamicTimeoutMs=$dynamicTimeoutMs stallWindowMs=$stallWindowMs")
             return ExportResult(
                 failureReason = AnnotatedExportFailureReason.EXPORT_TIMEOUT.name,
                 verificationStatus = VerificationStatus.FAILED,

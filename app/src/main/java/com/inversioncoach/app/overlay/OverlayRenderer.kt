@@ -33,6 +33,7 @@ fun OverlayRenderer(
     cueText: String = "",
     drillCameraSide: DrillCameraSide = DrillCameraSide.LEFT,
     freestyleViewMode: FreestyleViewMode = FreestyleViewMode.UNKNOWN,
+    unreliableJointNames: Set<String> = emptySet(),
 ) {
     Canvas(modifier = modifier) {
         val joints = frame?.joints.orEmpty()
@@ -55,6 +56,7 @@ fun OverlayRenderer(
                 scaleMode = scaleMode,
                 debugProjection = showDebugOverlay,
                 renderTarget = OverlayRenderTarget.LIVE_PREVIEW,
+                unreliableJointNames = unreliableJointNames,
             ),
         )
 
