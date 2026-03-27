@@ -23,4 +23,8 @@ class RoomDrillMovementProfileRepository(
             ),
         )
     }
+
+    override suspend fun clear(drillType: DrillType) {
+        dao.delete(drillType)
+    }
 }

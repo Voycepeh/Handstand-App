@@ -37,5 +37,9 @@ class DefaultCalibrationProfileProviderTest {
         override suspend fun save(profile: DrillMovementProfile) {
             profiles[profile.drillType] = profile
         }
+
+        override suspend fun clear(drillType: DrillType) {
+            profiles.remove(drillType)
+        }
     }
 }

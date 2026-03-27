@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -29,7 +30,10 @@ class CalibrationViewModelTest {
         val viewModel = CalibrationViewModel(DrillType.FREE_HANDSTAND, FakeProvider(repo), repo)
         viewModel.beginCalibration()
 
-        repeat(20) { viewModel.onPoseFrame(sampleFrame()) }
+        viewModel.onPoseFrame(sampleFrame())
+        viewModel.captureStep()
+        viewModel.continueToNextStep()
+        advanceUntilIdle()
 
         assertEquals(CalibrationPhase.CAPTURING, viewModel.state.value.phase)
         assertEquals("SIDE NEUTRAL", viewModel.state.value.currentStep.name.replace('_', ' '))
@@ -43,7 +47,11 @@ class CalibrationViewModelTest {
         val viewModel = CalibrationViewModel(DrillType.FREE_HANDSTAND, FakeProvider(repo), repo)
         viewModel.beginCalibration()
 
-        repeat(80) { viewModel.onPoseFrame(sampleFrame()) }
+        repeat(4) {
+            viewModel.onPoseFrame(sampleFrame())
+            viewModel.captureStep()
+            viewModel.continueToNextStep()
+        }
         advanceUntilIdle()
 
         assertNotNull(repo.saved)
@@ -58,7 +66,11 @@ class CalibrationViewModelTest {
         val viewModel = CalibrationViewModel(DrillType.FREE_HANDSTAND, FakeProvider(repo), repo)
         viewModel.beginCalibration()
 
-        repeat(80) { viewModel.onPoseFrame(sampleFrame()) }
+        repeat(4) {
+            viewModel.onPoseFrame(sampleFrame())
+            viewModel.captureStep()
+            viewModel.continueToNextStep()
+        }
         advanceUntilIdle()
 
         assertEquals(5, repo.saved?.profileVersion)
@@ -76,6 +88,25 @@ class CalibrationViewModelTest {
         assertEquals(CalibrationPhase.INTRO, viewModel.state.value.phase)
         assertEquals(0, viewModel.state.value.acceptedFrames)
         assertTrue(repo.saved == null)
+        kotlinx.coroutines.Dispatchers.resetMain()
+    }
+
+    @Test
+    fun captureSetsCapturedStateAndReviewFrameUsesCapturedFrame() = runTest(dispatcher) {
+        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+        val repo = FakeRepo()
+        val viewModel = CalibrationViewModel(DrillType.FREE_HANDSTAND, FakeProvider(repo), repo)
+        viewModel.beginCalibration()
+
+        viewModel.onPoseFrame(sampleFrame())
+        val liveFrame = viewModel.state.value.latestFrame
+        viewModel.captureStep()
+        val state = viewModel.state.value
+
+        assertTrue(state.hasCapturedFrame)
+        assertNotNull(state.capturedFrame)
+        assertSame(state.capturedFrame, state.reviewFrame)
+        assertTrue(liveFrame !== null)
         kotlinx.coroutines.Dispatchers.resetMain()
     }
 
@@ -112,6 +143,10 @@ class CalibrationViewModelTest {
 
         override suspend fun save(profile: DrillMovementProfile) {
             saved = profile
+        }
+
+        override suspend fun clear(drillType: DrillType) {
+            saved = null
         }
     }
 }

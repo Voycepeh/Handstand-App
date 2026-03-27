@@ -15,4 +15,5 @@ data class DrillMovementProfile(
 interface DrillMovementProfileRepository {
     suspend fun get(drillType: DrillType): DrillMovementProfile?
     suspend fun save(profile: DrillMovementProfile)
+    suspend fun clear(drillType: DrillType)
 }

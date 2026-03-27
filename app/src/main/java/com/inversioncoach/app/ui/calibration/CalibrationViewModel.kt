@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 class CalibrationViewModel(
     private val drillType: DrillType,
@@ -40,9 +41,10 @@ class CalibrationViewModel(
     val state: StateFlow<CalibrationUiState> = _state.asStateFlow()
 
     private var stepStartedAtMs: Long = 0L
-    private val acceptedForStep = mutableListOf<PoseFrame>()
     private var rejectedForStep = 0
     private var previousFrame: PoseFrame? = null
+    private var latestRawFrame: PoseFrame? = null
+    private var capturedRawFrame: PoseFrame? = null
 
     fun beginCalibration() {
         startStep(0)
@@ -51,6 +53,9 @@ class CalibrationViewModel(
     fun onPoseFrame(frame: PoseFrame) {
         val current = _state.value
         if (current.phase != CalibrationPhase.CAPTURING) return
+        if (current.hasCapturedFrame) return
+
+        latestRawFrame = frame
 
         val readiness = readinessEvaluator.evaluate(current.currentStep, frame)
         val isStillEnough = isStillEnough(frame)
@@ -74,25 +79,71 @@ class CalibrationViewModel(
 
         previousFrame = frame
         if (ready) {
-            acceptedForStep += frame
-            _state.update { it.copy(acceptedFrames = acceptedForStep.size, errorMessage = null) }
-            if (acceptedForStep.size >= current.requiredFrames) {
-                completeCurrentStep()
-            }
+            _state.update { it.copy(errorMessage = null) }
         } else {
             rejectedForStep += 1
             _state.update { it.copy(errorMessage = null) }
         }
     }
 
+    fun captureStep() {
+        val current = _state.value
+        if (current.phase != CalibrationPhase.CAPTURING) return
+        if (!current.isReady) {
+            _state.update { it.copy(errorMessage = "Not ready yet. Adjust position first.") }
+            return
+        }
+        val frame = latestRawFrame
+        if (frame == null) {
+            _state.update { it.copy(errorMessage = "No frame available yet. Please wait for camera preview.") }
+            return
+        }
+        capturedRawFrame = frame
+        _state.update {
+            it.copy(
+                capturedFrame = frame.toSmoothedPoseFrame(),
+                hasCapturedFrame = true,
+                acceptedFrames = it.requiredFrames,
+                stepResultMessage = "Frame captured. Retake or continue.",
+                errorMessage = null,
+            )
+        }
+    }
+
+    fun retakeStep() {
+        val current = _state.value
+        if (current.phase != CalibrationPhase.CAPTURING || !current.hasCapturedFrame) return
+        capturedRawFrame = null
+        _state.update {
+            it.copy(
+                capturedFrame = null,
+                hasCapturedFrame = false,
+                acceptedFrames = 0,
+                stepResultMessage = "Retake ready. Hold still and capture again.",
+                errorMessage = null,
+            )
+        }
+    }
+
+    fun continueToNextStep() {
+        val current = _state.value
+        if (current.phase != CalibrationPhase.CAPTURING) return
+        if (!current.hasCapturedFrame) {
+            _state.update { it.copy(errorMessage = "Capture a frame before continuing.") }
+            return
+        }
+        completeCurrentStep()
+    }
+
     private fun completeCurrentStep() {
         val step = _state.value.currentStep
+        val frame = capturedRawFrame ?: return
         session.record(
             CalibrationCapture(
                 step = step,
                 startedAtMs = stepStartedAtMs,
                 completedAtMs = System.currentTimeMillis(),
-                acceptedFrames = acceptedForStep.toList(),
+                acceptedFrames = listOf(frame),
                 rejectedFrameCount = rejectedForStep,
             ),
         )
@@ -106,12 +157,13 @@ class CalibrationViewModel(
         _state.update {
             it.copy(
                 stepResultMessage = "Step ${currentIndex + 1} complete.",
+                completedSteps = it.completedSteps + step,
                 isReady = false,
             )
         }
 
         viewModelScope.launch {
-            delay(700)
+            delay(350)
             startStep(currentIndex + 1)
         }
     }
@@ -130,10 +182,11 @@ class CalibrationViewModel(
             }
 
             val existing = calibrationProfileProvider.resolve(drillType)
+            val updatedAtMs = System.currentTimeMillis()
             val newProfile = existing.copy(
                 profileVersion = existing.profileVersion + 1,
                 userBodyProfile = builtProfile,
-                updatedAtMs = System.currentTimeMillis(),
+                updatedAtMs = updatedAtMs,
             )
             drillMovementProfileRepository.save(newProfile)
 
@@ -141,6 +194,9 @@ class CalibrationViewModel(
                 it.copy(
                     phase = CalibrationPhase.COMPLETED,
                     stepResultMessage = "Calibration saved.",
+                    completedSteps = steps.toSet(),
+                    savedProfileSummary = summarizeProfile(builtProfile),
+                    savedAtMs = updatedAtMs,
                     errorMessage = null,
                 )
             }
@@ -150,9 +206,10 @@ class CalibrationViewModel(
     private fun startStep(index: Int) {
         val step = steps[index]
         val copy = copyFor(step)
-        acceptedForStep.clear()
         rejectedForStep = 0
         previousFrame = null
+        latestRawFrame = null
+        capturedRawFrame = null
         stepStartedAtMs = System.currentTimeMillis()
         _state.value = _state.value.copy(
             phase = CalibrationPhase.CAPTURING,
@@ -163,10 +220,14 @@ class CalibrationViewModel(
             instruction = copy.instruction,
             cameraPlacement = copy.cameraPlacement,
             acceptedFrames = 0,
+            requiredFrames = 1,
             isReady = false,
             readinessMessage = "Get into position...",
             missingRequiredJoints = emptyList(),
             requiredJointNames = requiredJointsFor(step),
+            latestFrame = null,
+            capturedFrame = null,
+            hasCapturedFrame = false,
             stepResultMessage = null,
             errorMessage = null,
         )
@@ -214,6 +275,13 @@ class CalibrationViewModel(
         if (previousNose == null || currentNose == null) return true
         val movement = abs(previousNose.x - currentNose.x) + abs(previousNose.y - currentNose.y)
         return movement < 0.04f
+    }
+
+    private fun summarizeProfile(profile: com.inversioncoach.app.calibration.UserBodyProfile): String {
+        val shoulder = (profile.shoulderWidthNormalized * 100).roundToInt()
+        val torso = (profile.torsoLengthNormalized * 100).roundToInt()
+        val consistency = (profile.leftRightConsistency * 100).roundToInt()
+        return "Shoulders $shoulder • Torso $torso • Symmetry $consistency%"
     }
 
     private fun PoseFrame.toSmoothedPoseFrame(): SmoothedPoseFrame = SmoothedPoseFrame(

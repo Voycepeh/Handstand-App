@@ -27,4 +27,12 @@ data class CalibrationUiState(
     val stepResultMessage: String? = null,
     val visibleJointCount: Int = 0,
     val latestFrame: SmoothedPoseFrame? = null,
-)
+    val capturedFrame: SmoothedPoseFrame? = null,
+    val hasCapturedFrame: Boolean = false,
+    val completedSteps: Set<CalibrationStep> = emptySet(),
+    val savedProfileSummary: String? = null,
+    val savedAtMs: Long? = null,
+) {
+    val reviewFrame: SmoothedPoseFrame?
+        get() = capturedFrame ?: latestFrame
+}
