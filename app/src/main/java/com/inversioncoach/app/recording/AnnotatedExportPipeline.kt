@@ -20,8 +20,8 @@ import kotlin.math.abs
 private const val TAG = "AnnotatedExportPipeline"
 private const val MAX_EXPORT_FPS = 12
 private const val LONG_EXPORT_SESSION_MS = 30_000L
-private const val BASE_EXPORT_TIMEOUT_MS = 25_000L
-private const val MAX_EXPORT_TIMEOUT_MS = 90_000L
+private const val BASE_EXPORT_TIMEOUT_MS = 180_000L
+private const val MAX_EXPORT_TIMEOUT_MS = 300_000L
 private const val EXPORT_TIMEOUT_PER_FRAME_MS = 80L
 private const val EXPORT_TIMEOUT_DURATION_DIVISOR = 2L
 
