@@ -1,5 +1,6 @@
 package com.inversioncoach.app.motion
 
+import com.inversioncoach.app.calibration.RepTemplate
 import com.inversioncoach.app.model.AlignmentStrictness
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.motion.features.AngleFeatureExtractor
@@ -28,6 +29,7 @@ class MotionAnalysisPipeline(
     private var alignmentExtractor = DefaultAlignmentFeatureExtractor(profile, UserCalibrationSettings(AlignmentStrictness.BEGINNER))
     private var holdQualityTracker = HoldQualityTracker(UserCalibrationSettings(AlignmentStrictness.BEGINNER).resolvedThresholds())
     private var repQualityEvaluator = RepQualityEvaluator(profile, UserCalibrationSettings(AlignmentStrictness.BEGINNER).resolvedThresholds())
+    private var activeRepTemplate: RepTemplate? = null
     private val holdTrackerCompat = HoldAlignmentTracker()
     private val faultEngine = FaultDetectionEngine(
         movementPattern = drillDefinition.movementPattern,
@@ -107,6 +109,7 @@ class MotionAnalysisPipeline(
                 alignmentScore = alignment.smoothedScore,
                 dominantFault = alignment.dominantFault,
                 angles = angles,
+                frame = frame,
             )
         } else {
             null
@@ -138,6 +141,18 @@ class MotionAnalysisPipeline(
         alignmentExtractor.reconfigure(calibration)
         holdQualityTracker = HoldQualityTracker(calibration.resolvedThresholds())
         repQualityEvaluator = RepQualityEvaluator(profile, calibration.resolvedThresholds())
+        repQualityEvaluator.setTemplate(activeRepTemplate)
+    }
+
+    fun setRepTemplate(template: RepTemplate?) {
+        activeRepTemplate = template
+        repQualityEvaluator.setTemplate(template)
+    }
+
+    fun completedRepFrames(): List<List<LegacyPoseFrame>> {
+        return repQualityEvaluator.completedRepWindows()
+            .filter { it.result.repAccepted }
+            .map { it.frames }
     }
 
     private fun mapJoint(name: String): JointId? = when (name) {

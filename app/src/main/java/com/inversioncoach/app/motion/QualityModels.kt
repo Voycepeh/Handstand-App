@@ -114,6 +114,7 @@ data class RepQualityResult(
     val repAccepted: Boolean,
     val repFaults: List<String>,
     val failureReason: String,
+    val templateSimilarityScore: Int? = null,
 )
 
 data class RepQualitySnapshot(

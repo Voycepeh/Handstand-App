@@ -1,8 +1,11 @@
 package com.inversioncoach.app.motion
 
+import com.inversioncoach.app.calibration.RepTemplate
+import com.inversioncoach.app.calibration.rep.RepSimilarityComparator
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sqrt
+import com.inversioncoach.app.model.PoseFrame as LegacyPoseFrame
 
 class AlignmentScoringEngine(
     private val profile: DrillQualityProfile,
@@ -141,15 +144,38 @@ class HoldQualityTracker(
 class RepQualityEvaluator(
     private val profile: DrillQualityProfile,
     private val thresholds: QualityThresholds,
+    private val repSimilarityComparator: RepSimilarityComparator = RepSimilarityComparator(),
 ) {
+    private companion object {
+        private const val STALE_CYCLE_TIMEOUT_MS = 5000L
+    }
+
+    data class CompletedRep(
+        val frames: List<LegacyPoseFrame>,
+        val result: RepQualityResult,
+    )
+
     private var lastRawAttempts = 0
     private var repCount = 0
     private val results = mutableListOf<RepQualityResult>()
+    private val completedReps = mutableListOf<CompletedRep>()
+    private var activeTemplate: RepTemplate? = null
+    private val activeRepFrames = mutableListOf<LegacyPoseFrame>()
     private var cycleStartTs = 0L
     private var minElbowInCycle = 180f
     private var maxElbowAtTop = 0f
     private var belowFloorDurationMs = 0L
     private var lastTs = 0L
+    private var cycleLastFrameTs = 0L
+
+    private fun beginCycle(timestampMs: Long) {
+        cycleStartTs = timestampMs
+        minElbowInCycle = 180f
+        maxElbowAtTop = 0f
+        belowFloorDurationMs = 0L
+        activeRepFrames.clear()
+        cycleLastFrameTs = 0L
+    }
 
     fun update(
         timestampMs: Long,
@@ -158,12 +184,20 @@ class RepQualityEvaluator(
         alignmentScore: Int,
         dominantFault: String,
         angles: AngleFrame,
+        frame: LegacyPoseFrame,
     ): RepQualitySnapshot {
+        if (cycleStartTs != 0L && cycleLastFrameTs != 0L && timestampMs - cycleLastFrameTs > STALE_CYCLE_TIMEOUT_MS) {
+            resetCycleState()
+        }
+
         if (movement.currentPhase == MovementPhase.ECCENTRIC && cycleStartTs == 0L) {
-            cycleStartTs = timestampMs
-            minElbowInCycle = 180f
-            maxElbowAtTop = 0f
-            belowFloorDurationMs = 0L
+            beginCycle(timestampMs)
+        }
+        if (cycleStartTs != 0L) {
+            activeRepFrames += frame
+            cycleLastFrameTs = timestampMs
+        } else if (activeRepFrames.isNotEmpty()) {
+            activeRepFrames.clear()
         }
         val delta = if (lastTs == 0L) 0L else (timestampMs - lastTs).coerceAtLeast(0L)
         lastTs = timestampMs
@@ -177,9 +211,19 @@ class RepQualityEvaluator(
         val raw = repTracking?.rawRepAttempts ?: lastRawAttempts
         if (raw > lastRawAttempts) {
             repCount += 1
-            latest = finalizeRep(timestampMs, alignmentScore, dominantFault, movement.currentPhase)
+            latest = finalizeRep(
+                ts = timestampMs,
+                alignmentScore = alignmentScore,
+                dominantFault = dominantFault,
+                phase = movement.currentPhase,
+                repFrames = activeRepFrames.toList(),
+            )
             results += latest
-            cycleStartTs = 0L
+            completedReps += CompletedRep(
+                frames = activeRepFrames.toList(),
+                result = latest,
+            )
+            resetCycleState()
             lastRawAttempts = raw
         }
 
@@ -205,14 +249,45 @@ class RepQualityEvaluator(
         )
     }
 
-    private fun finalizeRep(ts: Long, alignmentScore: Int, dominantFault: String, phase: MovementPhase): RepQualityResult {
+    fun setTemplate(template: RepTemplate?) {
+        activeTemplate = template
+    }
+
+    fun completedRepWindows(): List<CompletedRep> = completedReps.toList()
+
+    private fun resetCycleState() {
+        activeRepFrames.clear()
+        cycleStartTs = 0L
+        cycleLastFrameTs = 0L
+        minElbowInCycle = 180f
+        maxElbowAtTop = 0f
+        belowFloorDurationMs = 0L
+    }
+
+    private fun finalizeRep(
+        ts: Long,
+        alignmentScore: Int,
+        dominantFault: String,
+        phase: MovementPhase,
+        repFrames: List<LegacyPoseFrame>,
+    ): RepQualityResult {
         val durationMs = if (cycleStartTs > 0L) (ts - cycleStartTs).coerceAtLeast(1L) else 1L
         val depthScore = (1f - abs(minElbowInCycle - profile.repDepthTargetDeg) / 90f).coerceIn(0f, 1f).toScore()
         val lineScore = alignmentScore
         val shoulderScore = if (dominantFault == "shoulder_stack") 50 else 85
         val lockoutScore = (1f - abs(maxElbowAtTop - profile.repLockoutTargetDeg) / 50f).coerceIn(0f, 1f).toScore()
         val tempoScore = (1f - abs(durationMs - 1800f) / 1800f).coerceIn(0f, 1f).toScore()
-        val repScore = (depthScore * 0.28f + lineScore * 0.27f + shoulderScore * 0.15f + lockoutScore * 0.2f + tempoScore * 0.1f).toInt()
+        val coreScore = (depthScore * 0.28f + lineScore * 0.27f + shoulderScore * 0.15f + lockoutScore * 0.2f + tempoScore * 0.1f)
+            .toInt()
+            .coerceIn(0, 100)
+        val templateSimilarityScore = activeTemplate?.let { template ->
+            repSimilarityComparator.similarityScore(repFrames, template)
+        }
+        val repScore = if (templateSimilarityScore != null) {
+            (coreScore * 0.8f + templateSimilarityScore * 0.2f).toInt().coerceIn(0, 100)
+        } else {
+            coreScore
+        }
 
         val faults = mutableListOf<String>()
         if (depthScore < 60) faults += "depth"
@@ -236,6 +311,6 @@ class RepQualityEvaluator(
             else -> "accepted"
         }
 
-        return RepQualityResult(repCount, repScore, accepted, faults, reason)
+        return RepQualityResult(repCount, repScore, accepted, faults, reason, templateSimilarityScore = templateSimilarityScore)
     }
 }

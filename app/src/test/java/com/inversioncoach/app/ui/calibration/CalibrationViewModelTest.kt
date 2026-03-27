@@ -133,6 +133,10 @@ class CalibrationViewModelTest {
         override suspend fun resolve(drillType: DrillType): DrillMovementProfile {
             return repo.initial ?: DefaultDrillMovementProfiles.forDrill(drillType)
         }
+
+        override suspend fun save(profile: DrillMovementProfile) {
+            repo.save(profile)
+        }
     }
 
     private class FakeRepo(initialVersion: Int = 1) : DrillMovementProfileRepository {

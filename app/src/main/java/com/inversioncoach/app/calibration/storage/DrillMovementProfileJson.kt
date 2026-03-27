@@ -3,8 +3,11 @@ package com.inversioncoach.app.calibration.storage
 import com.inversioncoach.app.calibration.DrillMovementProfile
 import com.inversioncoach.app.calibration.HoldTemplate
 import com.inversioncoach.app.calibration.RepTemplate
+import com.inversioncoach.app.calibration.RepTemplateSource
+import com.inversioncoach.app.calibration.TemporalMetricProfile
 import com.inversioncoach.app.calibration.UserBodyProfile
 import com.inversioncoach.app.model.DrillType
+import org.json.JSONArray
 import org.json.JSONObject
 
 class DrillMovementProfileJson {
@@ -55,9 +58,20 @@ class DrillMovementProfileJson {
     private fun repTemplateJson(rep: RepTemplate): JSONObject = JSONObject().apply {
         put("drillType", rep.drillType.name)
         put("profileVersion", rep.profileVersion)
-        put("targetRepCount", rep.targetRepCount)
-        put("depthTarget", rep.depthTarget)
-        put("tempoSeconds", rep.tempoSeconds)
+        put("expectedRepFrames", rep.expectedRepFrames)
+        put("minRomThreshold", rep.minRomThreshold)
+        put("source", rep.source.name)
+        put("temporalMetrics", JSONArray().apply {
+            rep.temporalMetrics.forEach { metric ->
+                put(
+                    JSONObject().apply {
+                        put("metricKey", metric.metricKey)
+                        put("meanSeries", JSONArray(metric.meanSeries))
+                        put("toleranceSeries", JSONArray(metric.toleranceSeries))
+                    },
+                )
+            }
+        })
     }
 
     private fun decodeUserBodyProfile(obj: JSONObject): UserBodyProfile = UserBodyProfile(
@@ -80,11 +94,30 @@ class DrillMovementProfileJson {
         stabilityTarget = obj.optInt("stabilityTarget", 80),
     )
 
-    private fun decodeRepTemplate(obj: JSONObject, fallbackDrillType: DrillType): RepTemplate = RepTemplate(
-        drillType = obj.optString("drillType").takeIf { it.isNotBlank() }?.let(DrillType::valueOf) ?: fallbackDrillType,
-        profileVersion = obj.optInt("profileVersion", 1),
-        targetRepCount = if (obj.has("targetRepCount") && !obj.isNull("targetRepCount")) obj.optInt("targetRepCount") else null,
-        depthTarget = if (obj.has("depthTarget") && !obj.isNull("depthTarget")) obj.optDouble("depthTarget").toFloat() else null,
-        tempoSeconds = if (obj.has("tempoSeconds") && !obj.isNull("tempoSeconds")) obj.optDouble("tempoSeconds").toFloat() else null,
-    )
+    private fun decodeRepTemplate(obj: JSONObject, fallbackDrillType: DrillType): RepTemplate {
+        val temporalMetrics = obj.optJSONArray("temporalMetrics")?.toTemporalMetricProfiles().orEmpty()
+        return RepTemplate(
+            drillType = obj.optString("drillType").takeIf { it.isNotBlank() }?.let(DrillType::valueOf) ?: fallbackDrillType,
+            profileVersion = obj.optInt("profileVersion", 1),
+            temporalMetrics = temporalMetrics,
+            expectedRepFrames = obj.optInt("expectedRepFrames", 1).coerceAtLeast(1),
+            minRomThreshold = if (obj.has("minRomThreshold") && !obj.isNull("minRomThreshold")) obj.optDouble("minRomThreshold").toFloat() else null,
+            source = obj.optString("source").takeIf { it.isNotBlank() }
+                ?.let { raw -> RepTemplateSource.entries.firstOrNull { it.name == raw } }
+                ?: RepTemplateSource.DEFAULT_BASELINE,
+        )
+    }
+
+    private fun JSONArray.toTemporalMetricProfiles(): List<TemporalMetricProfile> {
+        return List(length()) { index ->
+            val metric = optJSONObject(index) ?: JSONObject()
+            TemporalMetricProfile(
+                metricKey = metric.optString("metricKey"),
+                meanSeries = metric.optJSONArray("meanSeries")?.toFloatList().orEmpty(),
+                toleranceSeries = metric.optJSONArray("toleranceSeries")?.toFloatList().orEmpty(),
+            )
+        }.filter { it.metricKey.isNotBlank() }
+    }
+
+    private fun JSONArray.toFloatList(): List<Float> = List(length()) { index -> optDouble(index, 0.0).toFloat() }
 }

@@ -25,13 +25,7 @@ object DefaultDrillMovementProfiles {
                 profileVersion = 1,
                 userBodyProfile = null,
                 holdTemplate = null,
-                repTemplate = RepTemplate(
-                    drillType = drillType,
-                    profileVersion = 1,
-                    targetRepCount = null,
-                    depthTarget = null,
-                    tempoSeconds = null,
-                ),
+                repTemplate = null,
                 createdAtMs = nowMs,
                 updatedAtMs = nowMs,
             )

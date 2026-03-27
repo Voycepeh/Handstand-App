@@ -9,4 +9,8 @@ class DefaultCalibrationProfileProvider(
     override suspend fun resolve(drillType: DrillType): DrillMovementProfile {
         return repository.get(drillType) ?: DefaultDrillMovementProfiles.forDrill(drillType)
     }
+
+    override suspend fun save(profile: DrillMovementProfile) {
+        repository.save(profile)
+    }
 }

@@ -53,6 +53,7 @@ import com.inversioncoach.app.summary.SummaryGenerator
 import com.inversioncoach.app.calibration.CalibrationProfileProvider
 import com.inversioncoach.app.calibration.DrillMovementProfile
 import com.inversioncoach.app.calibration.UserBodyProfile
+import com.inversioncoach.app.calibration.rep.SessionRepTemplateUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -93,6 +94,7 @@ class LiveCoachingViewModel(
     private val compressionPipeline: VideoCompressionPipeline = VideoCompressionPipeline(),
     private val annotatedExportPipeline: AnnotatedExportPipeline,
 ) : ViewModel() {
+    private val repTemplateUpdater = SessionRepTemplateUpdater()
 
     enum class ExportLifecycleState {
         IDLE,
@@ -863,6 +865,8 @@ class LiveCoachingViewModel(
                     message = "Replay selection=${replaySelection.label}",
                     metrics = mapOf("replayUri" to replaySelection.uri.orEmpty()),
                 )
+                val learnedProfile = maybePersistLearnedRepTemplate(completedAtMs)
+                val calibrationProfileForSession = learnedProfile ?: activeMovementProfile
                 repository.saveSession(
                     SessionRecord(
                         id = activeSessionId,
@@ -901,8 +905,8 @@ class LiveCoachingViewModel(
                         retainedAssetType = finalVideos.retainedAssetType,
                         overlayFrameCount = overlayFrames.size,
                         overlayTimelineUri = overlayTimelineUri,
-                        calibrationProfileVersion = activeMovementProfile?.profileVersion,
-                        calibrationUpdatedAtMs = activeMovementProfile?.updatedAtMs,
+                        calibrationProfileVersion = calibrationProfileForSession?.profileVersion,
+                        calibrationUpdatedAtMs = calibrationProfileForSession?.updatedAtMs,
                         notesUri = null,
                         bestFrameTimestampMs = bestFrame,
                         worstFrameTimestampMs = worstFrame,
@@ -984,6 +988,7 @@ class LiveCoachingViewModel(
             smoother.reset()
             correctionEngine.reset()
             activeMovementProfile = calibrationProfileProvider.resolve(drillType)
+            motionPipeline.setRepTemplate(activeMovementProfile?.repTemplate)
             val now = System.currentTimeMillis()
             sessionStartedAtMs = now
             val newSessionId = repository.saveSession(
@@ -1065,6 +1070,24 @@ class LiveCoachingViewModel(
     private fun calibrationMetadataJson(): String {
         val profile = activeMovementProfile ?: return ""
         return "calibrationProfileVersion:${profile.profileVersion};calibrationUpdatedAtMs:${profile.updatedAtMs}"
+    }
+
+    private suspend fun maybePersistLearnedRepTemplate(nowMs: Long): DrillMovementProfile? {
+        if (sessionMode != SessionMode.DRILL) return null
+
+        val currentProfile = activeMovementProfile ?: calibrationProfileProvider.resolve(drillType)
+        val updatedProfile = repTemplateUpdater.updateProfile(
+            profile = currentProfile,
+            repWindows = motionPipeline.completedRepFrames(),
+            minimumRepCount = 2,
+            minimumFramesPerRep = 10,
+            learnedWeight = 0.3f,
+            nowMs = nowMs,
+        ) ?: return null
+        calibrationProfileProvider.save(updatedProfile)
+        activeMovementProfile = updatedProfile
+        motionPipeline.setRepTemplate(updatedProfile.repTemplate)
+        return updatedProfile
     }
 
     private fun setRawPersistState(status: RawPersistStatus, failureReason: String?) {
