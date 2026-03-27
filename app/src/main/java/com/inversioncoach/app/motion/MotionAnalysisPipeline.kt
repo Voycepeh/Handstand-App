@@ -1,5 +1,6 @@
 package com.inversioncoach.app.motion
 
+import com.inversioncoach.app.calibration.DrillMovementProfile
 import com.inversioncoach.app.calibration.RepTemplate
 import com.inversioncoach.app.model.AlignmentStrictness
 import com.inversioncoach.app.model.DrillType
@@ -38,6 +39,7 @@ class MotionAnalysisPipeline(
     private val feedbackEngine = FeedbackEngine()
     private val stabilityExtractor: StabilityFeatureExtractor = DefaultStabilityFeatureExtractor()
     private var configuredStrictness: AlignmentStrictness = AlignmentStrictness.BEGINNER
+    private val holdTemplateComparator = HoldTemplateComparator()
 
     private companion object {
         private const val MINIMAL_ALIGNMENT_DELTA = 12
@@ -62,7 +64,12 @@ class MotionAnalysisPipeline(
         val blockedReason: String,
     )
 
-    fun analyze(frame: LegacyPoseFrame, strictness: AlignmentStrictness = AlignmentStrictness.BEGINNER, calibration: UserCalibrationSettings? = null): Output {
+    fun analyze(
+        frame: LegacyPoseFrame,
+        strictness: AlignmentStrictness = AlignmentStrictness.BEGINNER,
+        calibration: UserCalibrationSettings? = null,
+        movementProfile: DrillMovementProfile? = null,
+    ): Output {
         val effectiveCalibration = calibration ?: UserCalibrationSettings(strictness)
         configureStrictnessIfNeeded(effectiveCalibration)
 
@@ -95,8 +102,21 @@ class MotionAnalysisPipeline(
         val repTracking = if (drillDefinition.repMode == RepMode.REP_BASED) phaseDetector.snapshot() else null
         val holdTracking = if (drillDefinition.repMode == RepMode.HOLD_BASED) holdTrackerCompat.update(frame.timestampMs, isMinimallyAligned) else null
 
+        val blendedHoldAlignmentScore = if (drillDefinition.repMode == RepMode.HOLD_BASED) {
+            val template = movementProfile?.holdTemplate
+            val bodyProfile = movementProfile?.userBodyProfile
+            if (template != null) {
+                val templateScore = holdTemplateComparator.similarityScore(frame, template, bodyProfile)
+                (alignment.smoothedScore * 0.8f + templateScore * 0.2f).toInt().coerceIn(0, 100)
+            } else {
+                alignment.smoothedScore
+            }
+        } else {
+            alignment.smoothedScore
+        }
+
         val holdQuality = if (drillDefinition.repMode == RepMode.HOLD_BASED) {
-            holdQualityTracker.update(frame.timestampMs, alignment.smoothedScore)
+            holdQualityTracker.update(frame.timestampMs, blendedHoldAlignmentScore)
         } else {
             null
         }

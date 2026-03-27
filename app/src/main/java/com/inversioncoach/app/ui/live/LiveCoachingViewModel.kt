@@ -381,7 +381,16 @@ class LiveCoachingViewModel(
         }
         val motionEligible = sessionMode == SessionMode.DRILL && (readiness?.timerEligible ?: false)
         val freestyleViewMode = if (sessionMode == SessionMode.FREESTYLE) freestyleOrientationClassifier.classify(smoothed.joints) else FreestyleViewMode.UNKNOWN
-        val motion = if (motionEligible) motionPipeline.analyze(corrected.frame, settings.alignmentStrictness, calibration) else null
+        val motion = if (motionEligible) {
+            motionPipeline.analyze(
+                frame = corrected.frame,
+                strictness = settings.alignmentStrictness,
+                calibration = calibration,
+                movementProfile = activeMovementProfile,
+            )
+        } else {
+            null
+        }
         _smoothedFrame.value = smoothed
         if (!overlayCaptureFrozen && shouldCaptureOverlayFrame(smoothed.timestampMs)) {
             val overlayFrame = overlayStabilizer.stabilize(
