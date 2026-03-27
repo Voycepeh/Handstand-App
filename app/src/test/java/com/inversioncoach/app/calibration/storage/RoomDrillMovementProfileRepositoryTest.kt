@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RoomDrillMovementProfileRepositoryTest {
@@ -31,13 +32,32 @@ class RoomDrillMovementProfileRepositoryTest {
         assertNull(restored)
     }
 
+    @Test
+    fun clearRemovesSavedProfile() = runTest {
+        val dao = FakeCalibrationDao()
+        val repository = RoomDrillMovementProfileRepository(dao, DrillMovementProfileJson())
+        val profile = DefaultDrillMovementProfiles.forDrill(DrillType.FREE_HANDSTAND, nowMs = 1234L)
+
+        repository.save(profile)
+        repository.clear(DrillType.FREE_HANDSTAND)
+
+        assertNull(repository.get(DrillType.FREE_HANDSTAND))
+        assertTrue(dao.deleted.contains(DrillType.FREE_HANDSTAND))
+    }
+
     private class FakeCalibrationDao : CalibrationDao {
         private val store = mutableMapOf<DrillType, CalibrationEntity>()
+        val deleted = mutableSetOf<DrillType>()
 
         override suspend fun get(drillType: DrillType): CalibrationEntity? = store[drillType]
 
         override suspend fun upsert(entity: CalibrationEntity) {
             store[entity.drillType] = entity
+        }
+
+        override suspend fun delete(drillType: DrillType) {
+            store.remove(drillType)
+            deleted += drillType
         }
     }
 }

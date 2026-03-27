@@ -17,6 +17,8 @@ object ServiceLocator {
     @Volatile
     private var db: InversionCoachDatabase? = null
     @Volatile
+    private var sessionRepository: SessionRepository? = null
+    @Volatile
     private var calibrationProvider: CalibrationProfileProvider? = null
     @Volatile
     private var drillMovementProfileRepository: DrillMovementProfileRepository? = null
@@ -35,13 +37,17 @@ object ServiceLocator {
     }
 
     fun repository(context: Context): SessionRepository {
-        val db = db(context)
-        return SessionRepository(
-            db.sessionDao(),
-            db.userSettingsDao(),
-            db.frameMetricDao(),
-            SessionBlobStorage(context.applicationContext),
-        )
+        return sessionRepository ?: synchronized(this) {
+            sessionRepository ?: run {
+                val db = db(context)
+                SessionRepository(
+                    db.sessionDao(),
+                    db.userSettingsDao(),
+                    db.frameMetricDao(),
+                    SessionBlobStorage(context.applicationContext),
+                ).also { sessionRepository = it }
+            }
+        }
     }
 
     fun metricsEngine(): AlignmentMetricsEngine = AlignmentMetricsEngine()

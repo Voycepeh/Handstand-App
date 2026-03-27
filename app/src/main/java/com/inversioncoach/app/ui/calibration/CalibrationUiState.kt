@@ -23,10 +23,16 @@ data class CalibrationUiState(
     val readinessMessage: String = "Position yourself fully in frame.",
     val requiredJointNames: List<String> = emptyList(),
     val missingRequiredJoints: List<String> = emptyList(),
-    val isCapturing: Boolean = false,
-    val isComplete: Boolean = false,
     val errorMessage: String? = null,
     val stepResultMessage: String? = null,
     val visibleJointCount: Int = 0,
     val latestFrame: SmoothedPoseFrame? = null,
-)
+    val capturedFrame: SmoothedPoseFrame? = null,
+    val hasCapturedFrame: Boolean = false,
+    val completedSteps: Set<CalibrationStep> = emptySet(),
+    val savedProfileSummary: String? = null,
+    val savedAtMs: Long? = null,
+) {
+    val reviewFrame: SmoothedPoseFrame?
+        get() = capturedFrame ?: latestFrame
+}
