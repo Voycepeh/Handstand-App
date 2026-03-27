@@ -209,7 +209,6 @@ class CalibrationViewModel(
                 profileVersion = nextVersion,
                 userBodyProfile = builtProfile,
                 holdTemplate = finalHoldTemplate,
-                updatedAtMs = System.currentTimeMillis(),
                 updatedAtMs = updatedAtMs,
             )
             drillMovementProfileRepository.save(newProfile)

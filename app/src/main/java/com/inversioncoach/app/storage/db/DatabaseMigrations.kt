@@ -4,7 +4,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 object DatabaseMigrations {
-    const val CREATE_DRILL_MOVEMENT_PROFILES_SQL =
+    val CREATE_DRILL_MOVEMENT_PROFILES_SQL =
         """
         CREATE TABLE IF NOT EXISTS `drill_movement_profiles` (
             `drillType` TEXT NOT NULL,

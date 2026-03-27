@@ -122,14 +122,6 @@ class DrillMovementProfileJson {
         )
     }
 
-    private fun decodeRepTemplate(obj: JSONObject, fallbackDrillType: DrillType): RepTemplate = RepTemplate(
-        drillType = obj.optString("drillType").takeIf { it.isNotBlank() }?.let(DrillType::valueOf) ?: fallbackDrillType,
-        profileVersion = obj.optInt("profileVersion", 1),
-        targetRepCount = if (obj.has("targetRepCount") && !obj.isNull("targetRepCount")) obj.optInt("targetRepCount") else null,
-        depthTarget = if (obj.has("depthTarget") && !obj.isNull("depthTarget")) obj.optDouble("depthTarget").toFloat() else null,
-        tempoSeconds = if (obj.has("tempoSeconds") && !obj.isNull("tempoSeconds")) obj.optDouble("tempoSeconds").toFloat() else null,
-    )
-
     private fun JSONArray.toMetricList(): List<HoldMetricTemplate> = buildList {
         for (index in 0 until length()) {
             val metric = optJSONObject(index) ?: continue
