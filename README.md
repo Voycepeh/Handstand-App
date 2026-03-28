@@ -3,9 +3,12 @@
 Inversion Coach is an Android app for live inversion coaching, pose-aware recording, imported-video analysis, and replay.
 
 It is built to help users practice handstand and inversion drills with:
+- multi-user profile switching
 - live coaching
 - pose overlays
 - uploaded video analysis
+- reference-template creation from uploaded videos
+- comparison scoring against saved references
 - session history
 - annotated replay and export
 - calibration-aware feedback
@@ -30,9 +33,19 @@ The app currently supports two primary flows:
 2. **Imported video analysis**
    - analyze an existing video offline
    - generate pose-aware metrics and replay context
+   - optionally save the upload as a drill reference template
+   - optionally compare the upload against a selected stored reference template
    - optionally export annotated output
 
 Both flows persist session data locally and resolve replay from the best available source, preferring annotated output when valid and falling back to raw video when needed.
+
+The app also supports a shared-device **multi-user profile workflow**:
+- create, rename, switch, and archive user profiles
+- keep one active user profile at a time
+- maintain body-profile calibration history per user
+- stamp each saved session with user/body profile attribution metadata
+
+In practice, this means teams/coaches can share one device while keeping per-athlete calibration history, session ownership, and comparison context separated.
 
 ## Who this repo is for
 
@@ -46,17 +59,25 @@ This repo is useful for:
 
 Start from the user journey, not the package list.
 
-1. A user chooses a drill or freestyle mode
-2. The app captures camera frames or imports a video
-3. Pose frames are analyzed into alignment and movement signals
-4. Overlays, cues, and results are generated
-5. Raw and annotated session outputs are saved for replay and history
+1. A user selects (or creates) an active user profile
+2. The app resolves that profile’s latest calibration/body profile (or default model)
+3. The user chooses a drill or freestyle mode
+4. The app captures camera frames or imports a video
+5. Pose frames are analyzed into alignment and movement signals
+6. (Optional) The user saves an uploaded attempt as a reference template for that drill
+7. (Optional) The user compares a current attempt against a previously saved reference template
+8. Overlays, cues, and results are generated
+9. Raw and annotated session outputs are saved for replay and history with profile attribution
 
 ## Core concepts
 
 ### Calibration
 
 Calibration stores body-specific values so analysis can become more consistent across users and drills.
+
+### Multi-user profile system
+
+One active user profile is selected from a list of local profiles. Calibration and session attribution are scoped to that active profile so multiple people can use the same device without mixing body-profile history.
 
 ### Drills
 
@@ -69,6 +90,10 @@ Live coaching handles countdown, recording, overlays, cues, and post-session fin
 ### Imported video analysis
 
 Imported video analysis applies the same general analysis idea to previously recorded footage.
+
+### Reference training and comparison
+
+Uploaded attempts can become drill-scoped reference templates. Later attempts can be scored against those templates (or built-in templates) to highlight similarity, phase-level performance, and top movement differences.
 
 ### Replay and export
 
@@ -145,7 +170,12 @@ The app can be understood in five layers:
 
 ## Current capabilities
 
+- multi-user profile management (create, switch, rename, archive)
+- active-user-scoped calibration/body profile versioning
+- per-session user/body profile attribution for history and replay integrity
 - live coaching sessions with countdown and drill/freestyle modes
+- drill-specific reference-template creation from uploaded videos
+- comparison scoring for current attempts against stored reference templates
 - pose smoothing, correction, and issue detection
 - overlay timeline capture for replay/export
 - raw capture persistence and media verification
