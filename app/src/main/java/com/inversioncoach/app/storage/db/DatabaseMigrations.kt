@@ -230,11 +230,85 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_16_17: Migration = object : Migration(16, 17) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `user_settings_new` (
+                    `id` INTEGER NOT NULL,
+                    `cueStyle` TEXT NOT NULL,
+                    `cueFrequencySeconds` REAL NOT NULL,
+                    `audioVolume` REAL NOT NULL,
+                    `localOnlyPrivacyMode` INTEGER NOT NULL,
+                    `retainDays` INTEGER NOT NULL,
+                    `debugOverlayEnabled` INTEGER NOT NULL,
+                    `maxStorageMb` INTEGER NOT NULL,
+                    `startupCountdownSeconds` INTEGER NOT NULL,
+                    `minSessionDurationSeconds` INTEGER NOT NULL,
+                    `alignmentStrictness` TEXT NOT NULL,
+                    `customLineDeviation` REAL NOT NULL,
+                    `customMinimumGoodFormScore` INTEGER NOT NULL,
+                    `customRepAcceptanceThreshold` INTEGER NOT NULL,
+                    `customHoldAlignedThreshold` INTEGER NOT NULL,
+                    `drillCameraSideSelections` TEXT NOT NULL,
+                    `userBodyProfileJson` TEXT,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                INSERT INTO `user_settings_new` (
+                    `id`,
+                    `cueStyle`,
+                    `cueFrequencySeconds`,
+                    `audioVolume`,
+                    `localOnlyPrivacyMode`,
+                    `retainDays`,
+                    `debugOverlayEnabled`,
+                    `maxStorageMb`,
+                    `startupCountdownSeconds`,
+                    `minSessionDurationSeconds`,
+                    `alignmentStrictness`,
+                    `customLineDeviation`,
+                    `customMinimumGoodFormScore`,
+                    `customRepAcceptanceThreshold`,
+                    `customHoldAlignedThreshold`,
+                    `drillCameraSideSelections`,
+                    `userBodyProfileJson`
+                )
+                SELECT
+                    `id`,
+                    `cueStyle`,
+                    `cueFrequencySeconds`,
+                    `audioVolume`,
+                    `localOnlyPrivacyMode`,
+                    `retainDays`,
+                    `debugOverlayEnabled`,
+                    `maxStorageMb`,
+                    `startupCountdownSeconds`,
+                    `minSessionDurationSeconds`,
+                    `alignmentStrictness`,
+                    `customLineDeviation`,
+                    `customMinimumGoodFormScore`,
+                    `customRepAcceptanceThreshold`,
+                    `customHoldAlignedThreshold`,
+                    `drillCameraSideSelections`,
+                    `userBodyProfileJson`
+                FROM `user_settings`
+                """.trimIndent(),
+            )
+            db.execSQL("DROP TABLE `user_settings`")
+            db.execSQL("ALTER TABLE `user_settings_new` RENAME TO `user_settings`")
+        }
+    }
+
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_11_12,
         MIGRATION_12_13,
         MIGRATION_13_14,
         MIGRATION_14_15,
         MIGRATION_15_16,
+        MIGRATION_16_17,
     )
 }
