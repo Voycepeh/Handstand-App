@@ -5,14 +5,32 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.inversioncoach.app.calibration.storage.CalibrationDao
 import com.inversioncoach.app.calibration.storage.CalibrationEntity
+import com.inversioncoach.app.model.CalibrationConfigRecord
+import com.inversioncoach.app.model.DrillDefinitionRecord
 import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.IssueEvent
+import com.inversioncoach.app.model.MovementProfileRecord
+import com.inversioncoach.app.model.ReferenceAssetRecord
+import com.inversioncoach.app.model.ReferenceTemplateRecord
 import com.inversioncoach.app.model.SessionRecord
+import com.inversioncoach.app.model.SessionComparisonRecord
 import com.inversioncoach.app.model.UserSettings
 
 @Database(
-    entities = [SessionRecord::class, UserSettings::class, FrameMetricRecord::class, IssueEvent::class, CalibrationEntity::class],
-    version = 14,
+    entities = [
+        SessionRecord::class,
+        UserSettings::class,
+        FrameMetricRecord::class,
+        IssueEvent::class,
+        CalibrationEntity::class,
+        DrillDefinitionRecord::class,
+        ReferenceAssetRecord::class,
+        MovementProfileRecord::class,
+        CalibrationConfigRecord::class,
+        ReferenceTemplateRecord::class,
+        SessionComparisonRecord::class,
+    ],
+    version = 16,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -21,4 +39,10 @@ abstract class InversionCoachDatabase : RoomDatabase() {
     abstract fun userSettingsDao(): UserSettingsDao
     abstract fun frameMetricDao(): FrameMetricDao
     abstract fun calibrationDao(): CalibrationDao
+    abstract fun drillDefinitionDao(): DrillDefinitionDao
+    abstract fun referenceAssetDao(): ReferenceAssetDao
+    abstract fun movementProfileDao(): MovementProfileDao
+    abstract fun calibrationConfigDao(): CalibrationConfigDao
+    abstract fun referenceTemplateDao(): ReferenceTemplateDao
+    abstract fun sessionComparisonDao(): SessionComparisonDao
 }

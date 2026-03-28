@@ -46,9 +46,195 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_14_15: Migration = object : Migration(14, 15) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `reference_template_records` (
+                    `id` TEXT NOT NULL,
+                    `drillType` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `description` TEXT NOT NULL,
+                    `assetPath` TEXT NOT NULL,
+                    `phaseOrderJson` TEXT NOT NULL,
+                    `isBuiltIn` INTEGER NOT NULL,
+                    `updatedAtMs` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `session_comparison_records` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `sessionId` INTEGER NOT NULL,
+                    `referenceTemplateId` TEXT NOT NULL,
+                    `overallSimilarityScore` INTEGER NOT NULL,
+                    `timingScore` INTEGER NOT NULL,
+                    `alignmentScore` INTEGER NOT NULL,
+                    `stabilityScore` INTEGER NOT NULL,
+                    `phaseScoresJson` TEXT NOT NULL,
+                    `topDifferencesJson` TEXT NOT NULL,
+                    `comparedAtMs` INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+        }
+    }
+
+    val MIGRATION_15_16: Migration = object : Migration(15, 16) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `drill_definition_records` (
+                    `id` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `description` TEXT NOT NULL,
+                    `movementMode` TEXT NOT NULL,
+                    `cameraView` TEXT NOT NULL,
+                    `phaseSchemaJson` TEXT NOT NULL,
+                    `keyJointsJson` TEXT NOT NULL,
+                    `normalizationBasisJson` TEXT NOT NULL,
+                    `cueConfigJson` TEXT NOT NULL,
+                    `sourceType` TEXT NOT NULL,
+                    `status` TEXT NOT NULL,
+                    `version` INTEGER NOT NULL,
+                    `createdAtMs` INTEGER NOT NULL,
+                    `updatedAtMs` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `reference_asset_records` (
+                    `id` TEXT NOT NULL,
+                    `drillId` TEXT NOT NULL,
+                    `displayName` TEXT NOT NULL,
+                    `ownerType` TEXT NOT NULL,
+                    `sourceType` TEXT NOT NULL,
+                    `videoUri` TEXT,
+                    `poseUri` TEXT,
+                    `profileUri` TEXT,
+                    `thumbnailUri` TEXT,
+                    `isReference` INTEGER NOT NULL,
+                    `qualityLabel` TEXT,
+                    `createdAtMs` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `movement_profile_records` (
+                    `id` TEXT NOT NULL,
+                    `assetId` TEXT NOT NULL,
+                    `drillId` TEXT NOT NULL,
+                    `extractionVersion` INTEGER NOT NULL,
+                    `poseTimelineJson` TEXT NOT NULL,
+                    `normalizedFeatureJson` TEXT NOT NULL,
+                    `repSegmentsJson` TEXT NOT NULL,
+                    `holdSegmentsJson` TEXT NOT NULL,
+                    `createdAtMs` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `calibration_config_records` (
+                    `id` TEXT NOT NULL,
+                    `drillId` TEXT NOT NULL,
+                    `displayName` TEXT NOT NULL,
+                    `configJson` TEXT NOT NULL,
+                    `scoringVersion` INTEGER NOT NULL,
+                    `featureVersion` INTEGER NOT NULL,
+                    `isActive` INTEGER NOT NULL,
+                    `createdAtMs` INTEGER NOT NULL,
+                    `updatedAtMs` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `reference_template_records_new` (
+                    `id` TEXT NOT NULL,
+                    `drillId` TEXT NOT NULL,
+                    `displayName` TEXT NOT NULL,
+                    `templateType` TEXT NOT NULL,
+                    `sourceProfileIdsJson` TEXT NOT NULL,
+                    `checkpointJson` TEXT NOT NULL,
+                    `toleranceJson` TEXT NOT NULL,
+                    `createdAtMs` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                INSERT INTO `reference_template_records_new` (`id`, `drillId`, `displayName`, `templateType`, `sourceProfileIdsJson`, `checkpointJson`, `toleranceJson`, `createdAtMs`)
+                SELECT 
+                    `id`,
+                    COALESCE(`drillType`, 'legacy_drill'),
+                    COALESCE(`name`, 'Template'),
+                    'SINGLE_REFERENCE',
+                    '',
+                    COALESCE(`phaseOrderJson`, '{}'),
+                    '{}',
+                    COALESCE(`updatedAtMs`, CAST(strftime('%s','now') AS INTEGER) * 1000)
+                FROM `reference_template_records`
+                """.trimIndent(),
+            )
+            db.execSQL("DROP TABLE IF EXISTS `reference_template_records`")
+            db.execSQL("ALTER TABLE `reference_template_records_new` RENAME TO `reference_template_records`")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `session_comparison_records_new` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `sessionId` INTEGER,
+                    `subjectAssetId` TEXT NOT NULL,
+                    `subjectProfileId` TEXT NOT NULL,
+                    `drillId` TEXT NOT NULL,
+                    `templateId` TEXT NOT NULL,
+                    `overallSimilarityScore` INTEGER NOT NULL,
+                    `phaseScoresJson` TEXT NOT NULL,
+                    `differencesJson` TEXT NOT NULL,
+                    `summary` TEXT NOT NULL,
+                    `scoringVersion` INTEGER NOT NULL,
+                    `createdAtMs` INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                INSERT INTO `session_comparison_records_new` (`id`, `sessionId`, `subjectAssetId`, `subjectProfileId`, `drillId`, `templateId`, `overallSimilarityScore`, `phaseScoresJson`, `differencesJson`, `summary`, `scoringVersion`, `createdAtMs`)
+                SELECT 
+                    `id`,
+                    `sessionId`,
+                    '',
+                    '',
+                    COALESCE(`referenceTemplateId`, 'legacy_drill'),
+                    COALESCE(`referenceTemplateId`, 'legacy_template'),
+                    `overallSimilarityScore`,
+                    COALESCE(`phaseScoresJson`, '{}'),
+                    COALESCE(`topDifferencesJson`, ''),
+                    'Migrated comparison',
+                    1,
+                    COALESCE(`comparedAtMs`, CAST(strftime('%s','now') AS INTEGER) * 1000)
+                FROM `session_comparison_records`
+                """.trimIndent(),
+            )
+            db.execSQL("DROP TABLE IF EXISTS `session_comparison_records`")
+            db.execSQL("ALTER TABLE `session_comparison_records_new` RENAME TO `session_comparison_records`")
+        }
+    }
+
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_11_12,
         MIGRATION_12_13,
         MIGRATION_13_14,
+        MIGRATION_14_15,
+        MIGRATION_15_16,
     )
 }

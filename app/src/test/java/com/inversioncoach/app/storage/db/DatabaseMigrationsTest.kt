@@ -15,6 +15,24 @@ class DatabaseMigrationsTest {
     }
 
     @Test
+    fun includesMigrationFrom14To15() {
+        val has14To15 = DatabaseMigrations.ALL.any { migration ->
+            migration.startVersion == 14 && migration.endVersion == 15
+        }
+
+        assertTrue("DatabaseMigrations.ALL must contain Migration(14, 15)", has14To15)
+    }
+
+    @Test
+    fun includesMigrationFrom15To16() {
+        val has15To16 = DatabaseMigrations.ALL.any { migration ->
+            migration.startVersion == 15 && migration.endVersion == 16
+        }
+
+        assertTrue("DatabaseMigrations.ALL must contain Migration(15, 16)", has15To16)
+    }
+
+    @Test
     fun migrationSqlForCalibrationTableAndSessionColumnsIsDefined() {
         assertTrue(DatabaseMigrations.CREATE_DRILL_MOVEMENT_PROFILES_SQL.contains("CREATE TABLE IF NOT EXISTS `drill_movement_profiles`"))
         assertEquals(

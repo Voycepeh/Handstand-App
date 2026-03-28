@@ -19,8 +19,10 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -49,6 +51,8 @@ fun HomeScreen(
     onProgress: () -> Unit,
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
+    onReferenceTraining: () -> Unit,
+    onManageDrills: () -> Unit,
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
@@ -64,6 +68,8 @@ fun HomeScreen(
             onProgress = onProgress,
             onSettings = onSettings,
             onUploadVideo = onUploadVideo,
+            onReferenceTraining = onReferenceTraining,
+            onManageDrills = onManageDrills,
             latestSessionStartMs = latestSession?.startedAtMs ?: 0L,
             latestSessionDurationMs = computeSessionDurationMs(latestSession?.startedAtMs ?: 0L, latestSession?.completedAtMs ?: 0L),
         )
@@ -79,6 +85,8 @@ private fun Content(
     onProgress: () -> Unit,
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
+    onReferenceTraining: () -> Unit,
+    onManageDrills: () -> Unit,
     latestSessionStartMs: Long,
     latestSessionDurationMs: Long,
 ) {
@@ -119,6 +127,18 @@ private fun Content(
             subtitle = "Analyze a recorded video with pose overlay",
             icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
             onClick = onUploadVideo,
+        )
+        ActionTile(
+            label = "Reference Training",
+            subtitle = "Compare upload against built-in template",
+            icon = { Icon(Icons.Default.Timeline, contentDescription = null) },
+            onClick = onReferenceTraining,
+        )
+        ActionTile(
+            label = "Manage Drills",
+            subtitle = "Create/edit portable drill definitions",
+            icon = { Icon(Icons.Default.EditNote, contentDescription = null) },
+            onClick = onManageDrills,
         )
 
         ActionTile(

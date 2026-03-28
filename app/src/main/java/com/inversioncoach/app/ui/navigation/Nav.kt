@@ -11,10 +11,15 @@ import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.LiveSessionOptions
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.ui.drilldetail.DrillDetailScreen
+import com.inversioncoach.app.ui.drills.EditDrillScreen
+import com.inversioncoach.app.ui.drills.ManageDrillsScreen
+import com.inversioncoach.app.ui.drills.DrillDetailScreen as DrillPackageDetailScreen
 import com.inversioncoach.app.ui.history.HistoryScreen
 import com.inversioncoach.app.ui.home.HomeScreen
 import com.inversioncoach.app.ui.live.LiveCoachingScreen
 import com.inversioncoach.app.ui.progress.ProgressScreen
+import com.inversioncoach.app.ui.reference.ReferenceTemplatePickerScreen
+import com.inversioncoach.app.ui.reference.ReferenceTrainingScreen
 import com.inversioncoach.app.ui.calibration.CalibrationScreen
 import com.inversioncoach.app.ui.results.ResultsScreen
 import com.inversioncoach.app.ui.results.SessionTooShortScreen
@@ -47,6 +52,21 @@ sealed class Route(val value: String) {
     data object Settings : Route("settings")
     data object DevTuning : Route("settings/dev-tuning")
     data object UploadVideo : Route("upload-video")
+    data object UploadVideoForDrill : Route("upload-video?drillId={drillId}&referenceTemplateId={referenceTemplateId}&isReference={isReference}") {
+        fun create(drillId: String, referenceTemplateId: String?, isReference: Boolean): String =
+            "upload-video?drillId=$drillId&referenceTemplateId=${referenceTemplateId.orEmpty()}&isReference=$isReference"
+    }
+    data object ManageDrills : Route("manage-drills")
+    data object EditDrill : Route("edit-drill?drillId={drillId}") {
+        fun create(drillId: String?): String = if (drillId == null) "edit-drill" else "edit-drill?drillId=$drillId"
+    }
+    data object DrillPackageDetail : Route("drill-package-detail/{drillId}") {
+        fun create(drillId: String): String = "drill-package-detail/$drillId"
+    }
+    data object ReferenceTraining : Route("reference-training/{drillId}") {
+        fun create(drillId: String): String = "reference-training/$drillId"
+    }
+    data object ReferenceTemplatePicker : Route("reference-template-picker")
     data object Calibration : Route("calibration/{drill}") {
         fun create(drillType: DrillType): String = "calibration/${drillType.name}"
     }
@@ -71,6 +91,8 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onProgress = { navController.navigate(Route.Progress.value) },
                 onSettings = { navController.navigate(Route.Settings.value) },
                 onUploadVideo = { navController.navigate(Route.UploadVideo.value) },
+                onReferenceTraining = { navController.navigate(Route.ReferenceTemplatePicker.value) },
+                onManageDrills = { navController.navigate(Route.ManageDrills.value) },
             )
         }
         composable(Route.Start.value) {
@@ -181,6 +203,69 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             UploadVideoScreen(
                 onBack = { navController.popBackStack() },
                 onOpenResults = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
+            )
+        }
+        composable(
+            Route.UploadVideoForDrill.value,
+            arguments = listOf(
+                navArgument("drillId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("referenceTemplateId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("isReference") { type = NavType.BoolType; defaultValue = false },
+            ),
+        ) {
+            val drillId = it.arguments?.getString("drillId")
+            val templateId = it.arguments?.getString("referenceTemplateId")
+            val isReference = it.arguments?.getBoolean("isReference") ?: false
+            UploadVideoScreen(
+                onBack = { navController.popBackStack() },
+                onOpenResults = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
+                selectedReferenceTemplateId = templateId,
+                selectedDrillId = drillId,
+                isReferenceUpload = isReference,
+            )
+        }
+        composable(Route.ReferenceTemplatePicker.value) {
+            ReferenceTemplatePickerScreen(
+                onBack = { navController.popBackStack() },
+                onSelectDrill = { drillId ->
+                    navController.navigate(Route.ReferenceTraining.create(drillId))
+                },
+            )
+        }
+        composable(Route.ManageDrills.value) {
+            ManageDrillsScreen(
+                onBack = { navController.popBackStack() },
+                onCreateDrill = { navController.navigate(Route.EditDrill.create(null)) },
+                onEditDrill = { drillId -> navController.navigate(Route.EditDrill.create(drillId)) },
+                onOpenDrill = { drillId -> navController.navigate(Route.DrillPackageDetail.create(drillId)) },
+            )
+        }
+        composable(
+            Route.EditDrill.value,
+            arguments = listOf(navArgument("drillId") { type = NavType.StringType; nullable = true; defaultValue = null }),
+        ) {
+            EditDrillScreen(
+                drillId = it.arguments?.getString("drillId"),
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Route.DrillPackageDetail.value, arguments = listOf(navArgument("drillId") { type = NavType.StringType })) {
+            val drillId = it.arguments?.getString("drillId").orEmpty()
+            DrillPackageDetailScreen(
+                drillId = drillId,
+                onBack = { navController.popBackStack() },
+                onUploadReference = { id -> navController.navigate(Route.UploadVideoForDrill.create(id, null, true)) },
+                onCompareAttempt = { id -> navController.navigate(Route.ReferenceTraining.create(id)) },
+                onEditCalibration = { _ -> navController.navigate(Route.Settings.value) },
+            )
+        }
+        composable(Route.ReferenceTraining.value, arguments = listOf(navArgument("drillId") { type = NavType.StringType })) {
+            val drillId = it.arguments?.getString("drillId").orEmpty()
+            ReferenceTrainingScreen(
+                drillId = drillId,
+                onBack = { navController.popBackStack() },
+                onUploadReference = { id -> navController.navigate(Route.UploadVideoForDrill.create(id, null, true)) },
+                onUploadAttempt = { id, templateId -> navController.navigate(Route.UploadVideoForDrill.create(id, templateId, false)) },
             )
         }
     }

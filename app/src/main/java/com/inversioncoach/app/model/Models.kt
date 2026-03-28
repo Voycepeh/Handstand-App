@@ -242,6 +242,94 @@ data class Recommendation(
     val drillFocus: DrillType,
 )
 
+@Entity(tableName = "reference_template_records")
+data class ReferenceTemplateRecord(
+    @PrimaryKey val id: String,
+    val drillId: String,
+    val displayName: String,
+    val templateType: String,
+    val sourceProfileIdsJson: String,
+    val checkpointJson: String,
+    val toleranceJson: String,
+    val createdAtMs: Long,
+)
+
+@Entity(tableName = "session_comparison_records")
+data class SessionComparisonRecord(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sessionId: Long?,
+    val subjectAssetId: String,
+    val subjectProfileId: String,
+    val drillId: String,
+    val templateId: String,
+    val overallSimilarityScore: Int,
+    val phaseScoresJson: String,
+    val differencesJson: String,
+    val summary: String,
+    val scoringVersion: Int,
+    val createdAtMs: Long,
+)
+
+@Entity(tableName = "drill_definition_records")
+data class DrillDefinitionRecord(
+    @PrimaryKey val id: String,
+    val name: String,
+    val description: String,
+    val movementMode: String,
+    val cameraView: String,
+    val phaseSchemaJson: String,
+    val keyJointsJson: String,
+    val normalizationBasisJson: String,
+    val cueConfigJson: String,
+    val sourceType: String,
+    val status: String,
+    val version: Int,
+    val createdAtMs: Long,
+    val updatedAtMs: Long,
+)
+
+@Entity(tableName = "reference_asset_records")
+data class ReferenceAssetRecord(
+    @PrimaryKey val id: String,
+    val drillId: String,
+    val displayName: String,
+    val ownerType: String,
+    val sourceType: String,
+    val videoUri: String?,
+    val poseUri: String?,
+    val profileUri: String?,
+    val thumbnailUri: String?,
+    val isReference: Boolean,
+    val qualityLabel: String?,
+    val createdAtMs: Long,
+)
+
+@Entity(tableName = "movement_profile_records")
+data class MovementProfileRecord(
+    @PrimaryKey val id: String,
+    val assetId: String,
+    val drillId: String,
+    val extractionVersion: Int,
+    val poseTimelineJson: String,
+    val normalizedFeatureJson: String,
+    val repSegmentsJson: String,
+    val holdSegmentsJson: String,
+    val createdAtMs: Long,
+)
+
+@Entity(tableName = "calibration_config_records")
+data class CalibrationConfigRecord(
+    @PrimaryKey val id: String,
+    val drillId: String,
+    val displayName: String,
+    val configJson: String,
+    val scoringVersion: Int,
+    val featureVersion: Int,
+    val isActive: Boolean,
+    val createdAtMs: Long,
+    val updatedAtMs: Long,
+)
+
 @Entity(tableName = "session_records")
 data class SessionRecord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

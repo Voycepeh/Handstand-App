@@ -2,6 +2,12 @@ package com.inversioncoach.app.storage.db
 
 import androidx.room.Database
 import com.inversioncoach.app.calibration.storage.CalibrationEntity
+import com.inversioncoach.app.model.CalibrationConfigRecord
+import com.inversioncoach.app.model.DrillDefinitionRecord
+import com.inversioncoach.app.model.MovementProfileRecord
+import com.inversioncoach.app.model.ReferenceAssetRecord
+import com.inversioncoach.app.model.ReferenceTemplateRecord
+import com.inversioncoach.app.model.SessionComparisonRecord
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -12,7 +18,13 @@ class InversionCoachDatabaseContractTest {
         val entities = annotation.entities.toSet()
 
         assertTrue("CalibrationEntity must be registered in Room database entities", entities.contains(CalibrationEntity::class.java))
-        assertTrue("Database version must include calibration migration", annotation.version >= 14)
+        assertTrue("ReferenceTemplateRecord must be registered in Room database entities", entities.contains(ReferenceTemplateRecord::class.java))
+        assertTrue("SessionComparisonRecord must be registered in Room database entities", entities.contains(SessionComparisonRecord::class.java))
+        assertTrue("DrillDefinitionRecord must be registered", entities.contains(DrillDefinitionRecord::class.java))
+        assertTrue("ReferenceAssetRecord must be registered", entities.contains(ReferenceAssetRecord::class.java))
+        assertTrue("MovementProfileRecord must be registered", entities.contains(MovementProfileRecord::class.java))
+        assertTrue("CalibrationConfigRecord must be registered", entities.contains(CalibrationConfigRecord::class.java))
+        assertTrue("Database version must include portable drill migrations", annotation.version >= 16)
     }
 
     @Test
@@ -22,5 +34,27 @@ class InversionCoachDatabaseContractTest {
         }
 
         assertTrue("InversionCoachDatabase must expose calibrationDao()", hasCalibrationDao)
+    }
+
+    @Test
+    fun databaseExposesReferenceAndComparisonDaos() {
+        val methods = InversionCoachDatabase::class.java.methods
+        val hasDrillDao = methods.any { it.name == "drillDefinitionDao" && it.returnType == DrillDefinitionDao::class.java }
+        val hasReferenceAssetDao = methods.any { it.name == "referenceAssetDao" && it.returnType == ReferenceAssetDao::class.java }
+        val hasMovementProfileDao = methods.any { it.name == "movementProfileDao" && it.returnType == MovementProfileDao::class.java }
+        val hasCalibrationConfigDao = methods.any { it.name == "calibrationConfigDao" && it.returnType == CalibrationConfigDao::class.java }
+        val hasReferenceDao = methods.any { method ->
+            method.name == "referenceTemplateDao" && method.returnType == ReferenceTemplateDao::class.java
+        }
+        val hasComparisonDao = methods.any { method ->
+            method.name == "sessionComparisonDao" && method.returnType == SessionComparisonDao::class.java
+        }
+
+        assertTrue("InversionCoachDatabase must expose drillDefinitionDao()", hasDrillDao)
+        assertTrue("InversionCoachDatabase must expose referenceAssetDao()", hasReferenceAssetDao)
+        assertTrue("InversionCoachDatabase must expose movementProfileDao()", hasMovementProfileDao)
+        assertTrue("InversionCoachDatabase must expose calibrationConfigDao()", hasCalibrationConfigDao)
+        assertTrue("InversionCoachDatabase must expose referenceTemplateDao()", hasReferenceDao)
+        assertTrue("InversionCoachDatabase must expose sessionComparisonDao()", hasComparisonDao)
     }
 }
