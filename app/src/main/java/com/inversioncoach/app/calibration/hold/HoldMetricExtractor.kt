@@ -60,10 +60,6 @@ class HoldMetricExtractor {
     }
 }
 
-private fun Iterable<Double>.averageOrNull(): Float? {
-    val list = toList()
-    return if (list.isEmpty()) null else list.average().toFloat()
-}
 
 private fun Iterable<Float>.averageOrNull(): Float? {
     val list = toList()
