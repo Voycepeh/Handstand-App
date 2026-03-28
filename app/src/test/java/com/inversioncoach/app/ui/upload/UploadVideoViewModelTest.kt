@@ -23,6 +23,9 @@ class UploadVideoViewModelTest {
             override suspend fun run(
                 uri: Uri,
                 trackingMode: UploadTrackingMode,
+                selectedDrillId: String?,
+                selectedReferenceTemplateId: String?,
+                isReferenceUpload: Boolean,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,
@@ -63,6 +66,9 @@ class UploadVideoViewModelTest {
             override suspend fun run(
                 uri: Uri,
                 trackingMode: UploadTrackingMode,
+                selectedDrillId: String?,
+                selectedReferenceTemplateId: String?,
+                isReferenceUpload: Boolean,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,
@@ -100,6 +106,9 @@ class UploadVideoViewModelTest {
             override suspend fun run(
                 uri: Uri,
                 trackingMode: UploadTrackingMode,
+                selectedDrillId: String?,
+                selectedReferenceTemplateId: String?,
+                isReferenceUpload: Boolean,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,
@@ -138,6 +147,9 @@ class UploadVideoViewModelTest {
             override suspend fun run(
                 uri: Uri,
                 trackingMode: UploadTrackingMode,
+                selectedDrillId: String?,
+                selectedReferenceTemplateId: String?,
+                isReferenceUpload: Boolean,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,
@@ -175,6 +187,9 @@ class UploadVideoViewModelTest {
             override suspend fun run(
                 uri: Uri,
                 trackingMode: UploadTrackingMode,
+                selectedDrillId: String?,
+                selectedReferenceTemplateId: String?,
+                isReferenceUpload: Boolean,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,
@@ -197,6 +212,9 @@ class UploadVideoViewModelTest {
             override suspend fun run(
                 uri: Uri,
                 trackingMode: UploadTrackingMode,
+                selectedDrillId: String?,
+                selectedReferenceTemplateId: String?,
+                isReferenceUpload: Boolean,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,
@@ -218,6 +236,9 @@ class UploadVideoViewModelTest {
             override suspend fun run(
                 uri: Uri,
                 trackingMode: UploadTrackingMode,
+                selectedDrillId: String?,
+                selectedReferenceTemplateId: String?,
+                isReferenceUpload: Boolean,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,
@@ -243,6 +264,9 @@ class UploadVideoViewModelTest {
             override suspend fun run(
                 uri: Uri,
                 trackingMode: UploadTrackingMode,
+                selectedDrillId: String?,
+                selectedReferenceTemplateId: String?,
+                isReferenceUpload: Boolean,
                 onSessionCreated: (Long) -> Unit,
                 onProgress: (UploadProgress) -> Unit,
                 onLog: (String) -> Unit,

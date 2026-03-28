@@ -64,6 +64,8 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
     val session by repository.observeSession(sessionId).collectAsState(initial = null)
+    val comparison by repository.observeSessionComparison(sessionId).collectAsState(initial = null)
+    val drills by repository.getAllDrills().collectAsState(initial = emptyList())
     val issueTimeline by repository.observeIssueTimeline(sessionId).collectAsState(initial = emptyList())
     var replaySelection by remember(sessionId) { mutableStateOf(ReplayAssetSelection(uri = null, label = "Replay unavailable")) }
     var replaySelectionKey by remember(sessionId) { mutableStateOf<String?>(null) }
@@ -273,6 +275,9 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Session ID: $sessionId")
                     Text("Type: ${sessionTypeLabel(session)}")
+                    resolveDrillContextLabel(session, drills)?.let { drillContext ->
+                        Text("Drill: $drillContext")
+                    }
                     Text("Started: ${formatSessionDateTime(session?.startedAtMs ?: 0L)}")
                     Text("Duration: ${formatSessionDuration(displayDurationMs)}")
                     session?.let { Text(formatPrimaryPerformance(it)) }
@@ -299,6 +304,25 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                         } else if (it.sessionSource == SessionSource.UPLOADED_VIDEO) {
                             Text("Upload analysis metrics are not available yet.")
                         }
+                    }
+                    comparison?.let { comparisonRecord ->
+                        val metrics = parseInlineMetrics(session?.metricsJson.orEmpty())
+                        val drillId = metrics["drillId"] ?: comparisonRecord.drillId
+                        val drillName = drills.firstOrNull { it.id == drillId }?.name ?: drillId
+                        Text("Selected drill: $drillName")
+                        Text("Reference template: ${metrics["referenceTemplateName"] ?: comparisonRecord.templateId}")
+                        Text("Overall similarity: ${comparisonRecord.overallSimilarityScore}/100")
+                        Text(
+                            "Phase scores: ${formatInlinePairs(comparisonRecord.phaseScoresJson)}",
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            "Top differences: ${comparisonRecord.differencesJson.split('|').filter { diff -> diff.isNotBlank() }.take(3).joinToString("; ")}",
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text("Scoring version: ${comparisonRecord.scoringVersion}")
                     }
                     Text(
                         "Top wins: ${sessionSummaryDisplay.wins}",
@@ -527,6 +551,19 @@ private fun sessionTypeLabel(session: com.inversioncoach.app.model.SessionRecord
     }
 }
 
+private fun resolveDrillContextLabel(
+    session: com.inversioncoach.app.model.SessionRecord?,
+    drills: List<com.inversioncoach.app.model.DrillDefinitionRecord>,
+): String? {
+    val active = session ?: return null
+    val metrics = parseInlineMetrics(active.metricsJson)
+    val drillId = metrics["drillId"]?.takeIf { it.isNotBlank() }
+    if (drillId != null) {
+        return drills.firstOrNull { it.id == drillId }?.name ?: drillId
+    }
+    return if (active.sessionSource == SessionSource.LIVE_COACHING) active.drillType.displayName else null
+}
+
 private fun formatDurationWithMs(durationMs: Long): String = "${formatSessionDuration(durationMs)} (${durationMs} ms)"
 
 internal fun shouldShowRawVideoButton(replayUri: String?, rawUri: String?): Boolean =
@@ -543,6 +580,22 @@ internal fun formatElapsedDuration(elapsedMs: Long?): String {
     val sec = totalSec % 60L
     return if (min > 0L) "${min}m ${sec}s" else "${sec}s"
 }
+
+private fun parseInlineMetrics(raw: String): Map<String, String> =
+    raw.split('|')
+        .mapNotNull { token ->
+            val index = token.indexOf(':')
+            if (index <= 0) null else token.substring(0, index) to token.substring(index + 1)
+        }
+        .toMap()
+
+private fun formatInlinePairs(raw: String): String =
+    raw.split('|')
+        .mapNotNull { token ->
+            val index = token.indexOf(':')
+            if (index <= 0) null else "${token.substring(0, index)} ${token.substring(index + 1)}"
+        }
+        .joinToString(", ")
 
 @Composable
 private fun StatusRow(
