@@ -6,9 +6,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.OutlinedTextField
@@ -97,7 +97,7 @@ fun EditDrillScreen(
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = movementModeExpanded) },
                     modifier = Modifier.fillMaxWidth().menuAnchor(),
                 )
-                ExposedDropdownMenu(expanded = movementModeExpanded, onDismissRequest = { movementModeExpanded = false }) {
+                DropdownMenu(expanded = movementModeExpanded, onDismissRequest = { movementModeExpanded = false }) {
                     listOf(DrillMovementMode.HOLD, DrillMovementMode.REP).forEach { option ->
                         DropdownMenuItem(
                             text = { Text(option) },
@@ -121,7 +121,7 @@ fun EditDrillScreen(
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = cameraViewExpanded) },
                     modifier = Modifier.fillMaxWidth().menuAnchor(),
                 )
-                ExposedDropdownMenu(expanded = cameraViewExpanded, onDismissRequest = { cameraViewExpanded = false }) {
+                DropdownMenu(expanded = cameraViewExpanded, onDismissRequest = { cameraViewExpanded = false }) {
                     listOf(
                         DrillCameraView.LEFT,
                         DrillCameraView.RIGHT,
