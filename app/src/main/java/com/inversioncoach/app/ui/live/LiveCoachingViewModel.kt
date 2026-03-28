@@ -30,7 +30,6 @@ import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.drills.core.DrillRegistry
 import com.inversioncoach.app.motion.MotionAnalysisPipeline
-import com.inversioncoach.app.motion.QualityThresholds
 import com.inversioncoach.app.motion.UserCalibrationSettings
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.overlay.FreestyleOrientationClassifier
@@ -364,27 +363,12 @@ class LiveCoachingViewModel(
             )
         }
         val smoothed = smoother.smooth(corrected.frame)
-        val calibration = if (settings.alignmentStrictness.name == "CUSTOM") {
-            UserCalibrationSettings(
-                strictness = settings.alignmentStrictness,
-                customThresholds = QualityThresholds(
-                    acceptableLineDeviation = settings.customLineDeviation,
-                    minimumGoodFormScore = settings.customMinimumGoodFormScore,
-                    repAcceptanceThreshold = settings.customRepAcceptanceThreshold,
-                    holdAlignedThreshold = settings.customHoldAlignedThreshold,
-                    alignmentPersistenceMs = 300L,
-                    allowedRepAlignmentDropMs = 300L,
-                ),
-            )
-        } else {
-            UserCalibrationSettings(settings.alignmentStrictness)
-        }
+        val calibration = UserCalibrationSettings()
         val motionEligible = sessionMode == SessionMode.DRILL && (readiness?.timerEligible ?: false)
         val freestyleViewMode = if (sessionMode == SessionMode.FREESTYLE) freestyleOrientationClassifier.classify(smoothed.joints) else FreestyleViewMode.UNKNOWN
         val motion = if (motionEligible) {
             motionPipeline.analyze(
                 frame = corrected.frame,
-                strictness = settings.alignmentStrictness,
                 calibration = calibration,
                 movementProfile = activeMovementProfile,
             )

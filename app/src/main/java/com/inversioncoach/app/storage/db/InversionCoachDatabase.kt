@@ -30,7 +30,7 @@ import com.inversioncoach.app.model.UserSettings
         ReferenceTemplateRecord::class,
         SessionComparisonRecord::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)

@@ -1,7 +1,6 @@
 package com.inversioncoach.app.storage.db
 
 import androidx.room.TypeConverter
-import com.inversioncoach.app.model.AlignmentStrictness
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.CleanupStatus
@@ -24,17 +23,6 @@ class Converters {
 
     @TypeConverter
     fun cueStyleToString(value: CueStyle): String = value.name
-
-    @TypeConverter
-    fun alignmentStrictnessFromString(raw: String): AlignmentStrictness = when (raw) {
-        "EASY" -> AlignmentStrictness.BEGINNER
-        "STRICT" -> AlignmentStrictness.ADVANCED
-        else -> runCatching { AlignmentStrictness.valueOf(raw) }.getOrDefault(AlignmentStrictness.STANDARD)
-    }
-
-    @TypeConverter
-    fun alignmentStrictnessToString(value: AlignmentStrictness): String = value.name
-
 
     @TypeConverter
     fun annotatedExportStatusFromString(raw: String): AnnotatedExportStatus =

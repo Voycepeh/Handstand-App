@@ -2,7 +2,6 @@ package com.inversioncoach.app.motion
 
 import com.inversioncoach.app.calibration.DrillMovementProfile
 import com.inversioncoach.app.calibration.RepTemplate
-import com.inversioncoach.app.model.AlignmentStrictness
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.motion.features.AngleFeatureExtractor
 import com.inversioncoach.app.motion.features.DefaultAlignmentFeatureExtractor
@@ -27,9 +26,9 @@ class MotionAnalysisPipeline(
         ),
         trackedAngle = trackedAngleFor(drillDefinition.movementPattern),
     )
-    private var alignmentExtractor = DefaultAlignmentFeatureExtractor(profile, UserCalibrationSettings(AlignmentStrictness.BEGINNER))
-    private var holdQualityTracker = HoldQualityTracker(UserCalibrationSettings(AlignmentStrictness.BEGINNER).resolvedThresholds())
-    private var repQualityEvaluator = RepQualityEvaluator(profile, UserCalibrationSettings(AlignmentStrictness.BEGINNER).resolvedThresholds())
+    private var alignmentExtractor = DefaultAlignmentFeatureExtractor(profile, UserCalibrationSettings())
+    private var holdQualityTracker = HoldQualityTracker(UserCalibrationSettings().resolvedThresholds())
+    private var repQualityEvaluator = RepQualityEvaluator(profile, UserCalibrationSettings().resolvedThresholds())
     private var activeRepTemplate: RepTemplate? = null
     private val holdTrackerCompat = HoldAlignmentTracker()
     private val faultEngine = FaultDetectionEngine(
@@ -38,7 +37,7 @@ class MotionAnalysisPipeline(
     )
     private val feedbackEngine = FeedbackEngine()
     private val stabilityExtractor: StabilityFeatureExtractor = DefaultStabilityFeatureExtractor()
-    private var configuredStrictness: AlignmentStrictness = AlignmentStrictness.BEGINNER
+    private var configuredCalibration: UserCalibrationSettings = UserCalibrationSettings()
     private val holdTemplateComparator = HoldTemplateComparator()
 
     private companion object {
@@ -66,11 +65,10 @@ class MotionAnalysisPipeline(
 
     fun analyze(
         frame: LegacyPoseFrame,
-        strictness: AlignmentStrictness = AlignmentStrictness.BEGINNER,
         calibration: UserCalibrationSettings? = null,
         movementProfile: DrillMovementProfile? = null,
     ): Output {
-        val effectiveCalibration = calibration ?: UserCalibrationSettings(strictness)
+        val effectiveCalibration = calibration ?: UserCalibrationSettings()
         configureStrictnessIfNeeded(effectiveCalibration)
 
         val motionFrame = PoseFrame(
@@ -156,8 +154,8 @@ class MotionAnalysisPipeline(
     }
 
     private fun configureStrictnessIfNeeded(calibration: UserCalibrationSettings) {
-        if (calibration.strictness == configuredStrictness && calibration.strictness != AlignmentStrictness.CUSTOM) return
-        configuredStrictness = calibration.strictness
+        if (calibration == configuredCalibration) return
+        configuredCalibration = calibration
         alignmentExtractor.reconfigure(calibration)
         holdQualityTracker = HoldQualityTracker(calibration.resolvedThresholds())
         repQualityEvaluator = RepQualityEvaluator(profile, calibration.resolvedThresholds())

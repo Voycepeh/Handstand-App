@@ -10,7 +10,6 @@ import com.inversioncoach.app.motion.JointId
 import com.inversioncoach.app.motion.Landmark2D
 import com.inversioncoach.app.motion.SmoothedPoseFrame
 import com.inversioncoach.app.motion.UserCalibrationSettings
-import com.inversioncoach.app.model.AlignmentStrictness
 import com.inversioncoach.app.model.DrillType
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -41,7 +40,7 @@ class FeatureExtractorsTest {
         assertEquals(legacyAngles.anglesDeg, wrappedAngles.anglesDeg)
 
         val profile = DrillQualityProfiles.byType(DrillType.FREE_HANDSTAND)
-        val alignment = DefaultAlignmentFeatureExtractor(profile, UserCalibrationSettings(AlignmentStrictness.BEGINNER))
+        val alignment = DefaultAlignmentFeatureExtractor(profile, UserCalibrationSettings())
         val faults = listOf(FaultEvent("none", FaultSeverity.LOW, "", BodySide.NONE, 0L))
         val first = alignment.score(legacyAngles, faults)
         val second = alignment.score(wrappedAngles, faults)
@@ -49,12 +48,12 @@ class FeatureExtractorsTest {
 
 
 
-        val advancedCalibration = UserCalibrationSettings(AlignmentStrictness.ADVANCED)
-        alignment.reconfigure(advancedCalibration)
-        val wrappedAdvanced = alignment.score(wrappedAngles, faults)
-        val legacyAdvanced = AlignmentScoringEngine(profile, advancedCalibration).score(wrappedAngles, faults)
-        assertEquals(legacyAdvanced.smoothedScore, wrappedAdvanced.smoothedScore)
-        assertEquals(legacyAdvanced.instantScore, wrappedAdvanced.instantScore)
+        val reconfiguredCalibration = UserCalibrationSettings()
+        alignment.reconfigure(reconfiguredCalibration)
+        val wrappedReconfigured = alignment.score(wrappedAngles, faults)
+        val legacyReconfigured = AlignmentScoringEngine(profile, reconfiguredCalibration).score(wrappedAngles, faults)
+        assertEquals(legacyReconfigured.smoothedScore, wrappedReconfigured.smoothedScore)
+        assertEquals(legacyReconfigured.instantScore, wrappedReconfigured.instantScore)
 
         val stability = DefaultStabilityFeatureExtractor().analyze(frame)
         assertEquals(stability.stabilityScore, DefaultStabilityFeatureExtractor().analyze(frame).stabilityScore)

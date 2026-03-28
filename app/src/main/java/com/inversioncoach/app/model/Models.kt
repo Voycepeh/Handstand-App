@@ -227,8 +227,6 @@ enum class AnnotatedExportFailureReason {
 
 enum class CueStyle { CONCISE, TECHNICAL, ENCOURAGING }
 
-enum class AlignmentStrictness { BEGINNER, STANDARD, ADVANCED, CUSTOM }
-
 data class CoachingCue(
     val id: String,
     val text: String,
@@ -433,11 +431,6 @@ data class UserSettings(
     val maxStorageMb: Int = 1024,
     val startupCountdownSeconds: Int = 10,
     val minSessionDurationSeconds: Int = 3,
-    val alignmentStrictness: AlignmentStrictness = AlignmentStrictness.BEGINNER,
-    val customLineDeviation: Float = 0.14f,
-    val customMinimumGoodFormScore: Int = 72,
-    val customRepAcceptanceThreshold: Int = 70,
-    val customHoldAlignedThreshold: Int = 72,
     val drillCameraSideSelections: String = "",
     val userBodyProfileJson: String? = null,
 )
