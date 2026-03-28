@@ -53,7 +53,6 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     var cueStyle by remember { mutableStateOf(CueStyle.CONCISE) }
     var cueFrequency by remember { mutableFloatStateOf(2f) }
-    var overlay by remember { mutableFloatStateOf(1f) }
     var debug by remember { mutableStateOf(false) }
     var localOnlyPrivacyMode by remember { mutableStateOf(true) }
     var maxStorageMb by remember { mutableIntStateOf(1024) }
@@ -80,7 +79,6 @@ fun SettingsScreen(
         repository.observeSettings().collect { s ->
             cueStyle = s.cueStyle
             cueFrequency = s.cueFrequencySeconds
-            overlay = s.overlayIntensity
             debug = s.debugOverlayEnabled
             localOnlyPrivacyMode = s.localOnlyPrivacyMode
             maxStorageMb = s.maxStorageMb
@@ -119,8 +117,6 @@ fun SettingsScreen(
             }
 
             SettingsCard(title = "Overlay") {
-                Text("Overlay intensity: ${"%.1f".format(overlay)}")
-                Slider(value = overlay, onValueChange = { overlay = it }, valueRange = 0.2f..1f)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Debug overlay (raw metrics/angles)")
                     Checkbox(checked = debug, onCheckedChange = { debug = it })
@@ -186,7 +182,6 @@ fun SettingsScreen(
                                     UserSettings(
                                         cueStyle = cueStyle,
                                         cueFrequencySeconds = cueFrequency,
-                                        overlayIntensity = overlay,
                                         debugOverlayEnabled = debug,
                                         localOnlyPrivacyMode = localOnlyPrivacyMode,
                                         maxStorageMb = maxStorageMb,

@@ -67,9 +67,6 @@ class MlKitVideoPoseFrameSource(
                 }
                 val intervalMs = (1000f / sampleFps.coerceAtLeast(1)).toLong().coerceAtLeast(16L)
                 val estimatedTotalFrames = (durationMs / intervalMs).toInt().coerceAtLeast(1) + 1
-                val sourceWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
-                val sourceHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
-                val decodeTarget = computeDecodeTargetDimensions(sourceWidth, sourceHeight)
                 Log.i(TAG, "decode_loop_start uri=$videoUri durationMs=$durationMs intervalMs=$intervalMs estimatedTotalFrames=$estimatedTotalFrames")
                 observer.onProgress(
                     AnalysisProgressEvent(
@@ -144,12 +141,10 @@ class MlKitVideoPoseFrameSource(
                                 val frameTimeUs = timestampMs * 1000L
                                 var bitmap: Bitmap? = null
                                 val decodeNanos = measureNanoTime {
-                                    bitmap = retriever.getScaledFrameAtTime(
+                                    bitmap = retriever.getFrameAtTime(
                                         frameTimeUs,
                                         MediaMetadataRetriever.OPTION_CLOSEST,
-                                        decodeTarget.first,
-                                        decodeTarget.second,
-                                    ) ?: retriever.getFrameAtTime(frameTimeUs, MediaMetadataRetriever.OPTION_CLOSEST)
+                                    )
                                 }
                                 totalDecodeNanos.addAndGet(decodeNanos)
                                 maxDecodeNanos.accumulateAndGet(decodeNanos) { current, candidate ->
@@ -160,7 +155,7 @@ class MlKitVideoPoseFrameSource(
                                     if (index % 2 == 0) {
                                         Log.i(
                                             TAG,
-                                            "decode_sample frameIndex=$index timestampMs=$timestampMs/$durationMs decodeMs=$decodeMs target=${decodeTarget.first}x${decodeTarget.second}",
+                                            "decode_sample frameIndex=$index timestampMs=$timestampMs/$durationMs decodeMs=$decodeMs",
                                         )
                                     }
                                     frameQueue.send(FramePacket(index = index, timestampMs = timestampMs, bitmap = nonNullBitmap))
@@ -279,20 +274,6 @@ class MlKitVideoPoseFrameSource(
             rejectionReason = if (landmarks.isEmpty()) "no_person_detected" else "none",
         )
         return poseMapper.toLegacy(internalFrame)
-    }
-
-    private fun computeDecodeTargetDimensions(sourceWidth: Int, sourceHeight: Int): Pair<Int, Int> {
-        if (sourceWidth <= 0 || sourceHeight <= 0) {
-            return MAX_ANALYSIS_DIMENSION to MAX_ANALYSIS_DIMENSION
-        }
-        val maxDimension = maxOf(sourceWidth, sourceHeight)
-        if (maxDimension <= MAX_ANALYSIS_DIMENSION) {
-            return sourceWidth to sourceHeight
-        }
-        val scale = MAX_ANALYSIS_DIMENSION.toFloat() / maxDimension.toFloat()
-        val targetWidth = (sourceWidth * scale).roundToLong().toInt().coerceAtLeast(1)
-        val targetHeight = (sourceHeight * scale).roundToLong().toInt().coerceAtLeast(1)
-        return targetWidth to targetHeight
     }
 
     private fun downscaleForAnalysis(bitmap: Bitmap): Bitmap {

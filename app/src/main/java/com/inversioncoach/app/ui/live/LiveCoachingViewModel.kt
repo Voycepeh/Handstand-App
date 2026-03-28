@@ -560,7 +560,7 @@ class LiveCoachingViewModel(
             SessionDiagnostics.log("raw_faults drill=$drillType faults=${motionFaults.map { it.code }}")
         }
 
-        if (cue != null) {
+        if (cue != null && _uiState.value.startupState == SessionStartupState.ACTIVE) {
             _spokenCue.value = cue
         }
 
@@ -646,6 +646,7 @@ class LiveCoachingViewModel(
     fun beginStartupCountdown(countdownSeconds: Int): Boolean {
         if (_uiState.value.startupState != SessionStartupState.IDLE || startupJob?.isActive == true) return false
         startupCancelled = false
+        _spokenCue.value = null
         _uiState.value = _uiState.value.copy(
             startupState = SessionStartupState.COUNTDOWN,
             sessionCountdownRemainingSeconds = countdownSeconds.coerceAtLeast(0),
@@ -691,6 +692,7 @@ class LiveCoachingViewModel(
     fun activateSessionIfStartupReady(): Boolean {
         if (_uiState.value.startupState != SessionStartupState.COUNTDOWN || startupCancelled) return false
         val initiatedAtMs = System.currentTimeMillis()
+        _spokenCue.value = null
         sessionStartedAtMs = initiatedAtMs
         overlayFrames.clear()
         overlayTimelineRecorder = OverlayTimelineRecorder(
@@ -711,6 +713,7 @@ class LiveCoachingViewModel(
         startupJob = null
         if (_uiState.value.startupState == SessionStartupState.ACTIVE) return
         startupCancelled = true
+        _spokenCue.value = null
         _uiState.value = _uiState.value.copy(
             startupState = SessionStartupState.CANCELLED,
             sessionCountdownRemainingSeconds = null,

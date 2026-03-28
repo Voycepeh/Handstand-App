@@ -424,7 +424,6 @@ data class UserSettings(
     val cueStyle: CueStyle = CueStyle.CONCISE,
     val cueFrequencySeconds: Float = 2f,
     val audioVolume: Float = 1f,
-    val overlayIntensity: Float = 1f,
     val localOnlyPrivacyMode: Boolean = true,
     val retainDays: Int = 60,
     val debugOverlayEnabled: Boolean = false,
