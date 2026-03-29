@@ -1006,7 +1006,7 @@ class LiveCoachingViewModel(
                 legacyBodyProfileFallback = resolved.bodyProfile
             } ?: run {
                 activeUsesDefaultBodyModel = activeMovementProfile?.userBodyProfile == null
-                legacyBodyProfileFallback = UserBodyProfile.decode(activeSettings.userBodyProfileJson)
+                legacyBodyProfileFallback = null
             }
             motionPipeline.setRepTemplate(activeMovementProfile?.repTemplate)
             val now = System.currentTimeMillis()

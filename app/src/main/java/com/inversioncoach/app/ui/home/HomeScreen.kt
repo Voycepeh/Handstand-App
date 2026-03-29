@@ -16,10 +16,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowOutward
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -33,26 +35,28 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.inversioncoach.app.calibration.ActiveProfileContext
+import com.inversioncoach.app.model.UserProfileRecord
 import com.inversioncoach.app.storage.ServiceLocator
-import com.inversioncoach.app.storage.repository.UserProfileStatus
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import kotlinx.coroutines.launch
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,14 +68,33 @@ fun HomeScreen(
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
     onCalibration: () -> Unit,
+    onReferenceTraining: () -> Unit = {},
+    onManageDrills: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
     val userProfileManager = remember { ServiceLocator.userProfileManager(context) }
+    val scope = rememberCoroutineScope()
+
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
-    val activeProfile by repository.observeActiveProfile().collectAsState(initial = null)
-    val profileStatuses by repository.observeProfileStatuses().collectAsState(initial = emptyList())
+    val profiles by userProfileManager.observeAvailableProfiles().collectAsState(initial = emptyList())
+    var activeProfileContext by remember { mutableStateOf<ActiveProfileContext?>(null) }
+    var expanded by remember { mutableStateOf(false) }
+    var showOverwriteDialog by remember { mutableStateOf(false) }
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var newProfileName by remember { mutableStateOf("") }
+    var renameTargetProfileId by remember { mutableStateOf<String?>(null) }
+    var renameTargetName by remember { mutableStateOf("") }
+
+    LaunchedEffect(profiles) {
+        activeProfileContext = runCatching { userProfileManager.resolveActiveProfileContext() }.getOrNull()
+    }
+
     val latestSession = sessions.maxByOrNull { it.startedAtMs }
+    val activeProfile = activeProfileContext?.userProfile
+    val activeProfileName = activeProfile?.displayName ?: "No active profile"
+    val activeHasCalibration = activeProfileContext?.bodyProfileRecord != null
+    val activeBodyProfileVersion = activeProfileContext?.bodyProfileRecord?.version
 
     ScaffoldedScreen(title = "Inversion Coach") { padding ->
         Content(
@@ -83,32 +106,52 @@ fun HomeScreen(
             onSettings = onSettings,
             onUploadVideo = onUploadVideo,
             onCalibration = onCalibration,
-            activeProfile = activeProfile,
-            profileStatuses = profileStatuses,
+            onReferenceTraining = onReferenceTraining,
+            onManageDrills = onManageDrills,
             latestSessionStartMs = latestSession?.startedAtMs ?: 0L,
             latestSessionDurationMs = computeSessionDurationMs(latestSession?.startedAtMs ?: 0L, latestSession?.completedAtMs ?: 0L),
-            profiles = profiles.map { it.id to it.displayName },
+            profiles = profiles,
             activeProfileId = activeProfile?.id,
-            activeProfileName = activeProfile?.displayName ?: "No profile",
+            activeProfileName = activeProfileName,
             activeHasCalibration = activeHasCalibration,
-            activeBodyProfileVersion = activeProfileContext?.bodyProfileRecord?.version,
+            activeBodyProfileVersion = activeBodyProfileVersion,
+            expanded = expanded,
+            onExpandedChange = { expanded = it },
             onSelectProfile = { profileId ->
                 scope.launch {
                     userProfileManager.setActiveProfile(profileId)
+                    activeProfileContext = userProfileManager.resolveActiveProfileContext()
                 }
             },
             onCreateProfile = { profileName ->
                 scope.launch {
                     val created = userProfileManager.createProfile(profileName)
                     userProfileManager.setActiveProfile(created.id)
+                    activeProfileContext = userProfileManager.resolveActiveProfileContext()
                 }
             },
             onRenameProfile = { profileId, newName ->
-                scope.launch { userProfileManager.renameProfile(profileId, newName) }
+                scope.launch {
+                    userProfileManager.renameProfile(profileId, newName)
+                    activeProfileContext = userProfileManager.resolveActiveProfileContext()
+                }
             },
             onArchiveProfile = { profileId ->
-                scope.launch { userProfileManager.archiveProfile(profileId) }
+                scope.launch {
+                    userProfileManager.archiveProfile(profileId)
+                    activeProfileContext = userProfileManager.resolveActiveProfileContext()
+                }
             },
+            showOverwriteDialog = showOverwriteDialog,
+            onShowOverwriteDialogChange = { showOverwriteDialog = it },
+            showCreateDialog = showCreateDialog,
+            onShowCreateDialogChange = { showCreateDialog = it },
+            newProfileName = newProfileName,
+            onNewProfileNameChange = { newProfileName = it },
+            renameTargetProfileId = renameTargetProfileId,
+            onRenameTargetProfileIdChange = { renameTargetProfileId = it },
+            renameTargetName = renameTargetName,
+            onRenameTargetNameChange = { renameTargetName = it },
         )
     }
 }
@@ -124,52 +167,44 @@ private fun Content(
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
     onCalibration: () -> Unit,
-    activeProfile: UserProfileStatus?,
-    profileStatuses: List<UserProfileStatus>,
+    onReferenceTraining: () -> Unit,
+    onManageDrills: () -> Unit,
     latestSessionStartMs: Long,
     latestSessionDurationMs: Long,
-    profiles: List<Pair<String, String>>,
+    profiles: List<UserProfileRecord>,
     activeProfileId: String?,
     activeProfileName: String,
     activeHasCalibration: Boolean,
     activeBodyProfileVersion: Int?,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     onSelectProfile: (String) -> Unit,
     onCreateProfile: (String) -> Unit,
     onRenameProfile: (String, String) -> Unit,
     onArchiveProfile: (String) -> Unit,
+    showOverwriteDialog: Boolean,
+    onShowOverwriteDialogChange: (Boolean) -> Unit,
+    showCreateDialog: Boolean,
+    onShowCreateDialogChange: (Boolean) -> Unit,
+    newProfileName: String,
+    onNewProfileNameChange: (String) -> Unit,
+    renameTargetProfileId: String?,
+    onRenameTargetProfileIdChange: (String?) -> Unit,
+    renameTargetName: String,
+    onRenameTargetNameChange: (String) -> Unit,
 ) {
-    val activeProfileName = activeProfile?.name ?: "No active profile"
-    val activeProfileCalibrated = activeProfile?.isCalibrated ?: false
-    val orderedProfiles = remember(profileStatuses) {
-        profileStatuses.sortedWith(
-            compareByDescending<UserProfileStatus> { it.isActive }
-                .thenBy { it.name.lowercase() },
-        )
-    }
-    var showOverwriteDialog by remember { mutableStateOf(false) }
-
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(padding)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text("Train smarter", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(
-            text = "Start live posture tracking instantly, or launch a drill-based coached session.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Text("Start live posture tracking instantly, or launch a drill-based coached session.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
         Card {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Active profile: $activeProfileName", fontWeight = FontWeight.SemiBold)
-                Text(
-                    if (activeHasCalibration) "Body profile: Calibrated (v${activeBodyProfileVersion ?: 1})"
-                    else "Body profile: Default model (no calibration yet)",
-                )
-                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+                Text(if (activeHasCalibration) "Body profile: Calibrated (v${activeBodyProfileVersion ?: 1})" else "Body profile: Default model (no calibration yet)")
+                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = onExpandedChange) {
                     OutlinedTextField(
                         value = activeProfileName,
                         onValueChange = {},
@@ -178,197 +213,105 @@ private fun Content(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
                     )
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        profiles.forEach { (id, name) ->
+                    DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
+                        profiles.forEach { profile ->
                             DropdownMenuItem(
-                                text = { Text(name) },
+                                text = { Text(profile.displayName) },
                                 onClick = {
-                                    expanded = false
-                                    onSelectProfile(id)
+                                    onExpandedChange(false)
+                                    onSelectProfile(profile.id)
                                 },
                             )
                         }
                     }
                 }
-                Button(onClick = { showCreateDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Create profile")
-                }
-                profiles.forEach { (id, name) ->
+                Button(onClick = { onShowCreateDialogChange(true) }, modifier = Modifier.fillMaxWidth()) { Text("Create profile") }
+                profiles.forEach { profile ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = if (id == activeProfileId) "• $name (Active)" else "• $name",
+                            text = if (profile.id == activeProfileId) "• ${profile.displayName} (Active)" else "• ${profile.displayName}",
                             modifier = Modifier.weight(1f),
                         )
-                        Button(
-                            onClick = {
-                                renameTargetProfileId = id
-                                renameTargetName = name
-                            },
-                        ) { Text("Rename") }
-                        Button(
-                            onClick = { onArchiveProfile(id) },
-                            enabled = profiles.size > 1 && id != activeProfileId,
-                        ) { Text("Archive") }
+                        Button(onClick = {
+                            onRenameTargetProfileIdChange(profile.id)
+                            onRenameTargetNameChange(profile.displayName)
+                        }) { Text("Rename") }
+                        Button(onClick = { onArchiveProfile(profile.id) }, enabled = profiles.size > 1 && profile.id != activeProfileId) { Text("Archive") }
                     }
                 }
             }
         }
 
-        ActionTile(
-            label = "Start Live Coaching",
-            subtitle = "Generic posture tracking",
-            icon = { Icon(Icons.Default.FitnessCenter, contentDescription = null) },
-            onClick = onStartFreestyle,
-            featured = true,
-            hero = true,
-        )
-
-        ActionTile(
-            label = "Choose Drill",
-            subtitle = "Guided drill-specific coaching",
-            icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-            onClick = onStart,
-        )
-
-        ActionTile(
-            label = "Upload Video",
-            subtitle = "Analyze a recorded video with pose overlay",
-            icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
-            onClick = onUploadVideo,
-        )
-        ActionTile(
-            label = "Reference Training",
-            subtitle = "Compare upload against built-in template",
-            icon = { Icon(Icons.Default.Timeline, contentDescription = null) },
-            onClick = onReferenceTraining,
-        )
-        ActionTile(
-            label = "Manage Drills",
-            subtitle = "Create/edit portable drill definitions",
-            icon = { Icon(Icons.Default.EditNote, contentDescription = null) },
-            onClick = onManageDrills,
-        )
+        ActionTile("Start Live Coaching", "Generic posture tracking", { Icon(Icons.Default.FitnessCenter, contentDescription = null) }, onStartFreestyle, featured = true, hero = true)
+        ActionTile("Choose Drill", "Guided drill-specific coaching", { Icon(Icons.Default.PlayArrow, contentDescription = null) }, onStart)
+        ActionTile("Upload Video", "Analyze a recorded video with pose overlay", { Icon(Icons.Default.VideoLibrary, contentDescription = null) }, onUploadVideo)
+        ActionTile("Reference Training", "Compare attempts against reference templates", { Icon(Icons.Default.Timeline, contentDescription = null) }, onReferenceTraining)
+        ActionTile("Manage Drills", "Create and edit custom drills", { Icon(Icons.Default.EditNote, contentDescription = null) }, onManageDrills)
 
         ActionTile(
             label = "Latest Session",
-            subtitle = if (latestSessionStartMs > 0L) {
-                "${formatSessionDateTime(latestSessionStartMs)} • ${formatSessionDuration(latestSessionDurationMs)}"
-            } else {
-                "Open history to review saved sessions"
-            },
+            subtitle = if (latestSessionStartMs > 0L) "${formatSessionDateTime(latestSessionStartMs)} • ${formatSessionDuration(latestSessionDurationMs)}" else "Open history to review saved sessions",
             icon = { Icon(Icons.Default.History, contentDescription = null) },
             onClick = onHistory,
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ActionTile(
-                label = "Review",
-                subtitle = "Session history",
-                icon = { Icon(Icons.Default.History, contentDescription = null) },
-                onClick = onHistory,
-                modifier = Modifier.weight(1f),
-            )
-            ActionTile(
-                label = "Progress",
-                subtitle = "Patterns & trends",
-                icon = { Icon(Icons.Default.BarChart, contentDescription = null) },
-                onClick = onProgress,
-                modifier = Modifier.weight(1f),
-            )
+            ActionTile("Review", "Session history", { Icon(Icons.Default.History, contentDescription = null) }, onHistory, modifier = Modifier.weight(1f))
+            ActionTile("Progress", "Patterns & trends", { Icon(Icons.Default.BarChart, contentDescription = null) }, onProgress, modifier = Modifier.weight(1f))
         }
 
         ProfileCalibrationCard(
             activeProfileName = activeProfileName,
-            isCalibrated = activeProfileCalibrated,
-            profileStatuses = orderedProfiles,
-            hasActiveProfile = activeProfile != null,
+            isCalibrated = activeHasCalibration,
+            hasActiveProfile = activeProfileId != null,
             onCalibrateClick = {
-                if (activeProfile == null) return@ProfileCalibrationCard
-                if (activeProfileCalibrated) {
-                    showOverwriteDialog = true
-                } else {
-                    onCalibration()
-                }
+                if (activeProfileId == null) return@ProfileCalibrationCard
+                if (activeHasCalibration) onShowOverwriteDialogChange(true) else onCalibration()
             },
         )
 
-        ActionTile(
-            label = "Settings",
-            subtitle = "Preferences & privacy",
-            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-            onClick = onSettings,
+        ActionTile("Settings", "Preferences & privacy", { Icon(Icons.Default.Settings, contentDescription = null) }, onSettings)
+    }
+
+    if (showCreateDialog) {
+        AlertDialog(
+            onDismissRequest = { onShowCreateDialogChange(false) },
+            title = { Text("Create profile") },
+            text = { OutlinedTextField(value = newProfileName, onValueChange = onNewProfileNameChange, label = { Text("Profile name") }, singleLine = true) },
+            confirmButton = {
+                Button(onClick = {
+                    onCreateProfile(newProfileName.trim().ifBlank { "User" })
+                    onNewProfileNameChange("")
+                    onShowCreateDialogChange(false)
+                }) { Text("Create") }
+            },
+            dismissButton = { Button(onClick = { onShowCreateDialogChange(false) }) { Text("Cancel") } },
         )
+    }
 
-        if (showCreateDialog) {
-            AlertDialog(
-                onDismissRequest = { showCreateDialog = false },
-                title = { Text("Create profile") },
-                text = {
-                    OutlinedTextField(
-                        value = newProfileName,
-                        onValueChange = { newProfileName = it },
-                        label = { Text("Profile name") },
-                        singleLine = true,
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val name = newProfileName.trim().ifBlank { "User" }
-                            onCreateProfile(name)
-                            newProfileName = ""
-                            showCreateDialog = false
-                        },
-                    ) { Text("Create") }
-                },
-                dismissButton = {
-                    Button(onClick = { showCreateDialog = false }) { Text("Cancel") }
-                },
-            )
-        }
-
-        if (renameTargetProfileId != null) {
-            AlertDialog(
-                onDismissRequest = { renameTargetProfileId = null },
-                title = { Text("Rename profile") },
-                text = {
-                    OutlinedTextField(
-                        value = renameTargetName,
-                        onValueChange = { renameTargetName = it },
-                        label = { Text("Profile name") },
-                        singleLine = true,
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val id = renameTargetProfileId ?: return@Button
-                            onRenameProfile(id, renameTargetName)
-                            renameTargetProfileId = null
-                        },
-                    ) { Text("Save") }
-                },
-                dismissButton = {
-                    Button(onClick = { renameTargetProfileId = null }) { Text("Cancel") }
-                },
-            )
-        }
+    if (renameTargetProfileId != null) {
+        AlertDialog(
+            onDismissRequest = { onRenameTargetProfileIdChange(null) },
+            title = { Text("Rename profile") },
+            text = { OutlinedTextField(value = renameTargetName, onValueChange = onRenameTargetNameChange, label = { Text("Profile name") }, singleLine = true) },
+            confirmButton = {
+                Button(onClick = {
+                    val id = renameTargetProfileId ?: return@Button
+                    onRenameProfile(id, renameTargetName)
+                    onRenameTargetProfileIdChange(null)
+                }) { Text("Save") }
+            },
+            dismissButton = { Button(onClick = { onRenameTargetProfileIdChange(null) }) { Text("Cancel") } },
+        )
     }
 
     if (showOverwriteDialog) {
         AlertDialog(
-            onDismissRequest = { showOverwriteDialog = false },
+            onDismissRequest = { onShowOverwriteDialogChange(false) },
             title = { Text("Overwrite calibration?") },
             text = { Text("This will replace the saved body calibration for $activeProfileName.") },
-            confirmButton = {
-                Button(onClick = {
-                    showOverwriteDialog = false
-                    onCalibration()
-                }) { Text("Overwrite") }
-            },
-            dismissButton = {
-                Button(onClick = { showOverwriteDialog = false }) { Text("Cancel") }
-            },
+            confirmButton = { Button(onClick = { onShowOverwriteDialogChange(false); onCalibration() }) { Text("Overwrite") } },
+            dismissButton = { Button(onClick = { onShowOverwriteDialogChange(false) }) { Text("Cancel") } },
         )
     }
 }
@@ -377,36 +320,15 @@ private fun Content(
 private fun ProfileCalibrationCard(
     activeProfileName: String,
     isCalibrated: Boolean,
-    profileStatuses: List<UserProfileStatus>,
     hasActiveProfile: Boolean,
     onCalibrateClick: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Profiles", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text("Active: $activeProfileName · ${if (isCalibrated) "Calibrated" else "Not calibrated"}")
-            Button(
-                onClick = onCalibrateClick,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = hasActiveProfile,
-            ) {
+            Button(onClick = onCalibrateClick, modifier = Modifier.fillMaxWidth(), enabled = hasActiveProfile) {
                 Text(if (isCalibrated) "Recalibrate" else "Start calibration")
-            }
-            if (!hasActiveProfile) {
-                Text("Create or activate a profile to calibrate.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            profileStatuses.forEach { profile ->
-                val suffix = if (profile.isActive) " (Active)" else ""
-                Text("${profile.name}$suffix · ${if (profile.isCalibrated) "Calibrated" else "Not calibrated"}")
             }
         }
     }
@@ -422,61 +344,22 @@ private fun ActionTile(
     featured: Boolean = false,
     hero: Boolean = false,
 ) {
-    val colors = if (featured) {
-        CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
-    } else {
-        CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        )
-    }
+    val colors = if (featured) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f), contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
+    else CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f), contentColor = MaterialTheme.colorScheme.onSurface)
 
-    Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(if (hero) 28.dp else 24.dp),
-        colors = colors,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = if (hero) 20.dp else 16.dp, vertical = if (hero) 24.dp else 18.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
+    Card(onClick = onClick, modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(if (hero) 28.dp else 24.dp), colors = colors) {
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = if (hero) 20.dp else 16.dp, vertical = if (hero) 24.dp else 18.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                    shape = RoundedCornerShape(12.dp),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                ) {
-                    Row(modifier = Modifier.padding(if (hero) 10.dp else 8.dp)) {
-                        icon()
-                    }
+                Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), shape = RoundedCornerShape(12.dp), tonalElevation = 0.dp, shadowElevation = 0.dp) {
+                    Row(modifier = Modifier.padding(if (hero) 10.dp else 8.dp)) { icon() }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = label,
-                        style = if (hero) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = subtitle,
-                        style = if (hero) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text(label, style = if (hero) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(subtitle, style = if (hero) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(modifier = Modifier.width(10.dp))
-            Icon(
-                imageVector = Icons.Default.ArrowOutward,
-                contentDescription = null,
-                modifier = Modifier.size(if (hero) 22.dp else 18.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
+            Icon(imageVector = Icons.Default.ArrowOutward, contentDescription = null, modifier = Modifier.size(if (hero) 22.dp else 18.dp), tint = MaterialTheme.colorScheme.primary)
         }
     }
 }

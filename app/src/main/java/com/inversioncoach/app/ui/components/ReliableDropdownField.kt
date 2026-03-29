@@ -28,6 +28,7 @@ data class DropdownOption<T>(
 )
 
 @Composable
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 fun <T> ReliableDropdownField(
     label: String,
     selected: DropdownOption<T>,

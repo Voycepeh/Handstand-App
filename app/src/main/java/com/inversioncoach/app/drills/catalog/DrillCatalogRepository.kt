@@ -12,6 +12,12 @@ class DrillCatalogRepository(
 
     fun exportCatalog(catalog: DrillCatalog): String = DrillCatalogExporter.export(catalog)
 
+
+    fun getAllDrills(assetPath: String = DEFAULT_ASSET_PATH): List<DrillTemplate> = loadCatalog(assetPath).drills
+
+    fun getDrillById(id: String, assetPath: String = DEFAULT_ASSET_PATH): DrillTemplate? =
+        getAllDrills(assetPath).firstOrNull { it.id == id }
+
     companion object {
         const val DEFAULT_ASSET_PATH = "drill_catalog/drill_catalog_v1.json"
     }

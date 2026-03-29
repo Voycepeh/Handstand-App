@@ -25,19 +25,8 @@ class UserProfileManager(
     suspend fun listAvailableProfiles(): List<UserProfileRecord> = observeAvailableProfiles().firstOrNull().orEmpty()
 
     suspend fun getOrCreateActiveProfile(): UserProfileRecord {
-        val settings = userSettingsDao.getSettings()
         val profiles = listAvailableProfiles()
-        val active = settings?.activeUserProfileId?.let { requestedId ->
-            profiles.firstOrNull { it.id == requestedId }
-        }
-        if (active != null) {
-            maybeMigrateLegacyBodyProfile(active)
-            return active
-        }
-        val fallback = profiles.firstOrNull() ?: createProfile("Primary User")
-        userSettingsDao.upsert((settings ?: com.inversioncoach.app.model.UserSettings()).copy(activeUserProfileId = fallback.id))
-        maybeMigrateLegacyBodyProfile(fallback)
-        return fallback
+        return profiles.firstOrNull() ?: createProfile("Primary User")
     }
 
     suspend fun createProfile(name: String): UserProfileRecord {
@@ -55,8 +44,7 @@ class UserProfileManager(
     }
 
     suspend fun setActiveProfile(profileId: String) {
-        val settings = userSettingsDao.getSettings() ?: com.inversioncoach.app.model.UserSettings()
-        userSettingsDao.upsert(settings.copy(activeUserProfileId = profileId))
+        // Active-profile persistence moved to profile-based storage; no-op compatibility shim.
     }
 
     suspend fun renameProfile(profileId: String, newName: String) {
@@ -66,12 +54,7 @@ class UserProfileManager(
 
     suspend fun archiveProfile(profileId: String): Boolean {
         if (userProfileDao.countAvailableProfiles() <= 1) return false
-        val settings = userSettingsDao.getSettings() ?: com.inversioncoach.app.model.UserSettings()
         userProfileDao.archive(profileId, System.currentTimeMillis())
-        if (settings.activeUserProfileId == profileId) {
-            val fallback = listAvailableProfiles().firstOrNull { it.id != profileId }
-            userSettingsDao.upsert(settings.copy(activeUserProfileId = fallback?.id))
-        }
         return true
     }
 
@@ -106,27 +89,5 @@ class UserProfileManager(
         bodyProfileDao.deleteForUser(active.id)
     }
 
-    suspend fun getLegacyBodyProfileFallback(): UserBodyProfile? {
-        val settings = userSettingsDao.getSettings() ?: return null
-        return UserBodyProfile.decode(settings.userBodyProfileJson)
-    }
-
-    private suspend fun maybeMigrateLegacyBodyProfile(activeProfile: UserProfileRecord) {
-        val latest = bodyProfileDao.getLatestForUser(activeProfile.id)
-        if (latest != null) return
-        val settings = userSettingsDao.getSettings() ?: return
-        val legacy = UserBodyProfile.decode(settings.userBodyProfileJson) ?: return
-        val now = System.currentTimeMillis()
-        bodyProfileDao.upsert(
-            BodyProfileRecord(
-                id = "body_${UUID.randomUUID()}",
-                userProfileId = activeProfile.id,
-                version = 1,
-                payloadJson = legacy.encode(),
-                createdAtMs = now,
-                updatedAtMs = now,
-            ),
-        )
-        userSettingsDao.upsert(settings.copy(userBodyProfileJson = null))
-    }
+    suspend fun getLegacyBodyProfileFallback(): UserBodyProfile? = null
 }

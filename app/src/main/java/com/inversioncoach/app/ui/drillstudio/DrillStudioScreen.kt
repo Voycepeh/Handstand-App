@@ -221,7 +221,7 @@ private fun DrillStudioEditor(
                         Card(
                             modifier = Modifier.width(190.dp).border(
                                 width = if (selected) 2.dp else 0.dp,
-                                color = MaterialTheme.colorScheme.primary,
+                                color = primaryColor,
                                 shape = RoundedCornerShape(12.dp),
                             ),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -354,6 +354,8 @@ private fun PoseCanvas(
     onJointMoved: (String, JointPoint) -> Unit,
 ) {
     var activeJoint by remember(phasePose.phaseId) { mutableStateOf<String?>(null) }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
     Box(modifier = Modifier.fillMaxWidth().height(260.dp).background(MaterialTheme.colorScheme.surface)) {
         Canvas(
             modifier = Modifier
@@ -388,7 +390,7 @@ private fun PoseCanvas(
                 val b = phasePose.joints[end]
                 if (a != null && b != null) {
                     drawLine(
-                        color = MaterialTheme.colorScheme.primary,
+                        color = primaryColor,
                         start = Offset(a.x * size.width, a.y * size.height),
                         end = Offset(b.x * size.width, b.y * size.height),
                         strokeWidth = 4f,
@@ -398,7 +400,7 @@ private fun PoseCanvas(
             }
             phasePose.joints.values.forEach { point ->
                 drawCircle(
-                    color = MaterialTheme.colorScheme.secondary,
+                    color = secondaryColor,
                     radius = 7f,
                     center = Offset(point.x * size.width, point.y * size.height),
                     style = Stroke(width = 3f),
@@ -413,13 +415,15 @@ private fun PreviewCard(drill: DrillTemplate, progress: Float) {
     val pose = remember(drill.id, progress, drill.skeletonTemplate.keyframes) {
         StickFigureAnimator.poseAt(drill.skeletonTemplate, progress)
     }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
     Canvas(modifier = Modifier.fillMaxWidth().height(140.dp).background(MaterialTheme.colorScheme.surface)) {
         StickFigureAnimator.canonicalBones.forEach { (start, end) ->
             val a = pose[start]
             val b = pose[end]
             if (a != null && b != null) {
                 drawLine(
-                    color = MaterialTheme.colorScheme.primary,
+                    color = primaryColor,
                     start = Offset(a.x * size.width, a.y * size.height),
                     end = Offset(b.x * size.width, b.y * size.height),
                     strokeWidth = 4f,
@@ -429,7 +433,7 @@ private fun PreviewCard(drill: DrillTemplate, progress: Float) {
         }
         pose.values.forEach { point ->
             drawCircle(
-                color = MaterialTheme.colorScheme.secondary,
+                color = secondaryColor,
                 radius = 6f,
                 center = Offset(point.x * size.width, point.y * size.height),
                 style = Stroke(width = 3f),
