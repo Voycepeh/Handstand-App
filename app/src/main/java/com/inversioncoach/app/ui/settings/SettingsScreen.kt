@@ -103,7 +103,17 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsCard(title = "Alignment") {
+            SettingsCard(title = "Session") {
+                Text("Startup countdown: ${startupCountdownSeconds}s")
+                Slider(
+                    value = startupCountdownSeconds.toFloat(),
+                    onValueChange = { startupCountdownSeconds = it.toInt().coerceIn(0, 30) },
+                    valueRange = 0f..30f,
+                )
+                Text("Time before recording starts.")
+            }
+
+            SettingsCard(title = "Alignment / thresholds") {
                 Text("Alignment strictness: ${alignmentStrictness.name.lowercase().replaceFirstChar { it.uppercase() }}")
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AlignmentStrictness.entries.forEach { level ->
@@ -136,13 +146,6 @@ fun SettingsScreen(
                     onValueChange = { maxStorageMb = it.toInt().coerceIn(256, 4096) },
                     valueRange = 256f..4096f,
                 )
-                Text("Startup countdown: ${startupCountdownSeconds}s")
-                Slider(
-                    value = startupCountdownSeconds.toFloat(),
-                    onValueChange = { startupCountdownSeconds = it.toInt().coerceIn(0, 30) },
-                    valueRange = 0f..30f,
-                )
-                Text("Time before recording starts.")
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Local-only privacy mode")
                     Checkbox(checked = localOnlyPrivacyMode, onCheckedChange = { localOnlyPrivacyMode = it })
