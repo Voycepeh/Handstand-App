@@ -9,12 +9,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,26 +31,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.model.AlignmentStrictness
-import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import kotlinx.coroutines.launch
-import java.text.DateFormat
-import java.util.Date
 
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     onDeveloperTuning: () -> Unit,
-    onCalibration: () -> Unit,
     onNavigateHome: () -> Unit,
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
-    val calibrationDrillType = DrillType.FREE_HANDSTAND
-
     val scope = rememberCoroutineScope()
+
+    var latestSettings by remember { mutableStateOf(UserSettings()) }
     var cueFrequency by remember { mutableFloatStateOf(2f) }
     var overlay by remember { mutableFloatStateOf(1f) }
     var debug by remember { mutableStateOf(false) }
@@ -64,39 +60,23 @@ fun SettingsScreen(
     var customHoldThreshold by remember { mutableIntStateOf(72) }
     var showSaveConfirmation by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
-    var showClearCalibrationConfirmation by remember { mutableStateOf(false) }
-    var calibrationStatus by remember { mutableStateOf("Not calibrated yet") }
-    var calibrationSummary by remember { mutableStateOf<String?>(null) }
-    var calibrationUpdatedAt by remember { mutableStateOf<Long?>(null) }
-
-    suspend fun refreshCalibrationStatus() {
-        val profile = ServiceLocator.calibrationProfileProvider(context).resolve(calibrationDrillType)
-        calibrationUpdatedAt = profile.userBodyProfile?.let { profile.updatedAtMs }
-        calibrationSummary = profile.userBodyProfile?.let {
-            "v${profile.profileVersion} • symmetry ${(it.leftRightConsistency * 100f).toInt()}%"
-        }
-        calibrationStatus = profile.userBodyProfile?.let {
-            "Saved"
-        } ?: "Not calibrated yet"
-    }
 
     LaunchedEffect(Unit) {
-        repository.observeSettings().collect { s ->
-            cueFrequency = s.cueFrequencySeconds
-            overlay = s.overlayIntensity
-            debug = s.debugOverlayEnabled
-            localOnlyPrivacyMode = s.localOnlyPrivacyMode
-            maxStorageMb = s.maxStorageMb
-            startupCountdownSeconds = s.startupCountdownSeconds
-            alignmentStrictness = s.alignmentStrictness
-            customLineDeviation = s.customLineDeviation
-            customGoodForm = s.customMinimumGoodFormScore
-            customRepThreshold = s.customRepAcceptanceThreshold
-            customHoldThreshold = s.customHoldAlignedThreshold
+        repository.observeSettings().collect { settings ->
+            latestSettings = settings
+            cueFrequency = settings.cueFrequencySeconds
+            overlay = settings.overlayIntensity
+            debug = settings.debugOverlayEnabled
+            localOnlyPrivacyMode = settings.localOnlyPrivacyMode
+            maxStorageMb = settings.maxStorageMb
+            startupCountdownSeconds = settings.startupCountdownSeconds
+            alignmentStrictness = settings.alignmentStrictness
+            customLineDeviation = settings.customLineDeviation
+            customGoodForm = settings.customMinimumGoodFormScore
+            customRepThreshold = settings.customRepAcceptanceThreshold
+            customHoldThreshold = settings.customHoldAlignedThreshold
         }
     }
-
-    LaunchedEffect(Unit) { refreshCalibrationStatus() }
 
     ScaffoldedScreen(title = "Settings", onBack = onBack) { padding ->
         Column(
@@ -107,34 +87,11 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Voice style: concise / technical / encouraging")
-            Text("Cue frequency: ${"%.1f".format(cueFrequency)}s")
-            Slider(value = cueFrequency, onValueChange = { cueFrequency = it }, valueRange = 1.5f..4f)
-            Text("Overlay intensity: ${"%.1f".format(overlay)}")
-            Slider(value = overlay, onValueChange = { overlay = it }, valueRange = 0.2f..1f)
-            Text("Max video storage: ${maxStorageMb} MB")
-            Slider(
-                value = maxStorageMb.toFloat(),
-                onValueChange = { maxStorageMb = it.toInt().coerceIn(256, 4096) },
-                valueRange = 256f..4096f,
-            )
-            Text("Startup countdown: ${startupCountdownSeconds}s")
-            Slider(
-                value = startupCountdownSeconds.toFloat(),
-                onValueChange = { startupCountdownSeconds = it.toInt().coerceIn(0, 30) },
-                valueRange = 0f..30f,
-            )
-            Text("Time before recording starts.")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Debug overlay (raw metrics/angles)")
-                Checkbox(checked = debug, onCheckedChange = { debug = it })
-            }
             Text("Preferences", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
             SettingsCard(title = "Voice cues") {
                 Text("Cue frequency: ${"%.1f".format(cueFrequency)}s")
                 Slider(value = cueFrequency, onValueChange = { cueFrequency = it }, valueRange = 1.5f..4f)
-                Text("Voice style: concise / technical / encouraging")
             }
 
             SettingsCard(title = "Overlay") {
@@ -179,6 +136,13 @@ fun SettingsScreen(
                     onValueChange = { maxStorageMb = it.toInt().coerceIn(256, 4096) },
                     valueRange = 256f..4096f,
                 )
+                Text("Startup countdown: ${startupCountdownSeconds}s")
+                Slider(
+                    value = startupCountdownSeconds.toFloat(),
+                    onValueChange = { startupCountdownSeconds = it.toInt().coerceIn(0, 30) },
+                    valueRange = 0f..30f,
+                )
+                Text("Time before recording starts.")
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Local-only privacy mode")
                     Checkbox(checked = localOnlyPrivacyMode, onCheckedChange = { localOnlyPrivacyMode = it })
@@ -186,21 +150,6 @@ fun SettingsScreen(
             }
 
             Button(onClick = { showSaveConfirmation = true }, modifier = Modifier.fillMaxWidth()) { Text("Save settings") }
-            SettingsCard(title = "Structural calibration") {
-                Text("Scope: ${calibrationDrillType.displayName} profile")
-                Text("Status: $calibrationStatus")
-                calibrationUpdatedAt?.let {
-                    Text("Last calibrated on ${DateFormat.getDateTimeInstance().format(Date(it))}")
-                }
-                calibrationSummary?.let { Text("Profile: $it") }
-                Text("Capture front, side, overhead, and stable hold poses to build your body profile.")
-                Button(onClick = onCalibration, modifier = Modifier.fillMaxWidth()) { Text("Start calibration") }
-                Button(
-                    onClick = { showClearCalibrationConfirmation = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = calibrationUpdatedAt != null,
-                ) { Text("Clear calibration") }
-            }
             Button(onClick = onDeveloperTuning, modifier = Modifier.fillMaxWidth()) { Text("Developer threshold tuning") }
             Button(onClick = { showDeleteConfirmation = true }, modifier = Modifier.fillMaxWidth()) { Text("Delete all sessions") }
         }
@@ -216,14 +165,13 @@ fun SettingsScreen(
                             showSaveConfirmation = false
                             scope.launch {
                                 repository.saveSettings(
-                                    UserSettings(
+                                    latestSettings.copy(
                                         cueFrequencySeconds = cueFrequency,
                                         overlayIntensity = overlay,
                                         debugOverlayEnabled = debug,
                                         localOnlyPrivacyMode = localOnlyPrivacyMode,
                                         maxStorageMb = maxStorageMb,
                                         startupCountdownSeconds = startupCountdownSeconds,
-                                        minSessionDurationSeconds = 0,
                                         alignmentStrictness = alignmentStrictness,
                                         customLineDeviation = customLineDeviation,
                                         customMinimumGoodFormScore = customGoodForm,
@@ -260,28 +208,6 @@ fun SettingsScreen(
                 },
                 dismissButton = {
                     Button(onClick = { showDeleteConfirmation = false }) { Text("Cancel") }
-                },
-            )
-        }
-
-        if (showClearCalibrationConfirmation) {
-            AlertDialog(
-                onDismissRequest = { showClearCalibrationConfirmation = false },
-                title = { Text("Clear calibration?") },
-                text = { Text("This will remove your saved body profile for ${calibrationDrillType.displayName} calibration.") },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            showClearCalibrationConfirmation = false
-                            scope.launch {
-                                ServiceLocator.drillMovementProfileRepository(context).clear(calibrationDrillType)
-                                refreshCalibrationStatus()
-                            }
-                        },
-                    ) { Text("Clear") }
-                },
-                dismissButton = {
-                    Button(onClick = { showClearCalibrationConfirmation = false }) { Text("Cancel") }
                 },
             )
         }

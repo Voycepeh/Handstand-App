@@ -12,7 +12,7 @@ import com.inversioncoach.app.model.UserSettings
 
 @Database(
     entities = [SessionRecord::class, UserSettings::class, FrameMetricRecord::class, IssueEvent::class, CalibrationEntity::class],
-    version = 14,
+    version = 16,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)

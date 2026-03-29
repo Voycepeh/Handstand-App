@@ -74,6 +74,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onProgress = { navController.navigate(Route.Progress.value) },
                 onSettings = { navController.navigate(Route.Settings.value) },
                 onUploadVideo = { navController.navigate(Route.UploadVideo.value) },
+                onCalibration = { navController.navigate(Route.Calibration.create(DrillType.FREE_HANDSTAND)) },
             )
         }
         composable(Route.Start.value) {
@@ -165,7 +166,6 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
                 onDeveloperTuning = { navController.navigate(Route.DevTuning.value) },
-                onCalibration = { navController.navigate(Route.Calibration.create(DrillType.FREE_HANDSTAND)) },
                 onNavigateHome = { navController.popBackStack(Route.Home.value, false) },
             )
         }

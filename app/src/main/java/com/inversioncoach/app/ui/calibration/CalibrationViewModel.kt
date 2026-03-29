@@ -14,6 +14,7 @@ import com.inversioncoach.app.calibration.hold.HoldTemplateBuilder
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.PoseFrame
 import com.inversioncoach.app.model.SmoothedPoseFrame
+import com.inversioncoach.app.storage.repository.SessionRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +28,7 @@ class CalibrationViewModel(
     private val drillType: DrillType,
     private val calibrationProfileProvider: CalibrationProfileProvider,
     private val drillMovementProfileRepository: DrillMovementProfileRepository,
+    private val repository: SessionRepository,
     private val engine: StructuralCalibrationEngine = StructuralCalibrationEngine(),
     private val holdTemplateBuilder: HoldTemplateBuilder = HoldTemplateBuilder(),
     private val holdTemplateBlender: HoldTemplateBlender = HoldTemplateBlender(),
@@ -209,10 +211,11 @@ class CalibrationViewModel(
                 profileVersion = nextVersion,
                 userBodyProfile = builtProfile,
                 holdTemplate = finalHoldTemplate,
-                updatedAtMs = System.currentTimeMillis(),
                 updatedAtMs = updatedAtMs,
             )
             drillMovementProfileRepository.save(newProfile)
+            val activeProfileName = repository.activeProfileName()
+            repository.saveCalibrationForProfile(activeProfileName, builtProfile)
 
             _state.update {
                 it.copy(

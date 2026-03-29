@@ -58,6 +58,7 @@ fun CalibrationScreen(drillType: DrillType, onBack: () -> Unit) {
             drillType = drillType,
             calibrationProfileProvider = ServiceLocator.calibrationProfileProvider(context),
             drillMovementProfileRepository = ServiceLocator.drillMovementProfileRepository(context),
+            repository = ServiceLocator.repository(context),
         )
     }
     val state by vm.state.collectAsState()
@@ -166,6 +167,7 @@ private fun CalibrationCaptureContent(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
                     PreviewView(ctx).apply {
+                        scaleType = PreviewView.ScaleType.FILL_CENTER
                         post {
                             cameraManager.bind(
                                 lifecycleOwner = lifecycleOwner,
@@ -262,26 +264,36 @@ private fun CalibrationGuideOverlay(modifier: Modifier, state: CalibrationUiStat
     val mapper = remember { PoseCoordinateMapper() }
     Box(modifier = modifier) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val margin = size.minDimension * 0.08f
-            drawRect(
-                color = if (state.isReady) Color(0xFF4CAF50) else Color(0xFFFFA000),
-                topLeft = Offset(margin, margin),
-                size = androidx.compose.ui.geometry.Size(size.width - margin * 2, size.height - margin * 2),
-                style = Stroke(width = 4f),
-            )
-
-            val jointsByName = state.reviewFrame?.joints?.associateBy { it.name }.orEmpty()
-            val missing = state.missingRequiredJoints.toSet()
             val frame = state.reviewFrame
             val projectionInput = PoseProjectionInput(
                 sourceWidth = frame?.analysisWidth?.takeIf { it > 0 } ?: size.width.toInt().coerceAtLeast(1),
                 sourceHeight = frame?.analysisHeight?.takeIf { it > 0 } ?: size.height.toInt().coerceAtLeast(1),
                 previewWidth = size.width,
                 previewHeight = size.height,
-                rotationDegrees = 0,
+                rotationDegrees = frame?.analysisRotationDegrees ?: 0,
                 mirrored = frame?.mirrored ?: false,
                 scaleMode = PoseScaleMode.FILL,
             )
+            val projectedPreviewRect = mapper.diagnostics(projectionInput).contentRect
+            val visiblePreviewRect = projectedPreviewRect.intersectWithin(size.width, size.height)
+            val horizontalMargin = (visiblePreviewRect.width * 0.07f).coerceAtLeast(24f)
+            val verticalMargin = (visiblePreviewRect.height * 0.06f).coerceAtLeast(24f)
+            val guideRect = androidx.compose.ui.geometry.Rect(
+                left = visiblePreviewRect.left + horizontalMargin,
+                top = visiblePreviewRect.top + verticalMargin,
+                right = visiblePreviewRect.right - horizontalMargin,
+                bottom = visiblePreviewRect.bottom - verticalMargin,
+            )
+
+            drawRect(
+                color = if (state.isReady) Color(0xFF4CAF50) else Color(0xFFFFA000),
+                topLeft = guideRect.topLeft,
+                size = guideRect.size,
+                style = Stroke(width = 4f),
+            )
+
+            val jointsByName = frame?.joints?.associateBy { it.name }.orEmpty()
+            val missing = state.missingRequiredJoints.toSet()
             state.requiredJointNames.forEach { name ->
                 val p = jointsByName[name] ?: return@forEach
                 val mapped = mapper.map(p.x, p.y, projectionInput)
@@ -309,3 +321,16 @@ private fun String.toDisplayLabel(): String =
     replace('_', ' ')
         .split(' ')
         .joinToString(" ") { token -> token.replaceFirstChar { c -> c.titlecase() } }
+
+private fun androidx.compose.ui.geometry.Rect.intersectWithin(width: Float, height: Float): androidx.compose.ui.geometry.Rect {
+    val bounded = androidx.compose.ui.geometry.Rect(
+        left = left.coerceIn(0f, width),
+        top = top.coerceIn(0f, height),
+        right = right.coerceIn(0f, width),
+        bottom = bottom.coerceIn(0f, height),
+    )
+    if (bounded.width <= 0f || bounded.height <= 0f) {
+        return androidx.compose.ui.geometry.Rect(0f, 0f, width, height)
+    }
+    return bounded
+}

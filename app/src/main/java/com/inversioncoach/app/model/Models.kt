@@ -335,7 +335,6 @@ data class SessionSummary(
 @Entity(tableName = "user_settings")
 data class UserSettings(
     @PrimaryKey val id: Int = 1,
-    val cueStyle: CueStyle = CueStyle.CONCISE,
     val cueFrequencySeconds: Float = 2f,
     val audioVolume: Float = 1f,
     val overlayIntensity: Float = 1f,
@@ -352,6 +351,9 @@ data class UserSettings(
     val customHoldAlignedThreshold: Int = 72,
     val drillCameraSideSelections: String = "",
     val userBodyProfileJson: String? = null,
+    val activeProfileName: String = "Profile 1",
+    val profileNamesCsv: String = "Profile 1",
+    val profileCalibrationsJson: String? = null,
 )
 
 data class LiveSessionUiState(

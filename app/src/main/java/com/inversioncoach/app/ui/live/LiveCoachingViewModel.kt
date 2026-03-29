@@ -532,7 +532,7 @@ class LiveCoachingViewModel(
         val cue = cueEngine.nextCue(
             config = config,
             metrics = analysis.metrics,
-            style = settings.cueStyle,
+            style = com.inversioncoach.app.model.CueStyle.CONCISE,
             minSpacingMs = (settings.cueFrequencySeconds * 1000).toLong(),
         )
 

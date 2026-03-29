@@ -6,7 +6,6 @@ import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.CleanupStatus
 import com.inversioncoach.app.model.CompressionStatus
-import com.inversioncoach.app.model.CueStyle
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.RetainedAssetType
@@ -19,11 +18,6 @@ class Converters {
     @TypeConverter
     fun drillTypeToString(value: DrillType): String = value.name
 
-    @TypeConverter
-    fun cueStyleFromString(raw: String): CueStyle = CueStyle.valueOf(raw)
-
-    @TypeConverter
-    fun cueStyleToString(value: CueStyle): String = value.name
 
     @TypeConverter
     fun alignmentStrictnessFromString(raw: String): AlignmentStrictness = when (raw) {
