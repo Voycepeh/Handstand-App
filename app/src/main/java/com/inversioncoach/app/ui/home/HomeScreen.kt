@@ -61,6 +61,7 @@ fun HomeScreen(
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
+    val activeProfile by repository.observeActiveProfile().collectAsState(initial = null)
     val profileStatuses by repository.observeProfileStatuses().collectAsState(initial = emptyList())
     val latestSession = sessions.maxByOrNull { it.startedAtMs }
 
@@ -75,6 +76,7 @@ fun HomeScreen(
             onSettings = onSettings,
             onUploadVideo = onUploadVideo,
             onCalibration = onCalibration,
+            activeProfile = activeProfile,
             profileStatuses = profileStatuses,
             latestSessionStartMs = latestSession?.startedAtMs ?: 0L,
             latestSessionDurationMs = computeSessionDurationMs(latestSession?.startedAtMs ?: 0L, latestSession?.completedAtMs ?: 0L),
@@ -93,13 +95,19 @@ private fun Content(
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
     onCalibration: () -> Unit,
+    activeProfile: UserProfileStatus?,
     profileStatuses: List<UserProfileStatus>,
     latestSessionStartMs: Long,
     latestSessionDurationMs: Long,
 ) {
-    val activeProfile = profileStatuses.firstOrNull { it.isActive }
-    val activeProfileName = activeProfile?.name ?: "Profile 1"
+    val activeProfileName = activeProfile?.name ?: "No active profile"
     val activeProfileCalibrated = activeProfile?.isCalibrated ?: false
+    val orderedProfiles = remember(profileStatuses) {
+        profileStatuses.sortedWith(
+            compareByDescending<UserProfileStatus> { it.isActive }
+                .thenBy { it.name.lowercase() },
+        )
+    }
     var showOverwriteDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -174,8 +182,10 @@ private fun Content(
         ProfileCalibrationCard(
             activeProfileName = activeProfileName,
             isCalibrated = activeProfileCalibrated,
-            profileStatuses = profileStatuses,
+            profileStatuses = orderedProfiles,
+            hasActiveProfile = activeProfile != null,
             onCalibrateClick = {
+                if (activeProfile == null) return@ProfileCalibrationCard
                 if (activeProfileCalibrated) {
                     showOverwriteDialog = true
                 } else {
@@ -215,6 +225,7 @@ private fun ProfileCalibrationCard(
     activeProfileName: String,
     isCalibrated: Boolean,
     profileStatuses: List<UserProfileStatus>,
+    hasActiveProfile: Boolean,
     onCalibrateClick: () -> Unit,
 ) {
     Card(
@@ -228,10 +239,17 @@ private fun ProfileCalibrationCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text("Active profile: $activeProfileName", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text("Body profile: ${if (isCalibrated) "Calibrated" else "Not calibrated"}")
-            Button(onClick = onCalibrateClick, modifier = Modifier.fillMaxWidth()) {
+            Text("Profiles", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("Active: $activeProfileName · ${if (isCalibrated) "Calibrated" else "Not calibrated"}")
+            Button(
+                onClick = onCalibrateClick,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = hasActiveProfile,
+            ) {
                 Text(if (isCalibrated) "Recalibrate" else "Start calibration")
+            }
+            if (!hasActiveProfile) {
+                Text("Create or activate a profile to calibrate.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             profileStatuses.forEach { profile ->
                 val suffix = if (profile.isActive) " (Active)" else ""
