@@ -169,7 +169,6 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         }
         composable(Route.Calibration.value) {
             CalibrationScreen(
-                drillType = DrillType.FREE_HANDSTAND,
                 onBack = { navController.popBackStack() },
             )
         }

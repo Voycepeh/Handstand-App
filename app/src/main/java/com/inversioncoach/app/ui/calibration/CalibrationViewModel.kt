@@ -25,7 +25,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 class CalibrationViewModel(
-    private val drillType: DrillType,
+    private val referenceDrillType: DrillType,
     private val calibrationProfileProvider: CalibrationProfileProvider,
     private val drillMovementProfileRepository: DrillMovementProfileRepository,
     private val repository: SessionRepository,
@@ -41,7 +41,7 @@ class CalibrationViewModel(
         CalibrationStep.CONTROLLED_HOLD,
     )
 
-    private val session = CalibrationSession(drillType = drillType)
+    private val session = CalibrationSession(drillType = referenceDrillType)
     private val readinessEvaluator = CalibrationReadinessEvaluator()
     private val _state = MutableStateFlow(CalibrationUiState())
     val state: StateFlow<CalibrationUiState> = _state.asStateFlow()
@@ -187,12 +187,12 @@ class CalibrationViewModel(
                 return@launch
             }
 
-            val existing = calibrationProfileProvider.resolve(drillType)
+            val existing = calibrationProfileProvider.resolve(referenceDrillType)
             val controlledHoldFrames = session.get(CalibrationStep.CONTROLLED_HOLD)?.acceptedFrames.orEmpty()
             val nextVersion = existing.profileVersion + 1
 
             val learnedHoldTemplate = holdTemplateBuilder.build(
-                drillType = drillType,
+                drillType = referenceDrillType,
                 profileVersion = nextVersion,
                 bodyProfile = builtProfile,
                 frames = controlledHoldFrames,

@@ -59,11 +59,15 @@ import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import java.util.concurrent.Executors
 
 @Composable
-fun CalibrationScreen(drillType: DrillType, onBack: () -> Unit) {
+fun CalibrationScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    // Structural calibration is profile-based. This reference drill remains an internal implementation
+    // detail so we can reuse current readiness/overlay/template logic until calibration-specific logic
+    // is fully separated from drill-tied analysis.
+    val referenceDrillType = DrillType.FREE_HANDSTAND
     val vm = remember {
         CalibrationViewModel(
-            drillType = drillType,
+            referenceDrillType = referenceDrillType,
             calibrationProfileProvider = ServiceLocator.calibrationProfileProvider(context),
             drillMovementProfileRepository = ServiceLocator.drillMovementProfileRepository(context),
             repository = ServiceLocator.repository(context),
@@ -113,7 +117,7 @@ fun CalibrationScreen(drillType: DrillType, onBack: () -> Unit) {
 
             CalibrationPhase.CAPTURING -> CalibrationCaptureContent(
                 state = state,
-                drillType = drillType,
+                referenceDrillType = referenceDrillType,
                 lifecycleOwner = lifecycleOwner,
                 cameraManager = cameraManager,
                 analyzer = analyzer,
@@ -143,7 +147,7 @@ fun CalibrationScreen(drillType: DrillType, onBack: () -> Unit) {
 @Composable
 private fun CalibrationCaptureContent(
     state: CalibrationUiState,
-    drillType: DrillType,
+    referenceDrillType: DrillType,
     lifecycleOwner: androidx.lifecycle.LifecycleOwner,
     cameraManager: CameraSessionManager,
     analyzer: PoseAnalyzer,
@@ -205,17 +209,17 @@ private fun CalibrationCaptureContent(
                     },
                 )
 
-                OverlayRenderer(
-                    frame = state.reviewFrame,
-                    drillType = drillType,
-                    sessionMode = SessionMode.DRILL,
-                    modifier = Modifier.fillMaxSize(),
-                    scaleMode = PoseScaleMode.FILL,
-                    showIdealLine = false,
-                    showDebugOverlay = false,
-                    drillCameraSide = DrillCameraSide.LEFT,
-                    freestyleViewMode = FreestyleViewMode.UNKNOWN,
-                )
+            OverlayRenderer(
+                frame = state.reviewFrame,
+                drillType = referenceDrillType,
+                sessionMode = SessionMode.DRILL,
+                modifier = Modifier.fillMaxSize(),
+                scaleMode = PoseScaleMode.FILL,
+                showIdealLine = false,
+                showDebugOverlay = false,
+                drillCameraSide = DrillCameraSide.LEFT,
+                freestyleViewMode = FreestyleViewMode.UNKNOWN,
+            )
 
                 CalibrationGuideOverlay(
                     modifier = Modifier.fillMaxSize(),
