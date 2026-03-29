@@ -44,6 +44,7 @@ fun SettingsScreen(
     onDeveloperTuning: () -> Unit,
     onCalibration: () -> Unit,
     onNavigateHome: () -> Unit,
+    onDrillStudio: () -> Unit,
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
@@ -170,6 +171,7 @@ fun SettingsScreen(
             }
             SettingsCard(title = "Developer tools") {
                 Button(onClick = onDeveloperTuning, modifier = Modifier.fillMaxWidth()) { Text("Developer threshold tuning") }
+                Button(onClick = onDrillStudio, modifier = Modifier.fillMaxWidth()) { Text("Drill Studio") }
             }
         }
 

@@ -24,6 +24,7 @@ import com.inversioncoach.app.ui.calibration.CalibrationScreen
 import com.inversioncoach.app.ui.results.ResultsScreen
 import com.inversioncoach.app.ui.results.SessionTooShortScreen
 import com.inversioncoach.app.ui.settings.DeveloperTuningScreen
+import com.inversioncoach.app.ui.settings.DrillStudioScreen
 import com.inversioncoach.app.ui.settings.SettingsScreen
 import com.inversioncoach.app.ui.startdrill.StartDrillScreen
 import com.inversioncoach.app.ui.upload.UploadVideoScreen
@@ -51,6 +52,7 @@ sealed class Route(val value: String) {
     data object Progress : Route("progress")
     data object Settings : Route("settings")
     data object DevTuning : Route("settings/dev-tuning")
+    data object DrillStudio : Route("settings/drill-studio")
     data object UploadVideo : Route("upload-video")
     data object UploadVideoForDrill : Route("upload-video?drillId={drillId}&referenceTemplateId={referenceTemplateId}&isReference={isReference}") {
         fun create(drillId: String, referenceTemplateId: String?, isReference: Boolean): String =
@@ -181,6 +183,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onDeveloperTuning = { navController.navigate(Route.DevTuning.value) },
                 onCalibration = { navController.navigate(Route.Calibration.value) },
                 onNavigateHome = { navController.popBackStack(Route.Home.value, false) },
+                onDrillStudio = { navController.navigate(Route.DrillStudio.value) },
             )
         }
         composable(Route.Calibration.value) {
@@ -189,6 +192,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             )
         }
         composable(Route.DevTuning.value) { DeveloperTuningScreen(onBack = { navController.popBackStack() }) }
+        composable(Route.DrillStudio.value) { DrillStudioScreen(onBack = { navController.popBackStack() }) }
         composable(Route.UploadVideo.value) {
             UploadVideoScreen(
                 onBack = { navController.popBackStack() },
