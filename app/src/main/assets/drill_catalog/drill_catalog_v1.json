@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "drill_catalog_v1",
+  "drills": [
+    {
+      "id": "kickup_to_wall_handstand",
+      "title": "Kick-up to Wall Handstand",
+      "family": "handstand",
+      "movementType": "hold",
+      "tags": ["inversion", "entry", "wall"],
+      "cameraView": "left_profile",
+      "supportedViews": ["left_profile", "right_profile"],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "pose_timeline",
+      "phases": [
+        { "id": "setup", "label": "Set-up", "order": 0, "progressWindow": [0.00, 0.15] },
+        { "id": "kickup", "label": "Kick-up", "order": 1, "progressWindow": [0.15, 0.55] },
+        { "id": "stack", "label": "Stack and Hold", "order": 2, "progressWindow": [0.55, 0.95] },
+        { "id": "exit", "label": "Controlled Exit", "order": 3, "progressWindow": [0.95, 1.00] }
+      ],
+      "skeletonTemplate": {
+        "id": "kickup_to_wall_handstand_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 15,
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [0.52, 0.16],
+              "shoulder_left": [0.46, 0.27],
+              "shoulder_right": [0.56, 0.27],
+              "hip_left": [0.48, 0.49],
+              "hip_right": [0.55, 0.49],
+              "wrist_left": [0.43, 0.79],
+              "wrist_right": [0.59, 0.79],
+              "ankle_left": [0.47, 0.92],
+              "ankle_right": [0.55, 0.88]
+            }
+          },
+          {
+            "progress": 0.5,
+            "joints": {
+              "head": [0.50, 0.22],
+              "shoulder_left": [0.46, 0.32],
+              "shoulder_right": [0.54, 0.32],
+              "hip_left": [0.48, 0.47],
+              "hip_right": [0.52, 0.47],
+              "wrist_left": [0.45, 0.80],
+              "wrist_right": [0.55, 0.80],
+              "ankle_left": [0.43, 0.23],
+              "ankle_right": [0.57, 0.17]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [0.50, 0.14],
+              "shoulder_left": [0.46, 0.24],
+              "shoulder_right": [0.54, 0.24],
+              "hip_left": [0.48, 0.40],
+              "hip_right": [0.52, 0.40],
+              "wrist_left": [0.46, 0.77],
+              "wrist_right": [0.54, 0.77],
+              "ankle_left": [0.47, 0.10],
+              "ankle_right": [0.53, 0.10]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {
+          "stack_line_error_deg": 10.0,
+          "wrist_shift_ratio": 0.12,
+          "hold_min_seconds": 6.0
+        },
+        "phaseWindows": {
+          "kickup": [0.15, 0.55],
+          "stack": [0.55, 0.95]
+        }
+      }
+    },
+    {
+      "id": "pike_pushup",
+      "title": "Pike Push-up",
+      "family": "push",
+      "movementType": "rep",
+      "tags": ["overhead", "strength"],
+      "cameraView": "left_profile",
+      "supportedViews": ["left_profile", "right_profile"],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "phases": [
+        { "id": "top", "label": "Top", "order": 0, "progressWindow": [0.00, 0.10] },
+        { "id": "eccentric", "label": "Eccentric", "order": 1, "progressWindow": [0.10, 0.55] },
+        { "id": "bottom", "label": "Bottom", "order": 2, "progressWindow": [0.55, 0.65] },
+        { "id": "concentric", "label": "Concentric", "order": 3, "progressWindow": [0.65, 1.00] }
+      ],
+      "skeletonTemplate": {
+        "id": "pike_pushup_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 18,
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [0.50, 0.26],
+              "shoulder_left": [0.44, 0.30],
+              "shoulder_right": [0.56, 0.30],
+              "hip_left": [0.47, 0.45],
+              "hip_right": [0.53, 0.45],
+              "wrist_left": [0.39, 0.78],
+              "wrist_right": [0.61, 0.78],
+              "ankle_left": [0.44, 0.83],
+              "ankle_right": [0.56, 0.83]
+            }
+          },
+          {
+            "progress": 0.5,
+            "joints": {
+              "head": [0.50, 0.36],
+              "shoulder_left": [0.45, 0.35],
+              "shoulder_right": [0.55, 0.35],
+              "hip_left": [0.48, 0.48],
+              "hip_right": [0.52, 0.48],
+              "wrist_left": [0.40, 0.78],
+              "wrist_right": [0.60, 0.78],
+              "ankle_left": [0.45, 0.84],
+              "ankle_right": [0.55, 0.84]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [0.50, 0.26],
+              "shoulder_left": [0.44, 0.30],
+              "shoulder_right": [0.56, 0.30],
+              "hip_left": [0.47, 0.45],
+              "hip_right": [0.53, 0.45],
+              "wrist_left": [0.39, 0.78],
+              "wrist_right": [0.61, 0.78],
+              "ankle_left": [0.44, 0.83],
+              "ankle_right": [0.56, 0.83]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {
+          "depth_ratio": 0.72,
+          "elbow_flare_deg": 20.0,
+          "rep_tempo_lower": 1.1,
+          "rep_tempo_upper": 4.0
+        },
+        "phaseWindows": {
+          "eccentric": [0.10, 0.55],
+          "concentric": [0.55, 0.95]
+        }
+      }
+    }
+  ]
+}

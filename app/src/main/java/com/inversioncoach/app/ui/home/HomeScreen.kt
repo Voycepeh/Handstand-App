@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Animation
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -45,6 +46,7 @@ import com.inversioncoach.app.ui.components.ScaffoldedScreen
 fun HomeScreen(
     onStart: () -> Unit,
     onStartFreestyle: () -> Unit,
+    onDrillStudio: () -> Unit,
     onHistory: () -> Unit,
     onProgress: () -> Unit,
     onSettings: () -> Unit,
@@ -60,6 +62,7 @@ fun HomeScreen(
             padding = padding,
             onStart = onStart,
             onStartFreestyle = onStartFreestyle,
+            onDrillStudio = onDrillStudio,
             onHistory = onHistory,
             onProgress = onProgress,
             onSettings = onSettings,
@@ -75,6 +78,7 @@ private fun Content(
     padding: PaddingValues,
     onStart: () -> Unit,
     onStartFreestyle: () -> Unit,
+    onDrillStudio: () -> Unit,
     onHistory: () -> Unit,
     onProgress: () -> Unit,
     onSettings: () -> Unit,
@@ -111,6 +115,13 @@ private fun Content(
             subtitle = "Guided drill-specific coaching",
             icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
             onClick = onStart,
+        )
+
+        ActionTile(
+            label = "Drill Studio",
+            subtitle = "Preview authored drill catalog templates",
+            icon = { Icon(Icons.Default.Animation, contentDescription = null) },
+            onClick = onDrillStudio,
         )
 
 

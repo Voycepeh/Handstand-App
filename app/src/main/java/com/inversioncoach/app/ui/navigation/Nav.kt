@@ -11,6 +11,7 @@ import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.LiveSessionOptions
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.ui.drilldetail.DrillDetailScreen
+import com.inversioncoach.app.ui.drillstudio.DrillStudioScreen
 import com.inversioncoach.app.ui.history.HistoryScreen
 import com.inversioncoach.app.ui.home.HomeScreen
 import com.inversioncoach.app.ui.live.LiveCoachingScreen
@@ -44,6 +45,7 @@ sealed class Route(val value: String) {
     }
     data object History : Route("history")
     data object Progress : Route("progress")
+    data object DrillStudio : Route("drill-studio")
     data object Settings : Route("settings")
     data object DevTuning : Route("settings/dev-tuning")
     data object UploadVideo : Route("upload-video")
@@ -67,6 +69,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                         ),
                     )
                 },
+                onDrillStudio = { navController.navigate(Route.DrillStudio.value) },
                 onHistory = { navController.navigate(Route.History.value) },
                 onProgress = { navController.navigate(Route.Progress.value) },
                 onSettings = { navController.navigate(Route.Settings.value) },
@@ -142,6 +145,9 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onBack = { navController.popBackStack() },
                 onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
             )
+        }
+        composable(Route.DrillStudio.value) {
+            DrillStudioScreen(onBack = { navController.popBackStack() })
         }
         composable(Route.SessionTooShort.value, arguments = listOf(
             navArgument("elapsedMs") { type = NavType.LongType },
