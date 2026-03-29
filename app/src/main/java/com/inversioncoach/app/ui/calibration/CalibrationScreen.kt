@@ -1,5 +1,7 @@
 package com.inversioncoach.app.ui.calibration
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -22,9 +24,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -35,6 +42,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import com.inversioncoach.app.camera.CameraSessionManager
 import com.inversioncoach.app.calibration.CalibrationStep
 import com.inversioncoach.app.model.DrillType
@@ -72,6 +80,18 @@ fun CalibrationScreen(drillType: DrillType, onBack: () -> Unit) {
         )
     }
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        cameraPermissionGranted = granted
+    }
+    var cameraPermissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        cameraPermissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -98,6 +118,8 @@ fun CalibrationScreen(drillType: DrillType, onBack: () -> Unit) {
                 cameraManager = cameraManager,
                 analyzer = analyzer,
                 vm = vm,
+                cameraPermissionGranted = cameraPermissionGranted,
+                onRequestCameraPermission = { permissionLauncher.launch(Manifest.permission.CAMERA) },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
@@ -126,6 +148,8 @@ private fun CalibrationCaptureContent(
     cameraManager: CameraSessionManager,
     analyzer: PoseAnalyzer,
     vm: CalibrationViewModel,
+    cameraPermissionGranted: Boolean,
+    onRequestCameraPermission: () -> Unit,
     modifier: Modifier,
     onExit: () -> Unit,
 ) {
@@ -163,50 +187,73 @@ private fun CalibrationCaptureContent(
                 .weight(1f)
                 .graphicsLayer { alpha = if (state.hasCapturedFrame) 0.82f else 1f },
         ) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    PreviewView(ctx).apply {
-                        scaleType = PreviewView.ScaleType.FILL_CENTER
-                        post {
-                            cameraManager.bind(
-                                lifecycleOwner = lifecycleOwner,
-                                previewView = this,
-                                analyzer = analyzer,
-                                zoomOutCamera = true,
-                            ) { _, _ -> }
+            if (cameraPermissionGranted) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        PreviewView(ctx).apply {
+                            scaleType = PreviewView.ScaleType.FILL_CENTER
+                            post {
+                                cameraManager.bind(
+                                    lifecycleOwner = lifecycleOwner,
+                                    previewView = this,
+                                    analyzer = analyzer,
+                                    zoomOutCamera = true,
+                                ) { _, _ -> }
+                            }
+                        }
+                    },
+                )
+
+                OverlayRenderer(
+                    frame = state.reviewFrame,
+                    drillType = drillType,
+                    sessionMode = SessionMode.DRILL,
+                    modifier = Modifier.fillMaxSize(),
+                    scaleMode = PoseScaleMode.FILL,
+                    showIdealLine = false,
+                    showDebugOverlay = false,
+                    drillCameraSide = DrillCameraSide.LEFT,
+                    freestyleViewMode = FreestyleViewMode.UNKNOWN,
+                )
+
+                CalibrationGuideOverlay(
+                    modifier = Modifier.fillMaxSize(),
+                    state = state,
+                )
+
+                if (state.hasCapturedFrame) {
+                    Text(
+                        text = "Captured frame",
+                        color = Color.White,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(8.dp)
+                            .background(Color(0xCC1B5E20), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.padding(20.dp),
+                    ) {
+                        Text(
+                            text = "Camera access is required for calibration",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Button(onClick = onRequestCameraPermission) {
+                            Text("Grant camera access")
                         }
                     }
-                },
-            )
-
-            OverlayRenderer(
-                frame = state.reviewFrame,
-                drillType = drillType,
-                sessionMode = SessionMode.DRILL,
-                modifier = Modifier.fillMaxSize(),
-                scaleMode = PoseScaleMode.FILL,
-                showIdealLine = false,
-                showDebugOverlay = false,
-                drillCameraSide = DrillCameraSide.LEFT,
-                freestyleViewMode = FreestyleViewMode.UNKNOWN,
-            )
-
-            CalibrationGuideOverlay(
-                modifier = Modifier.fillMaxSize(),
-                state = state,
-            )
-
-            if (state.hasCapturedFrame) {
-                Text(
-                    text = "Captured frame",
-                    color = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(8.dp)
-                        .background(Color(0xCC1B5E20), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                )
+                }
             }
         }
 
@@ -214,13 +261,25 @@ private fun CalibrationCaptureContent(
         state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = vm::captureStep, modifier = Modifier.weight(1f), enabled = state.isReady && !state.hasCapturedFrame) {
+            Button(
+                onClick = vm::captureStep,
+                modifier = Modifier.weight(1f),
+                enabled = cameraPermissionGranted && state.isReady && !state.hasCapturedFrame,
+            ) {
                 Text("Capture")
             }
-            Button(onClick = vm::retakeStep, modifier = Modifier.weight(1f), enabled = state.hasCapturedFrame) {
+            Button(
+                onClick = vm::retakeStep,
+                modifier = Modifier.weight(1f),
+                enabled = cameraPermissionGranted && state.hasCapturedFrame,
+            ) {
                 Text("Retake")
             }
-            Button(onClick = vm::continueToNextStep, modifier = Modifier.weight(1f), enabled = state.hasCapturedFrame) {
+            Button(
+                onClick = vm::continueToNextStep,
+                modifier = Modifier.weight(1f),
+                enabled = cameraPermissionGranted && state.hasCapturedFrame,
+            ) {
                 Text("Continue")
             }
         }
@@ -276,8 +335,8 @@ private fun CalibrationGuideOverlay(modifier: Modifier, state: CalibrationUiStat
             )
             val projectedPreviewRect = mapper.diagnostics(projectionInput).contentRect
             val visiblePreviewRect = projectedPreviewRect.intersectWithin(size.width, size.height)
-            val horizontalMargin = (visiblePreviewRect.width * 0.07f).coerceAtLeast(24f)
-            val verticalMargin = (visiblePreviewRect.height * 0.06f).coerceAtLeast(24f)
+            val horizontalMargin = (visiblePreviewRect.width * 0.03f).coerceAtLeast(10f)
+            val verticalMargin = (visiblePreviewRect.height * 0.03f).coerceAtLeast(10f)
             val guideRect = androidx.compose.ui.geometry.Rect(
                 left = visiblePreviewRect.left + horizontalMargin,
                 top = visiblePreviewRect.top + verticalMargin,
