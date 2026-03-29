@@ -84,13 +84,13 @@ fun CalibrationScreen(onBack: () -> Unit) {
         )
     }
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        cameraPermissionGranted = granted
-    }
     var cameraPermissionGranted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED,
         )
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        cameraPermissionGranted = granted
     }
 
     LaunchedEffect(Unit) {

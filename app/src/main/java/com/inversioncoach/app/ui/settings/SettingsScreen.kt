@@ -30,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.inversioncoach.app.model.AlignmentStrictness
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
@@ -53,8 +52,6 @@ fun SettingsScreen(
     var localOnlyPrivacyMode by remember { mutableStateOf(true) }
     var maxStorageMb by remember { mutableIntStateOf(1024) }
     var startupCountdownSeconds by remember { mutableIntStateOf(10) }
-    var activeUserProfileId by remember { mutableStateOf<String?>(null) }
-    var userBodyProfileJson by remember { mutableStateOf<String?>(null) }
     var showSaveConfirmation by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
@@ -62,26 +59,16 @@ fun SettingsScreen(
         repository.observeSettings().collect { settings ->
             latestSettings = settings
             cueFrequency = settings.cueFrequencySeconds
-            overlay = settings.overlayIntensity
             debug = settings.debugOverlayEnabled
             localOnlyPrivacyMode = settings.localOnlyPrivacyMode
             maxStorageMb = settings.maxStorageMb
             startupCountdownSeconds = settings.startupCountdownSeconds
-            alignmentStrictness = settings.alignmentStrictness
-            customLineDeviation = settings.customLineDeviation
-            customGoodForm = settings.customMinimumGoodFormScore
-            customRepThreshold = settings.customRepAcceptanceThreshold
-            customHoldThreshold = settings.customHoldAlignedThreshold
         }
     }
 
     ScaffoldedScreen(title = "Settings", onBack = onBack) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Preferences", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -100,47 +87,13 @@ fun SettingsScreen(
 
             SettingsCard(title = "Session") {
                 Text("Startup countdown: ${startupCountdownSeconds}s")
-                Slider(
-                    value = startupCountdownSeconds.toFloat(),
-                    onValueChange = { startupCountdownSeconds = it.toInt().coerceIn(0, 30) },
-                    valueRange = 0f..30f,
-                )
+                Slider(value = startupCountdownSeconds.toFloat(), onValueChange = { startupCountdownSeconds = it.toInt().coerceIn(0, 30) }, valueRange = 0f..30f)
                 Text("Time before recording starts.")
-            }
-
-            SettingsCard(title = "Alignment / thresholds") {
-                Text("Alignment strictness: ${alignmentStrictness.name.lowercase().replaceFirstChar { it.uppercase() }}")
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AlignmentStrictness.entries.forEach { level ->
-                        Button(
-                            onClick = { alignmentStrictness = level },
-                            modifier = Modifier.weight(1f),
-                            enabled = alignmentStrictness != level,
-                        ) {
-                            Text(level.name.lowercase().replaceFirstChar { it.uppercase() })
-                        }
-                    }
-                }
-                Text("Beginner is forgiving. Advanced is strict. Custom uses your thresholds from saved settings.")
-                if (alignmentStrictness == AlignmentStrictness.CUSTOM) {
-                    Text("Line deviation: ${"%.2f".format(customLineDeviation)}")
-                    Slider(value = customLineDeviation, onValueChange = { customLineDeviation = it }, valueRange = 0.06f..0.24f)
-                    Text("Minimum good form score: $customGoodForm")
-                    Slider(value = customGoodForm.toFloat(), onValueChange = { customGoodForm = it.toInt().coerceIn(40, 95) }, valueRange = 40f..95f)
-                    Text("Rep acceptance threshold: $customRepThreshold")
-                    Slider(value = customRepThreshold.toFloat(), onValueChange = { customRepThreshold = it.toInt().coerceIn(40, 95) }, valueRange = 40f..95f)
-                    Text("Hold aligned threshold: $customHoldThreshold")
-                    Slider(value = customHoldThreshold.toFloat(), onValueChange = { customHoldThreshold = it.toInt().coerceIn(40, 95) }, valueRange = 40f..95f)
-                }
             }
 
             SettingsCard(title = "Storage & privacy") {
                 Text("Max video storage: ${maxStorageMb} MB")
-                Slider(
-                    value = maxStorageMb.toFloat(),
-                    onValueChange = { maxStorageMb = it.toInt().coerceIn(256, 4096) },
-                    valueRange = 256f..4096f,
-                )
+                Slider(value = maxStorageMb.toFloat(), onValueChange = { maxStorageMb = it.toInt().coerceIn(256, 4096) }, valueRange = 256f..4096f)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Local-only privacy mode")
                     Checkbox(checked = localOnlyPrivacyMode, onCheckedChange = { localOnlyPrivacyMode = it })
@@ -150,7 +103,7 @@ fun SettingsScreen(
 
             Button(onClick = { showSaveConfirmation = true }, modifier = Modifier.fillMaxWidth()) { Text("Save settings") }
             Button(onClick = onDeveloperTuning, modifier = Modifier.fillMaxWidth()) { Text("Developer threshold tuning") }
-            Button(onClick = { showDeleteConfirmation = true }, modifier = Modifier.fillMaxWidth()) { Text("Delete all sessions") }
+            Button(onClick = onDrillStudio, modifier = Modifier.fillMaxWidth()) { Text("Drill Studio") }
         }
 
         if (showSaveConfirmation) {
@@ -159,32 +112,23 @@ fun SettingsScreen(
                 title = { Text("Save settings?") },
                 text = { Text("This will apply your updated preferences and return you to the home page.") },
                 confirmButton = {
-                    Button(
-                        onClick = {
-                            showSaveConfirmation = false
-                            scope.launch {
-                                repository.saveSettings(
-                                    latestSettings.copy(
-                                        cueFrequencySeconds = cueFrequency,
-                                        debugOverlayEnabled = debug,
-                                        localOnlyPrivacyMode = localOnlyPrivacyMode,
-                                        maxStorageMb = maxStorageMb,
-                                        startupCountdownSeconds = startupCountdownSeconds,
-                                        alignmentStrictness = alignmentStrictness,
-                                        customLineDeviation = customLineDeviation,
-                                        customMinimumGoodFormScore = customGoodForm,
-                                        customRepAcceptanceThreshold = customRepThreshold,
-                                        customHoldAlignedThreshold = customHoldThreshold,
-                                    ),
-                                )
-                                onNavigateHome()
-                            }
-                        },
-                    ) { Text("Save") }
+                    Button(onClick = {
+                        showSaveConfirmation = false
+                        scope.launch {
+                            repository.saveSettings(
+                                latestSettings.copy(
+                                    cueFrequencySeconds = cueFrequency,
+                                    debugOverlayEnabled = debug,
+                                    localOnlyPrivacyMode = localOnlyPrivacyMode,
+                                    maxStorageMb = maxStorageMb,
+                                    startupCountdownSeconds = startupCountdownSeconds,
+                                ),
+                            )
+                            onNavigateHome()
+                        }
+                    }) { Text("Save") }
                 },
-                dismissButton = {
-                    Button(onClick = { showSaveConfirmation = false }) { Text("Cancel") }
-                },
+                dismissButton = { Button(onClick = { showSaveConfirmation = false }) { Text("Cancel") } },
             )
         }
 
@@ -194,19 +138,15 @@ fun SettingsScreen(
                 title = { Text("Delete all sessions?") },
                 text = { Text("This action cannot be undone. All saved sessions will be removed and you will return to the home page.") },
                 confirmButton = {
-                    Button(
-                        onClick = {
-                            showDeleteConfirmation = false
-                            scope.launch {
-                                repository.clearAllSessions()
-                                onNavigateHome()
-                            }
-                        },
-                    ) { Text("Delete") }
+                    Button(onClick = {
+                        showDeleteConfirmation = false
+                        scope.launch {
+                            repository.clearAllSessions()
+                            onNavigateHome()
+                        }
+                    }) { Text("Delete") }
                 },
-                dismissButton = {
-                    Button(onClick = { showDeleteConfirmation = false }) { Text("Cancel") }
-                },
+                dismissButton = { Button(onClick = { showDeleteConfirmation = false }) { Text("Cancel") } },
             )
         }
     }
@@ -217,20 +157,10 @@ private fun SettingsCard(title: String, content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)),
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
-            )
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
             content()
         }
     }

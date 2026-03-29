@@ -16,32 +16,25 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowOutward
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -55,7 +48,6 @@ import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 fun HomeScreen(
     onStart: () -> Unit,
     onStartFreestyle: () -> Unit,
@@ -64,10 +56,11 @@ fun HomeScreen(
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
     onCalibration: () -> Unit,
+    onReferenceTraining: () -> Unit = {},
+    onManageDrills: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
-    val userProfileManager = remember { ServiceLocator.userProfileManager(context) }
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
     val activeProfile by repository.observeActiveProfile().collectAsState(initial = null)
     val profileStatuses by repository.observeProfileStatuses().collectAsState(initial = emptyList())
@@ -83,38 +76,17 @@ fun HomeScreen(
             onSettings = onSettings,
             onUploadVideo = onUploadVideo,
             onCalibration = onCalibration,
+            onReferenceTraining = onReferenceTraining,
+            onManageDrills = onManageDrills,
             activeProfile = activeProfile,
             profileStatuses = profileStatuses,
             latestSessionStartMs = latestSession?.startedAtMs ?: 0L,
             latestSessionDurationMs = computeSessionDurationMs(latestSession?.startedAtMs ?: 0L, latestSession?.completedAtMs ?: 0L),
-            profiles = profiles.map { it.id to it.displayName },
-            activeProfileId = activeProfile?.id,
-            activeProfileName = activeProfile?.displayName ?: "No profile",
-            activeHasCalibration = activeHasCalibration,
-            activeBodyProfileVersion = activeProfileContext?.bodyProfileRecord?.version,
-            onSelectProfile = { profileId ->
-                scope.launch {
-                    userProfileManager.setActiveProfile(profileId)
-                }
-            },
-            onCreateProfile = { profileName ->
-                scope.launch {
-                    val created = userProfileManager.createProfile(profileName)
-                    userProfileManager.setActiveProfile(created.id)
-                }
-            },
-            onRenameProfile = { profileId, newName ->
-                scope.launch { userProfileManager.renameProfile(profileId, newName) }
-            },
-            onArchiveProfile = { profileId ->
-                scope.launch { userProfileManager.archiveProfile(profileId) }
-            },
         )
     }
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 private fun Content(
     padding: PaddingValues,
     onStart: () -> Unit,
@@ -124,95 +96,26 @@ private fun Content(
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
     onCalibration: () -> Unit,
+    onReferenceTraining: () -> Unit,
+    onManageDrills: () -> Unit,
     activeProfile: UserProfileStatus?,
     profileStatuses: List<UserProfileStatus>,
     latestSessionStartMs: Long,
     latestSessionDurationMs: Long,
-    profiles: List<Pair<String, String>>,
-    activeProfileId: String?,
-    activeProfileName: String,
-    activeHasCalibration: Boolean,
-    activeBodyProfileVersion: Int?,
-    onSelectProfile: (String) -> Unit,
-    onCreateProfile: (String) -> Unit,
-    onRenameProfile: (String, String) -> Unit,
-    onArchiveProfile: (String) -> Unit,
 ) {
     val activeProfileName = activeProfile?.name ?: "No active profile"
     val activeProfileCalibrated = activeProfile?.isCalibrated ?: false
     val orderedProfiles = remember(profileStatuses) {
-        profileStatuses.sortedWith(
-            compareByDescending<UserProfileStatus> { it.isActive }
-                .thenBy { it.name.lowercase() },
-        )
+        profileStatuses.sortedWith(compareByDescending<UserProfileStatus> { it.isActive }.thenBy { it.name.lowercase() })
     }
     var showOverwriteDialog by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(padding)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text("Train smarter", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(
-            text = "Start live posture tracking instantly, or launch a drill-based coached session.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Card {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Active profile: $activeProfileName", fontWeight = FontWeight.SemiBold)
-                Text(
-                    if (activeHasCalibration) "Body profile: Calibrated (v${activeBodyProfileVersion ?: 1})"
-                    else "Body profile: Default model (no calibration yet)",
-                )
-                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                    OutlinedTextField(
-                        value = activeProfileName,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Switch profile") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    )
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        profiles.forEach { (id, name) ->
-                            DropdownMenuItem(
-                                text = { Text(name) },
-                                onClick = {
-                                    expanded = false
-                                    onSelectProfile(id)
-                                },
-                            )
-                        }
-                    }
-                }
-                Button(onClick = { showCreateDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Create profile")
-                }
-                profiles.forEach { (id, name) ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = if (id == activeProfileId) "• $name (Active)" else "• $name",
-                            modifier = Modifier.weight(1f),
-                        )
-                        Button(
-                            onClick = {
-                                renameTargetProfileId = id
-                                renameTargetName = name
-                            },
-                        ) { Text("Rename") }
-                        Button(
-                            onClick = { onArchiveProfile(id) },
-                            enabled = profiles.size > 1 && id != activeProfileId,
-                        ) { Text("Archive") }
-                    }
-                }
-            }
-        }
+        Text("Start live posture tracking instantly, or launch a drill-based coached session.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         ActionTile(
             label = "Start Live Coaching",
@@ -222,14 +125,12 @@ private fun Content(
             featured = true,
             hero = true,
         )
-
         ActionTile(
             label = "Choose Drill",
             subtitle = "Guided drill-specific coaching",
             icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
             onClick = onStart,
         )
-
         ActionTile(
             label = "Upload Video",
             subtitle = "Analyze a recorded video with pose overlay",
@@ -238,24 +139,20 @@ private fun Content(
         )
         ActionTile(
             label = "Reference Training",
-            subtitle = "Compare upload against built-in template",
+            subtitle = "Compare attempts against reference templates",
             icon = { Icon(Icons.Default.Timeline, contentDescription = null) },
             onClick = onReferenceTraining,
         )
         ActionTile(
             label = "Manage Drills",
-            subtitle = "Create/edit portable drill definitions",
+            subtitle = "Create and edit custom drills",
             icon = { Icon(Icons.Default.EditNote, contentDescription = null) },
             onClick = onManageDrills,
         )
 
         ActionTile(
             label = "Latest Session",
-            subtitle = if (latestSessionStartMs > 0L) {
-                "${formatSessionDateTime(latestSessionStartMs)} • ${formatSessionDuration(latestSessionDurationMs)}"
-            } else {
-                "Open history to review saved sessions"
-            },
+            subtitle = if (latestSessionStartMs > 0L) "${formatSessionDateTime(latestSessionStartMs)} • ${formatSessionDuration(latestSessionDurationMs)}" else "Open history to review saved sessions",
             icon = { Icon(Icons.Default.History, contentDescription = null) },
             onClick = onHistory,
         )
@@ -284,11 +181,7 @@ private fun Content(
             hasActiveProfile = activeProfile != null,
             onCalibrateClick = {
                 if (activeProfile == null) return@ProfileCalibrationCard
-                if (activeProfileCalibrated) {
-                    showOverwriteDialog = true
-                } else {
-                    onCalibration()
-                }
+                if (activeProfileCalibrated) showOverwriteDialog = true else onCalibration()
             },
         )
 
@@ -298,77 +191,15 @@ private fun Content(
             icon = { Icon(Icons.Default.Settings, contentDescription = null) },
             onClick = onSettings,
         )
-
-        if (showCreateDialog) {
-            AlertDialog(
-                onDismissRequest = { showCreateDialog = false },
-                title = { Text("Create profile") },
-                text = {
-                    OutlinedTextField(
-                        value = newProfileName,
-                        onValueChange = { newProfileName = it },
-                        label = { Text("Profile name") },
-                        singleLine = true,
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val name = newProfileName.trim().ifBlank { "User" }
-                            onCreateProfile(name)
-                            newProfileName = ""
-                            showCreateDialog = false
-                        },
-                    ) { Text("Create") }
-                },
-                dismissButton = {
-                    Button(onClick = { showCreateDialog = false }) { Text("Cancel") }
-                },
-            )
-        }
-
-        if (renameTargetProfileId != null) {
-            AlertDialog(
-                onDismissRequest = { renameTargetProfileId = null },
-                title = { Text("Rename profile") },
-                text = {
-                    OutlinedTextField(
-                        value = renameTargetName,
-                        onValueChange = { renameTargetName = it },
-                        label = { Text("Profile name") },
-                        singleLine = true,
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val id = renameTargetProfileId ?: return@Button
-                            onRenameProfile(id, renameTargetName)
-                            renameTargetProfileId = null
-                        },
-                    ) { Text("Save") }
-                },
-                dismissButton = {
-                    Button(onClick = { renameTargetProfileId = null }) { Text("Cancel") }
-                },
-            )
-        }
     }
 
     if (showOverwriteDialog) {
-        AlertDialog(
+        androidx.compose.material3.AlertDialog(
             onDismissRequest = { showOverwriteDialog = false },
             title = { Text("Overwrite calibration?") },
             text = { Text("This will replace the saved body calibration for $activeProfileName.") },
-            confirmButton = {
-                Button(onClick = {
-                    showOverwriteDialog = false
-                    onCalibration()
-                }) { Text("Overwrite") }
-            },
-            dismissButton = {
-                Button(onClick = { showOverwriteDialog = false }) { Text("Cancel") }
-            },
+            confirmButton = { Button(onClick = { showOverwriteDialog = false; onCalibration() }) { Text("Overwrite") } },
+            dismissButton = { Button(onClick = { showOverwriteDialog = false }) { Text("Cancel") } },
         )
     }
 }
@@ -381,28 +212,12 @@ private fun ProfileCalibrationCard(
     hasActiveProfile: Boolean,
     onCalibrateClick: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Profiles", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text("Active: $activeProfileName · ${if (isCalibrated) "Calibrated" else "Not calibrated"}")
-            Button(
-                onClick = onCalibrateClick,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = hasActiveProfile,
-            ) {
+            Button(onClick = onCalibrateClick, modifier = Modifier.fillMaxWidth(), enabled = hasActiveProfile) {
                 Text(if (isCalibrated) "Recalibrate" else "Start calibration")
-            }
-            if (!hasActiveProfile) {
-                Text("Create or activate a profile to calibrate.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             profileStatuses.forEach { profile ->
                 val suffix = if (profile.isActive) " (Active)" else ""
@@ -422,61 +237,22 @@ private fun ActionTile(
     featured: Boolean = false,
     hero: Boolean = false,
 ) {
-    val colors = if (featured) {
-        CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
-    } else {
-        CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        )
-    }
+    val colors = if (featured) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f), contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
+    else CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f), contentColor = MaterialTheme.colorScheme.onSurface)
 
-    Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(if (hero) 28.dp else 24.dp),
-        colors = colors,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = if (hero) 20.dp else 16.dp, vertical = if (hero) 24.dp else 18.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
+    Card(onClick = onClick, modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(if (hero) 28.dp else 24.dp), colors = colors) {
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = if (hero) 20.dp else 16.dp, vertical = if (hero) 24.dp else 18.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                    shape = RoundedCornerShape(12.dp),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                ) {
-                    Row(modifier = Modifier.padding(if (hero) 10.dp else 8.dp)) {
-                        icon()
-                    }
+                Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), shape = RoundedCornerShape(12.dp), tonalElevation = 0.dp, shadowElevation = 0.dp) {
+                    Row(modifier = Modifier.padding(if (hero) 10.dp else 8.dp)) { icon() }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = label,
-                        style = if (hero) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = subtitle,
-                        style = if (hero) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text(label, style = if (hero) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(subtitle, style = if (hero) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(modifier = Modifier.width(10.dp))
-            Icon(
-                imageVector = Icons.Default.ArrowOutward,
-                contentDescription = null,
-                modifier = Modifier.size(if (hero) 22.dp else 18.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
+            Icon(imageVector = Icons.Default.ArrowOutward, contentDescription = null, modifier = Modifier.size(if (hero) 22.dp else 18.dp), tint = MaterialTheme.colorScheme.primary)
         }
     }
 }
