@@ -25,23 +25,11 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Make gradlew executable
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -f ./gradlew ]]; then
-            chmod +x ./gradlew
-          fi
-
       - name: Build debug APK
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -f ./gradlew ]]; then
-            ./gradlew :app:assembleDebug
-          else
-            gradle :app:assembleDebug
-          fi
+          gradle :app:assembleDebug
 
       - name: Rename APK for release
         shell: bash
