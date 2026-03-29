@@ -49,9 +49,7 @@ sealed class Route(val value: String) {
     data object Settings : Route("settings")
     data object DevTuning : Route("settings/dev-tuning")
     data object UploadVideo : Route("upload-video")
-    data object Calibration : Route("calibration/{drill}") {
-        fun create(drillType: DrillType): String = "calibration/${drillType.name}"
-    }
+    data object Calibration : Route("calibration")
 }
 
 @Composable
@@ -74,7 +72,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onProgress = { navController.navigate(Route.Progress.value) },
                 onSettings = { navController.navigate(Route.Settings.value) },
                 onUploadVideo = { navController.navigate(Route.UploadVideo.value) },
-                onCalibration = { navController.navigate(Route.Calibration.create(DrillType.FREE_HANDSTAND)) },
+                onCalibration = { navController.navigate(Route.Calibration.value) },
             )
         }
         composable(Route.Start.value) {
@@ -169,16 +167,9 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onNavigateHome = { navController.popBackStack(Route.Home.value, false) },
             )
         }
-        composable(
-            Route.Calibration.value,
-            arguments = listOf(navArgument("drill") { type = NavType.StringType }),
-        ) { backStack ->
-            val drill = parseDrillTypeOrDefault(
-                rawValue = backStack.arguments?.getString("drill"),
-                fallback = DrillType.FREE_HANDSTAND,
-            )
+        composable(Route.Calibration.value) {
             CalibrationScreen(
-                drillType = drill,
+                drillType = DrillType.FREE_HANDSTAND,
                 onBack = { navController.popBackStack() },
             )
         }
