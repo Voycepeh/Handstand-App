@@ -2,7 +2,6 @@ package com.inversioncoach.app.ui.drillstudio
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -21,9 +19,9 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,79 +32,118 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.inversioncoach.app.drills.catalog.AnalysisPlane
+import com.inversioncoach.app.drills.catalog.CameraView
+import com.inversioncoach.app.drills.catalog.CatalogMovementType
+import com.inversioncoach.app.drills.catalog.ComparisonMode
 import com.inversioncoach.app.drills.catalog.DrillCatalogRepository
 import com.inversioncoach.app.drills.catalog.DrillTemplate
 import com.inversioncoach.app.drills.catalog.StickFigureAnimator
+import com.inversioncoach.app.ui.components.DropdownOption
+import com.inversioncoach.app.ui.components.MultiSelectChipsField
+import com.inversioncoach.app.ui.components.ReliableDropdownField
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import kotlinx.coroutines.isActive
 
 @Composable
 fun DrillStudioScreen(
     onBack: () -> Unit,
+    initRequest: DrillStudioInitRequest,
 ) {
     val context = LocalContext.current
-    val repository = remember { DrillCatalogRepository(context) }
-    val catalog = remember { runCatching { repository.loadCatalog() }.getOrNull() }
+    val vm = remember {
+        DrillStudioViewModel(
+            repository = DrillCatalogRepository(context),
+        )
+    }
+    val uiState by vm.uiState.collectAsState()
 
-    var selectedIndex by remember(catalog) { mutableIntStateOf(0) }
-    val drills = catalog?.drills.orEmpty()
-    val selectedDrill = drills.getOrNull(selectedIndex)
+    LaunchedEffect(initRequest.mode, initRequest.drillId) {
+        vm.initialize(initRequest)
+    }
 
-    var progress by remember(selectedDrill?.id) { mutableFloatStateOf(0f) }
-    var autoPlay by remember(selectedDrill?.id) { mutableStateOf(true) }
-    var mirrored by remember(selectedDrill?.id) { mutableStateOf(false) }
-    var exportedJson by remember { mutableStateOf<String?>(null) }
+    ScaffoldedScreen(title = "Drill Studio", onBack = onBack) { padding ->
+        when (val state = uiState) {
+            DrillStudioUiState.Loading -> DrillStudioLoading(padding)
+            is DrillStudioUiState.Error -> DrillStudioError(
+                padding = padding,
+                message = state.message,
+                onRetry = { vm.initialize(initRequest) },
+                onBack = onBack,
+            )
+            is DrillStudioUiState.Ready -> DrillStudioEditor(
+                padding = padding,
+                draft = state.draft,
+                sourceSeedId = state.sourceSeedId,
+                onUpdateDraft = vm::updateDraft,
+            )
+        }
+    }
+}
 
-    LaunchedEffect(autoPlay, selectedDrill?.id) {
-        if (!autoPlay || selectedDrill == null) return@LaunchedEffect
+@Composable
+private fun DrillStudioLoading(padding: PaddingValues) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Initializing editor…", style = MaterialTheme.typography.titleMedium)
+        Text("Loading draft and validating drill state.")
+    }
+}
+
+@Composable
+private fun DrillStudioError(
+    padding: PaddingValues,
+    message: String,
+    onRetry: () -> Unit,
+    onBack: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Could not open Drill Studio", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(message)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onRetry) { Text("Retry") }
+            Button(onClick = onBack) { Text("Back") }
+        }
+    }
+}
+
+@Composable
+private fun DrillStudioEditor(
+    padding: PaddingValues,
+    draft: DrillTemplate,
+    sourceSeedId: String?,
+    onUpdateDraft: ((DrillTemplate) -> DrillTemplate) -> Unit,
+) {
+    var progress by remember(draft.id) { mutableFloatStateOf(0f) }
+    var autoPlay by remember(draft.id) { mutableStateOf(true) }
+    var mirrored by remember(draft.id) { mutableStateOf(false) }
+
+    LaunchedEffect(autoPlay, draft.id, draft.skeletonTemplate.framesPerSecond) {
+        if (!autoPlay) return@LaunchedEffect
         while (isActive) {
-            val fps = selectedDrill.skeletonTemplate.framesPerSecond.coerceAtLeast(1)
+            val fps = draft.skeletonTemplate.framesPerSecond.coerceAtLeast(1)
             progress += 1f / fps.toFloat()
             if (progress > 1f) progress -= 1f
             kotlinx.coroutines.delay((1000L / fps).coerceAtLeast(16L))
         }
     }
 
-    ScaffoldedScreen(title = "Drill Studio", onBack = onBack) { padding ->
-        DrillStudioContent(
-            padding = padding,
-            drills = drills,
-            selectedIndex = selectedIndex,
-            onSelectDrill = { selectedIndex = it },
-            selectedDrill = selectedDrill,
-            progress = progress,
-            onProgressChange = {
-                autoPlay = false
-                progress = it
-            },
-            autoPlay = autoPlay,
-            onToggleAutoPlay = { autoPlay = !autoPlay },
-            mirrored = mirrored,
-            onToggleMirrored = { mirrored = !mirrored },
-            onExport = {
-                exportedJson = catalog?.let(repository::exportCatalog)
-            },
-            exportedJson = exportedJson,
-        )
-    }
-}
+    val cameraOptions = remember { CameraView.entries.map { DropdownOption(it, it.name.pretty()) } }
+    val planeOptions = remember { AnalysisPlane.entries.map { DropdownOption(it, it.name.pretty()) } }
+    val movementOptions = remember { CatalogMovementType.entries.map { DropdownOption(it, it.name.pretty()) } }
+    val comparisonOptions = remember { ComparisonMode.entries.map { DropdownOption(it, it.name.pretty()) } }
 
-@Composable
-private fun DrillStudioContent(
-    padding: PaddingValues,
-    drills: List<DrillTemplate>,
-    selectedIndex: Int,
-    onSelectDrill: (Int) -> Unit,
-    selectedDrill: DrillTemplate?,
-    progress: Float,
-    onProgressChange: (Float) -> Unit,
-    autoPlay: Boolean,
-    onToggleAutoPlay: () -> Unit,
-    mirrored: Boolean,
-    onToggleMirrored: () -> Unit,
-    onExport: () -> Unit,
-    exportedJson: String?,
-) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -115,110 +152,98 @@ private fun DrillStudioContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Text(
-                text = "Authored Templates",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = "Animated preview + phase scrubber for authored catalog drills.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        if (selectedDrill != null) {
-            item {
-                DrillPreviewCard(
-                    drill = selectedDrill,
-                    progress = progress,
-                    onProgressChange = onProgressChange,
-                    autoPlay = autoPlay,
-                    onToggleAutoPlay = onToggleAutoPlay,
-                    mirrored = mirrored,
-                    onToggleMirrored = onToggleMirrored,
+            SectionCard(title = "Drill info") {
+                Text("Editing: ${draft.title}")
+                if (sourceSeedId != null) {
+                    Text(
+                        "Seeded source: $sourceSeedId (editing draft copy)",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text("Custom draft")
+                }
+                ReliableDropdownField(
+                    label = "Movement type",
+                    selected = movementOptions.firstOrNull { it.value == draft.movementType } ?: movementOptions.first(),
+                    options = movementOptions,
+                    onOptionSelected = { option -> onUpdateDraft { it.copy(movementType = option.value) } },
+                )
+                ReliableDropdownField(
+                    label = "Comparison mode",
+                    selected = comparisonOptions.firstOrNull { it.value == draft.comparisonMode } ?: comparisonOptions.first(),
+                    options = comparisonOptions,
+                    onOptionSelected = { option -> onUpdateDraft { it.copy(comparisonMode = option.value) } },
                 )
             }
         }
 
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onExport) {
-                    Text("Export Catalog JSON")
-                }
-                if (exportedJson != null) {
-                    Text(
-                        "${exportedJson.length} chars",
-                        modifier = Modifier.padding(top = 12.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        if (exportedJson != null) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                    ),
-                ) {
-                    Text(
-                        text = exportedJson.take(700),
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        }
-
-        items(drills.indices.toList(), key = { drills[it].id }) { index ->
-            val drill = drills[index]
-            val selected = selectedIndex == index
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = if (selected) {
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            SectionCard(title = "View config") {
+                MultiSelectChipsField(
+                    label = "Supported views",
+                    options = cameraOptions,
+                    selectedValues = draft.supportedViews.toSet(),
+                    onToggle = { view ->
+                        onUpdateDraft { current ->
+                            val next = if (view in current.supportedViews) {
+                                current.supportedViews - view
+                            } else {
+                                current.supportedViews + view
+                            }
+                            current.copy(supportedViews = next.ifEmpty { listOf(current.cameraView) }.distinct())
+                        }
                     },
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSelectDrill(index) },
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(drill.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "${drill.cameraView.name.lowercase()} • ${drill.comparisonMode.name.lowercase()}",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        "${drill.movementType.name.lowercase()} • ${drill.phases.size} phases • ${drill.skeletonTemplate.keyframes.size} keyframes",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        "phases: ${drill.phases.sortedBy { it.order }.joinToString { it.label }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                )
+                ReliableDropdownField(
+                    label = "Primary/default view",
+                    selected = cameraOptions.firstOrNull { it.value == draft.cameraView } ?: cameraOptions.first(),
+                    options = cameraOptions.filter { it.value in draft.supportedViews },
+                    onOptionSelected = { option -> onUpdateDraft { it.copy(cameraView = option.value) } },
+                )
+                ReliableDropdownField(
+                    label = "Analysis plane",
+                    selected = planeOptions.firstOrNull { it.value == draft.analysisPlane } ?: planeOptions.first(),
+                    options = planeOptions,
+                    onOptionSelected = { option -> onUpdateDraft { it.copy(analysisPlane = option.value) } },
+                )
+            }
+        }
+
+        item {
+            SectionCard(title = "Phase editor") {
+                DrillPreviewCard(
+                    drill = draft,
+                    progress = progress,
+                    onProgressChange = {
+                        autoPlay = false
+                        progress = it
+                    },
+                    autoPlay = autoPlay,
+                    onToggleAutoPlay = { autoPlay = !autoPlay },
+                    mirrored = mirrored,
+                    onToggleMirrored = { mirrored = !mirrored },
+                )
+                Text("${draft.phases.size} phases")
+                draft.phases.sortedBy { it.order }.forEach { phase ->
+                    val bounds = phase.progressWindow
+                    Text("${phase.order}. ${phase.label} (${formatWindow(bounds?.start)}-${formatWindow(bounds?.end)})")
                 }
             }
         }
 
-        if (drills.isEmpty()) {
-            item {
-                Text(
-                    text = "No authored templates found in drill_catalog_v1.json",
-                    style = MaterialTheme.typography.bodyMedium,
+        item {
+            SectionCard(title = "Pose editor") {
+                Text("Frames per second: ${draft.skeletonTemplate.framesPerSecond}")
+                Slider(
+                    value = draft.skeletonTemplate.framesPerSecond.toFloat(),
+                    onValueChange = { fps ->
+                        onUpdateDraft { current ->
+                            current.copy(skeletonTemplate = current.skeletonTemplate.copy(framesPerSecond = fps.toInt().coerceAtLeast(12)))
+                        }
+                    },
+                    valueRange = 12f..60f,
                 )
+                Text("Keyframes: ${draft.skeletonTemplate.keyframes.size}")
             }
         }
     }
@@ -246,7 +271,7 @@ private fun DrillPreviewCard(
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))) {
         Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Preview: ${drill.title}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("Preview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
                 "progress ${"%.2f".format(progress)} • phase ${activePhase?.label ?: "n/a"}",
                 style = MaterialTheme.typography.bodySmall,
@@ -290,3 +315,29 @@ private fun DrillPreviewCard(
         }
     }
 }
+
+@Composable
+private fun SectionCard(title: String, content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            content()
+        }
+    }
+}
+
+private fun String.pretty(): String =
+    lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+
+private fun formatWindow(value: Float?): String = value?.let { "%.2f".format(it) } ?: "n/a"
