@@ -54,7 +54,16 @@ data class SkeletonTemplate(
     val loop: Boolean,
     val mirroredSupported: Boolean = false,
     val framesPerSecond: Int,
+    val phasePoses: List<PhasePoseTemplate> = emptyList(),
     val keyframes: List<SkeletonKeyframeTemplate>,
+)
+
+data class PhasePoseTemplate(
+    val phaseId: String,
+    val name: String,
+    val joints: Map<String, JointPoint>,
+    val holdDurationMs: Int? = null,
+    val transitionDurationMs: Int = 700,
 )
 
 data class SkeletonKeyframeTemplate(

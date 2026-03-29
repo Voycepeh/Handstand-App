@@ -68,13 +68,23 @@ object DrillCatalogJson {
         }
     }
 
-    private fun JSONObject.toSkeletonTemplate(): SkeletonTemplate = SkeletonTemplate(
-        id = getString("id"),
-        loop = getBoolean("loop"),
-        mirroredSupported = optBoolean("mirroredSupported", false),
-        framesPerSecond = getInt("framesPerSecond"),
-        keyframes = getJSONArray("keyframes").toKeyframes(),
-    )
+    private fun JSONObject.toSkeletonTemplate(): SkeletonTemplate {
+        val phasePoses = optJSONArray("phasePoses")?.toPhasePoses().orEmpty()
+        val explicitKeyframes = optJSONArray("keyframes")?.toKeyframes().orEmpty()
+        val fallbackKeyframes = if (explicitKeyframes.isNotEmpty()) {
+            explicitKeyframes
+        } else {
+            phasePoses.toKeyframesFromPhasePoses()
+        }
+        return SkeletonTemplate(
+            id = getString("id"),
+            loop = getBoolean("loop"),
+            mirroredSupported = optBoolean("mirroredSupported", false),
+            framesPerSecond = getInt("framesPerSecond"),
+            phasePoses = phasePoses,
+            keyframes = fallbackKeyframes,
+        )
+    }
 
     private fun JSONArray.toKeyframes(): List<SkeletonKeyframeTemplate> = buildList {
         for (i in 0 until length()) {
@@ -88,7 +98,36 @@ object DrillCatalogJson {
                     put(key, JointPoint(point.getDouble(0).toFloat(), point.getDouble(1).toFloat()))
                 }
             }
-            add(SkeletonKeyframeTemplate(progress = obj.getDouble("progress").toFloat(), joints = joints))
+            add(
+                SkeletonKeyframeTemplate(
+                    progress = obj.getDouble("progress").toFloat(),
+                    joints = normalizeJointNames(joints),
+                ),
+            )
+        }
+    }
+
+    private fun JSONArray.toPhasePoses(): List<PhasePoseTemplate> = buildList {
+        for (i in 0 until length()) {
+            val obj = getJSONObject(i)
+            val jointsObj = obj.getJSONObject("joints")
+            val joints = buildMap {
+                val keys = jointsObj.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val point = jointsObj.getJSONArray(key)
+                    put(key, JointPoint(point.getDouble(0).toFloat(), point.getDouble(1).toFloat()))
+                }
+            }
+            add(
+                PhasePoseTemplate(
+                    phaseId = obj.getString("phaseId"),
+                    name = obj.optString("name", obj.getString("phaseId")),
+                    joints = normalizeJointNames(joints),
+                    holdDurationMs = obj.optInt("holdDurationMs").takeIf { it > 0 },
+                    transitionDurationMs = obj.optInt("transitionDurationMs", 700).coerceAtLeast(100),
+                ),
+            )
         }
     }
 
@@ -142,7 +181,46 @@ object DrillCatalogJson {
         put("loop", loop)
         put("mirroredSupported", mirroredSupported)
         put("framesPerSecond", framesPerSecond)
-        put("keyframes", JSONArray().apply { keyframes.forEach { put(it.toJson()) } })
+        if (phasePoses.isNotEmpty()) {
+            put("phasePoses", JSONArray().apply { phasePoses.forEach { put(it.toJson()) } })
+        }
+        put("keyframes", JSONArray().apply {
+            keyframesForExport().forEach { put(it.toJson()) }
+        })
+    }
+
+    private fun PhasePoseTemplate.toJson(): JSONObject = JSONObject().apply {
+        put("phaseId", phaseId)
+        put("name", name)
+        holdDurationMs?.let { put("holdDurationMs", it) }
+        put("transitionDurationMs", transitionDurationMs)
+        put(
+            "joints",
+            JSONObject().apply {
+                normalizeJointNames(joints).forEach { (jointName, point) -> put(jointName, JSONArray().put(point.x).put(point.y)) }
+            },
+        )
+    }
+
+    private fun SkeletonTemplate.keyframesForExport(): List<SkeletonKeyframeTemplate> {
+        if (phasePoses.isEmpty()) return keyframes
+        return phasePoses.toKeyframesFromPhasePoses()
+    }
+
+    private fun List<PhasePoseTemplate>.toKeyframesFromPhasePoses(): List<SkeletonKeyframeTemplate> {
+        if (isEmpty()) return emptyList()
+        val phasePoses = this
+        if (phasePoses.size == 1) return listOf(
+            SkeletonKeyframeTemplate(progress = 0f, joints = phasePoses.first().joints),
+            SkeletonKeyframeTemplate(progress = 1f, joints = phasePoses.first().joints),
+        )
+        val totalDuration = phasePoses.sumOf { (it.holdDurationMs ?: 0) + it.transitionDurationMs }.coerceAtLeast(1)
+        var elapsed = 0
+        return phasePoses.map { pose ->
+            val progress = elapsed.toFloat() / totalDuration.toFloat()
+            elapsed += (pose.holdDurationMs ?: 0) + pose.transitionDurationMs
+            SkeletonKeyframeTemplate(progress = progress.coerceIn(0f, 1f), joints = pose.joints)
+        } + SkeletonKeyframeTemplate(progress = 1f, joints = phasePoses.last().joints)
     }
 
     private fun SkeletonKeyframeTemplate.toJson(): JSONObject = JSONObject().apply {
@@ -150,7 +228,7 @@ object DrillCatalogJson {
         put(
             "joints",
             JSONObject().apply {
-                joints.forEach { (jointName, point) -> put(jointName, JSONArray().put(point.x).put(point.y)) }
+                normalizeJointNames(joints).forEach { (jointName, point) -> put(jointName, JSONArray().put(point.x).put(point.y)) }
             },
         )
     }
@@ -188,6 +266,11 @@ object DrillCatalogJson {
             }
 
             val validPhaseIds = drill.phases.map { it.id }.toSet()
+            drill.skeletonTemplate.phasePoses.forEach { pose ->
+                require(pose.phaseId in validPhaseIds) {
+                    "drill '${drill.id}' phasePose references unknown phase '${pose.phaseId}'"
+                }
+            }
             val windowsFromCalibration = drill.calibration.phaseWindows.keys
             require(windowsFromCalibration.all { it in validPhaseIds }) {
                 "drill '${drill.id}' calibration phaseWindows reference unknown phase ids"
@@ -201,5 +284,20 @@ object DrillCatalogJson {
                 }
             }
         }
+    }
+
+    private fun normalizeJointNames(joints: Map<String, JointPoint>): Map<String, JointPoint> {
+        val aliases = mapOf(
+            "left_shoulder" to "shoulder_left",
+            "right_shoulder" to "shoulder_right",
+            "left_hip" to "hip_left",
+            "right_hip" to "hip_right",
+            "left_ankle" to "ankle_left",
+            "right_ankle" to "ankle_right",
+            "left_wrist" to "wrist_left",
+            "right_wrist" to "wrist_right",
+            "nose" to "head",
+        )
+        return joints.entries.associate { (name, point) -> (aliases[name] ?: name) to point }
     }
 }
