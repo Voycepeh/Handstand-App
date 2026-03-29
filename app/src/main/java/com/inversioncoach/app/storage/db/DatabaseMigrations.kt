@@ -4,6 +4,13 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import org.json.JSONObject
 
+data class LegacyProfileSettings(
+    val activeProfileName: String = "Profile 1",
+    val profileNamesCsv: String = "Profile 1",
+    val profileCalibrationsJson: String? = null,
+    val userBodyProfileJson: String? = null,
+)
+
 object DatabaseMigrations {
     val CREATE_DRILL_MOVEMENT_PROFILES_SQL =
         """
@@ -255,12 +262,6 @@ object DatabaseMigrations {
             return 0L
         }
 
-        data class LegacyProfileSettings(
-            val activeProfileName: String = "Profile 1",
-            val profileNamesCsv: String = "Profile 1",
-            val profileCalibrationsJson: String? = null,
-            val userBodyProfileJson: String? = null,
-        )
     }
 
     val ALL: Array<Migration> = arrayOf(
