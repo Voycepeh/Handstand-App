@@ -55,9 +55,8 @@ private data class DrillGridItem(
 fun StartDrillScreen(
     onBack: () -> Unit,
     onStart: (DrillType, LiveSessionOptions) -> Unit,
-    onOpenDetail: (DrillType) -> Unit,
     onCreateDrill: () -> Unit,
-    onOpenDrillStudio: (DrillType) -> Unit,
+    onEditDrill: (DrillType) -> Unit,
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
@@ -91,7 +90,7 @@ fun StartDrillScreen(
         ) {
             Text("Choose your flow", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(
-                text = "Tap a drill to start, or open a specific drill in Studio.",
+                text = "Tap a drill to select it, then start or edit.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -101,7 +100,7 @@ fun StartDrillScreen(
                 shape = RoundedCornerShape(16.dp),
             ) {
                 Text(
-                    "Create Drill",
+                    "New Drill",
                     modifier = Modifier.padding(14.dp),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.titleMedium,
@@ -146,13 +145,14 @@ fun StartDrillScreen(
                 }
                 Card(
                     onClick = {
-                        selectedDrill?.let(onOpenDrillStudio)
+                        val drill = selectedDrill ?: return@Card
+                        onEditDrill(drill)
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                 ) {
                     Text(
-                        "Open ${selectedDrill?.displayName} in Drill Studio",
+                        "Edit ${selectedDrill?.displayName}",
                         modifier = Modifier.padding(14.dp),
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.titleMedium,

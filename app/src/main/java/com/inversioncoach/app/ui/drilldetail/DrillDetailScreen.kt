@@ -25,14 +25,14 @@ import com.inversioncoach.app.ui.components.DrillPreviewAnimation
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 
 @Composable
-fun DrillDetailScreen(drillType: DrillType, onBack: () -> Unit, onOpenDrillStudio: (DrillType) -> Unit) {
+fun DrillDetailScreen(drillType: DrillType, onBack: () -> Unit, onEditDrill: (DrillType) -> Unit) {
     val drill = DrillCatalog.byType(drillType)
     ScaffoldedScreen(title = drill.displayName, onBack = onBack) { padding ->
         DrillDetailContent(
             padding = padding,
             drillType = drillType,
             drill = drill,
-            onOpenDrillStudio = onOpenDrillStudio,
+            onEditDrill = onEditDrill,
         )
     }
 }
@@ -42,7 +42,7 @@ private fun DrillDetailContent(
     padding: PaddingValues,
     drillType: DrillType,
     drill: com.inversioncoach.app.motion.DrillDefinition,
-    onOpenDrillStudio: (DrillType) -> Unit,
+    onEditDrill: (DrillType) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier
@@ -70,10 +70,10 @@ private fun DrillDetailContent(
 
         item {
             Button(
-                onClick = { onOpenDrillStudio(drillType) },
+                onClick = { onEditDrill(drillType) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Open in Drill Studio")
+                Text("Edit")
             }
         }
 
