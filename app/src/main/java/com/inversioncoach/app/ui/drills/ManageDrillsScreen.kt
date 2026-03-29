@@ -33,6 +33,7 @@ fun ManageDrillsScreen(
     onCreateDrill: () -> Unit,
     onEditDrill: (String) -> Unit,
     onOpenDrill: (String) -> Unit,
+    onOpenInStudio: (String?) -> Unit,
 ) {
     val context = LocalContext.current
     val repo = remember { ServiceLocator.repository(context) }
@@ -45,6 +46,7 @@ fun ManageDrillsScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Button(onClick = onCreateDrill, modifier = Modifier.fillMaxWidth()) { Text("Create Drill") }
+            OutlinedButton(onClick = { onOpenInStudio(null) }, modifier = Modifier.fillMaxWidth()) { Text("Open Drill Studio") }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(drills) { drill ->
                     Card(
@@ -58,6 +60,7 @@ fun ManageDrillsScreen(
                             Text("${drill.movementMode} • ${drill.cameraView} • ${drill.status}", style = MaterialTheme.typography.labelSmall)
                             Button(onClick = { onOpenDrill(drill.id) }, modifier = Modifier.fillMaxWidth()) { Text("Open") }
                             OutlinedButton(onClick = { onEditDrill(drill.id) }, modifier = Modifier.fillMaxWidth()) { Text("Edit") }
+                            OutlinedButton(onClick = { onOpenInStudio(drill.id) }, modifier = Modifier.fillMaxWidth()) { Text("Open in Drill Studio") }
                             OutlinedButton(
                                 onClick = { scope.launch { repo.archiveDrill(drill.id) } },
                                 modifier = Modifier.fillMaxWidth(),

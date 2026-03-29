@@ -1,4 +1,4 @@
-package com.inversioncoach.app.motion
+package com.inversioncoach.app.drills.studio
 
 import android.content.Context
 import android.net.Uri

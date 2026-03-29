@@ -1,10 +1,13 @@
-package com.inversioncoach.app.motion
+package com.inversioncoach.app.drills.studio
 
 import android.content.Context
-import com.inversioncoach.app.model.DrillType
+import com.inversioncoach.app.drills.catalog.DrillCatalogRepository
 import org.json.JSONObject
 
-class DrillCatalogDraftStore(private val context: Context) {
+class DrillCatalogDraftStore(
+    private val context: Context,
+    private val catalogRepository: DrillCatalogRepository = DrillCatalogRepository(context),
+) {
     private val storeFile = context.filesDir.resolve("drill_studio/drafts.json").apply { parentFile?.mkdirs() }
 
     data class DrillPickerItem(
@@ -16,24 +19,14 @@ class DrillCatalogDraftStore(private val context: Context) {
 
     fun listDrills(): List<DrillPickerItem> {
         val drafts = loadDrafts()
-        val seeded = DrillCatalog.all.map { drill ->
-            DrillPickerItem(
-                id = drill.id.name,
-                name = drill.displayName,
-                seeded = true,
-                hasDraft = drafts.has(drill.id.name),
-            )
+        val seeded = catalogRepository.getAllDrills().map { drill ->
+            DrillPickerItem(id = drill.id, name = drill.title, seeded = true, hasDraft = drafts.has(drill.id))
         }
         val custom = drafts.keys().asSequence()
-            .filterNot { key -> DrillType.fromStoredName(key) != null }
+            .filterNot { key -> seeded.any { it.id == key } }
             .mapNotNull { key ->
                 val document = runCatching { DrillStudioCodec.fromJson(drafts.getJSONObject(key)) }.getOrNull() ?: return@mapNotNull null
-                DrillPickerItem(
-                    id = key,
-                    name = document.displayName,
-                    seeded = false,
-                    hasDraft = true,
-                )
+                DrillPickerItem(id = key, name = document.displayName, seeded = false, hasDraft = true)
             }
             .toList()
         return seeded + custom
@@ -41,13 +34,11 @@ class DrillCatalogDraftStore(private val context: Context) {
 
     fun loadForEditor(id: String): DrillStudioDocument {
         val drafts = loadDrafts()
-        if (drafts.has(id)) {
-            return DrillStudioCodec.fromJson(drafts.getJSONObject(id))
-        }
-        val seededType = DrillType.fromStoredName(id)
-        if (seededType != null) {
-            return DrillStudioCodec.fromSeeded(DrillCatalog.byType(seededType))
-        }
+        if (drafts.has(id)) return DrillStudioCodec.fromJson(drafts.getJSONObject(id))
+
+        val seeded = catalogRepository.getDrillById(id)
+        if (seeded != null) return DrillStudioMapper.fromCatalog(seeded)
+
         error("Unknown drill id: $id")
     }
 
@@ -68,7 +59,7 @@ class DrillCatalogDraftStore(private val context: Context) {
         val newId = "custom_${System.currentTimeMillis()}"
         val duplicate = source.copy(
             id = newId,
-            seededDrillType = null,
+            seededCatalogDrillId = null,
             displayName = "${source.displayName} Copy",
         )
         saveDraft(duplicate)
