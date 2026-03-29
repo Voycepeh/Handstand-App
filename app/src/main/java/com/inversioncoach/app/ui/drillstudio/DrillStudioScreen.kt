@@ -55,6 +55,7 @@ import com.inversioncoach.app.ui.components.DropdownOption
 import com.inversioncoach.app.ui.components.MultiSelectChipsField
 import com.inversioncoach.app.ui.components.ReliableDropdownField
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import com.inversioncoach.app.calibration.UserBodyProfile
 import com.inversioncoach.app.storage.ServiceLocator
 import kotlinx.coroutines.isActive
 
@@ -452,4 +453,3 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
 }
 
 private fun String.pretty(): String = lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
-import com.inversioncoach.app.calibration.UserBodyProfile
