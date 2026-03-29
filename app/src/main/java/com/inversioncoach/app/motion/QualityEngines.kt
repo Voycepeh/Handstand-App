@@ -41,8 +41,8 @@ class AlignmentScoringEngine(
     }
 
     private fun scoreByTolerance(value: Float, tolerance: Float, thresholds: QualityThresholds): Int {
-        val strictnessMultiplier = thresholds.acceptableLineDeviation / 0.14f
-        val normalized = 1f - (value / max(tolerance * strictnessMultiplier, 0.02f))
+        val toleranceMultiplier = thresholds.acceptableLineDeviation / 0.14f
+        val normalized = 1f - (value / max(tolerance * toleranceMultiplier, 0.02f))
         return normalized.coerceIn(0f, 1f).toScore()
     }
 

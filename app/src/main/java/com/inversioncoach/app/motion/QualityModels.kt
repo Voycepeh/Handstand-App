@@ -1,6 +1,5 @@
 package com.inversioncoach.app.motion
 
-import com.inversioncoach.app.model.AlignmentStrictness
 import com.inversioncoach.app.model.DrillType
 import kotlin.math.roundToInt
 
@@ -14,21 +13,12 @@ data class QualityThresholds(
 )
 
 data class UserCalibrationSettings(
-    val strictness: AlignmentStrictness,
-    val customThresholds: QualityThresholds? = null,
+    val thresholds: QualityThresholds = DEFAULT_THRESHOLDS,
 ) {
-    fun resolvedThresholds(): QualityThresholds = if (strictness == AlignmentStrictness.CUSTOM) {
-        customThresholds ?: presets[AlignmentStrictness.STANDARD]!!
-    } else {
-        presets[strictness] ?: presets[AlignmentStrictness.STANDARD]!!
-    }
+    fun resolvedThresholds(): QualityThresholds = thresholds
 
     companion object {
-        val presets: Map<AlignmentStrictness, QualityThresholds> = mapOf(
-            AlignmentStrictness.BEGINNER to QualityThresholds(0.2f, 62, 60, 60, 380L, 450L),
-            AlignmentStrictness.STANDARD to QualityThresholds(0.14f, 72, 70, 72, 300L, 300L),
-            AlignmentStrictness.ADVANCED to QualityThresholds(0.1f, 82, 80, 82, 220L, 200L),
-        )
+        val DEFAULT_THRESHOLDS: QualityThresholds = QualityThresholds(0.14f, 72, 70, 72, 300L, 300L)
     }
 }
 

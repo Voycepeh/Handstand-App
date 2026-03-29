@@ -46,6 +46,9 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
+    val comparedSessionIds by repository.observeComparedSessionIds().collectAsState(initial = emptyList())
+    val latestComparisonScores by repository.observeLatestComparisonScores().collectAsState(initial = emptyMap())
+    val drills by repository.getAllDrills().collectAsState(initial = emptyList())
     val settings by repository.observeSettings().collectAsState(initial = UserSettings())
     val sessionSizes = remember { mutableStateMapOf<Long, Long>() }
     val lastRefreshSignatures = remember { mutableStateMapOf<Long, String>() }
@@ -160,10 +163,29 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
                     ) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(session.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                            val drillId = parseHistoryMetric(session.metricsJson, "drillId")
+                            val drillName = drills.firstOrNull { it.id == drillId }?.name
+                            if (!drillId.isNullOrBlank()) {
+                                Text(
+                                    "Drill: ${drillName ?: drillId}",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             Text(historyCardDurationText(session), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("Time: ${formatSessionDateTime(session.startedAtMs)}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                "Profile: ${session.userProfileId ?: "unknown"} • Body v${session.bodyProfileVersion ?: 0}" +
+                                    if (session.usedDefaultBodyModel) " (default model)" else "",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                             LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                             Text(status, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (comparedSessionIds.contains(session.id)) {
+                                Text("Reference comparison saved", color = MaterialTheme.colorScheme.primary)
+                                latestComparisonScores[session.id]?.let { score ->
+                                    Text("Similarity score: $score", color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
                             Text("Storage: $sizeMb MB", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -179,6 +201,9 @@ internal fun historyCardDurationText(session: com.inversioncoach.app.model.Sessi
 }
 
 private enum class HistorySort { RECENCY, STORAGE_SIZE, SESSION_DURATION }
+
+private fun parseHistoryMetric(raw: String, key: String): String? =
+    raw.split('|').firstOrNull { token -> token.startsWith("$key:") }?.substringAfter(':')?.takeIf { it.isNotBlank() }
 
 internal fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): String = when {
     session.rawPersistStatus == RawPersistStatus.FAILED -> "Failed"

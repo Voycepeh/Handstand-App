@@ -14,6 +14,25 @@ classDiagram
     +updateAnnotatedExportStatus(sessionId, status)
   }
 
+  class UserProfileManager {
+    <<ProfileCoordinator>>
+    +getOrCreateActiveProfile()
+    +setActiveProfile(profileId)
+    +resolveActiveProfileContext()
+  }
+
+  class UserSettingsDao {
+    <<Persistence>>
+  }
+
+  class UserProfileDao {
+    <<Persistence>>
+  }
+
+  class BodyProfileDao {
+    <<Persistence>>
+  }
+
   class SessionBlobStorage {
     <<MediaStorage>>
     +saveRawVideoBlob()
@@ -46,10 +65,15 @@ classDiagram
   }
 
   LiveCoachingViewModel --> SessionRepository
+  LiveCoachingViewModel --> UserProfileManager
   LiveCoachingViewModel --> AnnotatedExportPipeline
   LiveCoachingViewModel --> MotionAnalysisPipeline
   LiveCoachingViewModel --> MediaVerificationHelper
   SessionRepository --> SessionBlobStorage
+  SessionRepository --> UserSettingsDao
+  UserProfileManager --> UserSettingsDao
+  UserProfileManager --> UserProfileDao
+  UserProfileManager --> BodyProfileDao
   AnnotatedExportPipeline --> AnnotatedExportNormalization
   AnnotatedExportPipeline --> MediaVerificationHelper
   MlKitVideoPoseFrameSource --> MotionAnalysisPipeline

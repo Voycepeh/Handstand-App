@@ -1,6 +1,5 @@
 package com.inversioncoach.app.motion
 
-import com.inversioncoach.app.model.AlignmentStrictness
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.PoseFrame as LegacyPoseFrame
 import org.junit.Assert.assertEquals
@@ -12,7 +11,7 @@ class QualityEnginesTest {
     @Test
     fun alignmentScoring_variesByDrillProfile() {
         val frame = AngleFrame(1000L, mapOf("left_elbow_flexion" to 165f, "right_elbow_flexion" to 166f, "left_knee_flexion" to 170f, "right_knee_flexion" to 170f, "wrist_to_shoulder_line" to 12f), 8f, 6f, 0.08f)
-        val standard = UserCalibrationSettings(AlignmentStrictness.STANDARD)
+        val standard = UserCalibrationSettings()
         val handstand = AlignmentScoringEngine(DrillQualityProfiles.byType(DrillType.FREE_HANDSTAND), standard)
         val pike = AlignmentScoringEngine(DrillQualityProfiles.byType(DrillType.PIKE_PUSH_UP), standard)
 
@@ -23,16 +22,15 @@ class QualityEnginesTest {
     }
 
     @Test
-    fun strictnessChangesThresholdBehavior() {
-        val beginner = UserCalibrationSettings(AlignmentStrictness.BEGINNER).resolvedThresholds()
-        val advanced = UserCalibrationSettings(AlignmentStrictness.ADVANCED).resolvedThresholds()
-        assertTrue(beginner.minimumGoodFormScore < advanced.minimumGoodFormScore)
-        assertTrue(beginner.acceptableLineDeviation > advanced.acceptableLineDeviation)
+    fun calibrationDefaultsMatchAnalyzerDefaults() {
+        val defaults = UserCalibrationSettings().resolvedThresholds()
+        assertEquals(72, defaults.minimumGoodFormScore)
+        assertEquals(70, defaults.repAcceptanceThreshold)
     }
 
     @Test
     fun holdQualityAccumulatesAlignedDuration() {
-        val tracker = HoldQualityTracker(UserCalibrationSettings(AlignmentStrictness.STANDARD).resolvedThresholds())
+        val tracker = HoldQualityTracker(UserCalibrationSettings().resolvedThresholds())
         tracker.update(0L, 80)
         tracker.update(200L, 85)
         val snapshot = tracker.update(500L, 84)
@@ -46,7 +44,7 @@ class QualityEnginesTest {
     fun repEvaluatorRejectsLowQualityRep() {
         val evaluator = RepQualityEvaluator(
             DrillQualityProfiles.byType(DrillType.PIKE_PUSH_UP),
-            UserCalibrationSettings(AlignmentStrictness.ADVANCED).resolvedThresholds(),
+            UserCalibrationSettings().resolvedThresholds(),
         )
         val repTracking = RepTrackingSnapshot(rawRepAttempts = 1, validRepCount = 0, alignmentPassRatio = 0.1f)
         val result = evaluator.update(
@@ -67,7 +65,7 @@ class QualityEnginesTest {
     fun repEvaluatorCollectsFramesOnlyAfterCycleStart() {
         val evaluator = RepQualityEvaluator(
             DrillQualityProfiles.byType(DrillType.PIKE_PUSH_UP),
-            UserCalibrationSettings(AlignmentStrictness.STANDARD).resolvedThresholds(),
+            UserCalibrationSettings().resolvedThresholds(),
         )
 
         repeat(3) { idx ->
@@ -100,7 +98,7 @@ class QualityEnginesTest {
     fun repEvaluatorRestartsCycleAfterStaleGapWithoutDroppingCurrentFrame() {
         val evaluator = RepQualityEvaluator(
             DrillQualityProfiles.byType(DrillType.PIKE_PUSH_UP),
-            UserCalibrationSettings(AlignmentStrictness.STANDARD).resolvedThresholds(),
+            UserCalibrationSettings().resolvedThresholds(),
         )
 
         evaluator.update(

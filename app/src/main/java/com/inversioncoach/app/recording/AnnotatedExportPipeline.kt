@@ -18,8 +18,6 @@ import kotlinx.coroutines.delay
 import kotlin.math.abs
 
 private const val TAG = "AnnotatedExportPipeline"
-private const val BASE_EXPORT_TIMEOUT_MS = 30_000L
-private const val MAX_EXPORT_TIMEOUT_MS = 300_000L
 private const val DEFAULT_STALL_WINDOW_MS = 20_000L
 private const val SOFT_SLOW_EXPORT_THRESHOLD_MS = 90_000L
 private const val MAX_EXPORT_FPS = 12

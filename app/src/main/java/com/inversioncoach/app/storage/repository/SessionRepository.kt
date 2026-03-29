@@ -2,8 +2,10 @@ package com.inversioncoach.app.storage.repository
 
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
+import com.inversioncoach.app.model.CalibrationConfigRecord
 import com.inversioncoach.app.model.CleanupStatus
 import com.inversioncoach.app.model.CompressionStatus
+import com.inversioncoach.app.model.DrillDefinitionRecord
 import com.inversioncoach.app.model.RetainedAssetType
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.FrameMetricRecord
@@ -11,13 +13,17 @@ import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.model.ProfileCalibrationEntity
 import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.SessionRecord
+import com.inversioncoach.app.model.SessionComparisonRecord
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.calibration.UserBodyProfile
+import com.inversioncoach.app.drills.DrillDefinitionValidator
+import com.inversioncoach.app.drills.DrillStatus
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.storage.SessionBlobStorage
 import com.inversioncoach.app.storage.db.FrameMetricDao
 import com.inversioncoach.app.storage.db.ProfileDao
 import com.inversioncoach.app.storage.db.SessionDao
+import com.inversioncoach.app.storage.db.SessionComparisonDao
 import com.inversioncoach.app.storage.db.UserSettingsDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -44,6 +50,58 @@ class SessionRepository(
         if (drillType == null) sessionDao.observeAll() else sessionDao.observeByDrill(drillType)
 
     fun observeSession(sessionId: Long): Flow<SessionRecord?> = sessionDao.observeById(sessionId)
+    fun observeReferenceTemplates(drillId: String? = null): Flow<List<ReferenceTemplateRecord>> =
+        if (drillId == null) referenceTemplateDao.observeAll() else referenceTemplateDao.observeByDrillId(drillId)
+
+    suspend fun getReferenceTemplate(templateId: String): ReferenceTemplateRecord? = referenceTemplateDao.getById(templateId)
+
+    suspend fun saveReferenceTemplate(record: ReferenceTemplateRecord) = referenceTemplateDao.upsert(record)
+
+    suspend fun saveSessionComparison(record: SessionComparisonRecord): Long = sessionComparisonDao.insert(record)
+
+    fun observeSessionComparison(sessionId: Long): Flow<SessionComparisonRecord?> = sessionComparisonDao.observeLatestForSession(sessionId)
+    suspend fun getLatestSessionComparison(sessionId: Long): SessionComparisonRecord? = sessionComparisonDao.getLatestForSession(sessionId)
+
+    fun observeComparedSessionIds(): Flow<List<Long>> = sessionComparisonDao.observeComparedSessionIds()
+    fun observeLatestComparisonScores(): Flow<Map<Long, Int>> =
+        sessionComparisonDao.observeAll().map { rows ->
+            rows.asSequence()
+                .filter { it.sessionId != null }
+                .groupBy { it.sessionId!! }
+                .mapValues { (_, comparisons) -> comparisons.maxByOrNull { it.createdAtMs }?.overallSimilarityScore ?: 0 }
+        }
+
+    fun getAllDrills(): Flow<List<DrillDefinitionRecord>> = drillDefinitionDao.observeAll()
+    fun getActiveDrills(): Flow<List<DrillDefinitionRecord>> = drillDefinitionDao.observeActive()
+    suspend fun getDrill(drillId: String): DrillDefinitionRecord? = drillDefinitionDao.getById(drillId)
+    suspend fun createDrill(record: DrillDefinitionRecord) = drillDefinitionDao.upsert(record)
+    suspend fun updateDrill(record: DrillDefinitionRecord) = drillDefinitionDao.upsert(record)
+    suspend fun validateAndMarkDrillReady(drillId: String): List<String> {
+        val existing = drillDefinitionDao.getById(drillId) ?: return listOf("Drill not found.")
+        val errors = DrillDefinitionValidator.validate(existing)
+        if (errors.isEmpty()) {
+            drillDefinitionDao.upsert(existing.copy(status = DrillStatus.READY, updatedAtMs = System.currentTimeMillis()))
+        }
+        return errors
+    }
+    suspend fun archiveDrill(drillId: String) {
+        val existing = drillDefinitionDao.getById(drillId) ?: return
+        drillDefinitionDao.upsert(existing.copy(status = DrillStatus.ARCHIVED, updatedAtMs = System.currentTimeMillis()))
+    }
+    suspend fun deleteDrill(drillId: String) {
+        drillDefinitionDao.deleteById(drillId)
+    }
+    suspend fun seedDrills(records: List<DrillDefinitionRecord>) = drillDefinitionDao.upsertAll(records)
+
+    suspend fun saveReferenceAsset(record: ReferenceAssetRecord) = referenceAssetDao.upsert(record)
+    fun observeReferenceAssets(drillId: String): Flow<List<ReferenceAssetRecord>> = referenceAssetDao.observeByDrill(drillId)
+    suspend fun saveMovementProfile(record: MovementProfileRecord) = movementProfileDao.upsert(record)
+    suspend fun getMovementProfile(profileId: String): MovementProfileRecord? = movementProfileDao.getById(profileId)
+    suspend fun saveCalibrationConfig(record: CalibrationConfigRecord) = calibrationConfigDao.upsert(record)
+    fun observeCalibrationConfig(drillId: String): Flow<List<CalibrationConfigRecord>> = calibrationConfigDao.observeByDrill(drillId)
+    fun getComparisonsForSession(sessionId: Long): Flow<List<SessionComparisonRecord>> = sessionComparisonDao.observeAllForSession(sessionId)
+    fun getComparisonsForDrill(drillId: String): Flow<List<SessionComparisonRecord>> = sessionComparisonDao.observeByDrill(drillId)
+    fun getTemplatesForDrill(drillId: String): Flow<List<ReferenceTemplateRecord>> = referenceTemplateDao.observeByDrillId(drillId)
 
     suspend fun saveSession(record: SessionRecord): Long = sessionDao.upsert(record)
 
@@ -237,6 +295,7 @@ class SessionRepository(
             if (sessionBytes <= 0L) continue
             frameMetricDao.deleteFrameMetricsForSession(session.id)
             frameMetricDao.deleteIssueEventsForSession(session.id)
+            sessionComparisonDao.deleteBySessionId(session.id)
             sessionDao.deleteById(session.id)
             sessionBlobStorage.deleteSessionBlob(session.id)
             currentBytes -= sessionBytes
@@ -274,6 +333,7 @@ class SessionRepository(
     suspend fun deleteSession(sessionId: Long) {
         frameMetricDao.deleteFrameMetricsForSession(sessionId)
         frameMetricDao.deleteIssueEventsForSession(sessionId)
+        sessionComparisonDao.deleteBySessionId(sessionId)
         sessionDao.deleteById(sessionId)
         sessionBlobStorage.deleteSessionBlob(sessionId)
     }
@@ -298,6 +358,7 @@ class SessionRepository(
         sessionDao.deleteAll()
         frameMetricDao.deleteAllFrameMetrics()
         frameMetricDao.deleteAllIssueEvents()
+        sessionComparisonDao.deleteAll()
         sessionBlobStorage.deleteAllBlobs()
     }
 

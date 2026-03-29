@@ -2,4 +2,5 @@
 <paths>
     <files-path name="session_blobs" path="session_blobs/" />
     <cache-path name="recordings" path="recordings/" />
+    <files-path name="drill_studio" path="drill_studio/" />
 </paths>

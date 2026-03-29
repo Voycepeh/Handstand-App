@@ -93,6 +93,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             cueEngine = ServiceLocator.cueEngine(),
             repository = repository,
             calibrationProfileProvider = ServiceLocator.calibrationProfileProvider(context),
+            runtimeBodyProfileResolver = ServiceLocator.runtimeBodyProfileResolver(context),
             options = options,
             annotatedExportPipeline = AnnotatedExportPipeline(
                 repository = repository,
@@ -188,10 +189,16 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
         }
     }
 
-    LaunchedEffect(spokenCue?.generatedAtMs, settings.audioVolume, options.voiceEnabled) {
+    LaunchedEffect(
+        spokenCue?.generatedAtMs,
+        settings.audioVolume,
+        options.voiceEnabled,
+        uiState.startupState,
+    ) {
         val cue = spokenCue ?: return@LaunchedEffect
         if (!options.voiceEnabled) return@LaunchedEffect
         if (settings.audioVolume <= 0f) return@LaunchedEffect
+        if (uiState.startupState != SessionStartupState.ACTIVE) return@LaunchedEffect
         if (cue.generatedAtMs != uiState.currentCueGeneratedAtMs || cue.id != uiState.currentCueId) return@LaunchedEffect
         voiceCoach.speak(cue, volume = settings.audioVolume)
     }

@@ -227,8 +227,6 @@ enum class AnnotatedExportFailureReason {
 
 enum class CueStyle { CONCISE, TECHNICAL, ENCOURAGING }
 
-enum class AlignmentStrictness { BEGINNER, STANDARD, ADVANCED, CUSTOM }
-
 data class CoachingCue(
     val id: String,
     val text: String,
@@ -240,6 +238,94 @@ data class Recommendation(
     val title: String,
     val reason: String,
     val drillFocus: DrillType,
+)
+
+@Entity(tableName = "reference_template_records")
+data class ReferenceTemplateRecord(
+    @PrimaryKey val id: String,
+    val drillId: String,
+    val displayName: String,
+    val templateType: String,
+    val sourceProfileIdsJson: String,
+    val checkpointJson: String,
+    val toleranceJson: String,
+    val createdAtMs: Long,
+)
+
+@Entity(tableName = "session_comparison_records")
+data class SessionComparisonRecord(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sessionId: Long?,
+    val subjectAssetId: String,
+    val subjectProfileId: String,
+    val drillId: String,
+    val templateId: String,
+    val overallSimilarityScore: Int,
+    val phaseScoresJson: String,
+    val differencesJson: String,
+    val summary: String,
+    val scoringVersion: Int,
+    val createdAtMs: Long,
+)
+
+@Entity(tableName = "drill_definition_records")
+data class DrillDefinitionRecord(
+    @PrimaryKey val id: String,
+    val name: String,
+    val description: String,
+    val movementMode: String,
+    val cameraView: String,
+    val phaseSchemaJson: String,
+    val keyJointsJson: String,
+    val normalizationBasisJson: String,
+    val cueConfigJson: String,
+    val sourceType: String,
+    val status: String,
+    val version: Int,
+    val createdAtMs: Long,
+    val updatedAtMs: Long,
+)
+
+@Entity(tableName = "reference_asset_records")
+data class ReferenceAssetRecord(
+    @PrimaryKey val id: String,
+    val drillId: String,
+    val displayName: String,
+    val ownerType: String,
+    val sourceType: String,
+    val videoUri: String?,
+    val poseUri: String?,
+    val profileUri: String?,
+    val thumbnailUri: String?,
+    val isReference: Boolean,
+    val qualityLabel: String?,
+    val createdAtMs: Long,
+)
+
+@Entity(tableName = "movement_profile_records")
+data class MovementProfileRecord(
+    @PrimaryKey val id: String,
+    val assetId: String,
+    val drillId: String,
+    val extractionVersion: Int,
+    val poseTimelineJson: String,
+    val normalizedFeatureJson: String,
+    val repSegmentsJson: String,
+    val holdSegmentsJson: String,
+    val createdAtMs: Long,
+)
+
+@Entity(tableName = "calibration_config_records")
+data class CalibrationConfigRecord(
+    @PrimaryKey val id: String,
+    val drillId: String,
+    val displayName: String,
+    val configJson: String,
+    val scoringVersion: Int,
+    val featureVersion: Int,
+    val isActive: Boolean,
+    val createdAtMs: Long,
+    val updatedAtMs: Long,
 )
 
 @Entity(tableName = "session_records")
@@ -292,10 +378,33 @@ data class SessionRecord(
     val overlayTimelineUri: String? = null,
     val calibrationProfileVersion: Int? = null,
     val calibrationUpdatedAtMs: Long? = null,
+    val userProfileId: String? = null,
+    val bodyProfileId: String? = null,
+    val bodyProfileVersion: Int? = null,
+    val usedDefaultBodyModel: Boolean = false,
     val notesUri: String?,
     val bestFrameTimestampMs: Long?,
     val worstFrameTimestampMs: Long?,
     val topImprovementFocus: String,
+)
+
+@Entity(tableName = "user_profile_records")
+data class UserProfileRecord(
+    @PrimaryKey val id: String,
+    val displayName: String,
+    val createdAtMs: Long,
+    val updatedAtMs: Long,
+    val isArchived: Boolean = false,
+)
+
+@Entity(tableName = "body_profile_records")
+data class BodyProfileRecord(
+    @PrimaryKey val id: String,
+    val userProfileId: String,
+    val version: Int,
+    val payloadJson: String,
+    val createdAtMs: Long,
+    val updatedAtMs: Long,
 )
 
 @Entity(tableName = "frame_metric_records")
@@ -337,18 +446,12 @@ data class UserSettings(
     @PrimaryKey val id: Int = 1,
     val cueFrequencySeconds: Float = 2f,
     val audioVolume: Float = 1f,
-    val overlayIntensity: Float = 1f,
     val localOnlyPrivacyMode: Boolean = true,
     val retainDays: Int = 60,
     val debugOverlayEnabled: Boolean = false,
     val maxStorageMb: Int = 1024,
     val startupCountdownSeconds: Int = 10,
     val minSessionDurationSeconds: Int = 3,
-    val alignmentStrictness: AlignmentStrictness = AlignmentStrictness.BEGINNER,
-    val customLineDeviation: Float = 0.14f,
-    val customMinimumGoodFormScore: Int = 72,
-    val customRepAcceptanceThreshold: Int = 70,
-    val customHoldAlignedThreshold: Int = 72,
     val drillCameraSideSelections: String = "",
 )
 

@@ -1,0 +1,20 @@
+{
+  "id": "free_handstand_baseline_v1",
+  "templateName": "Free Handstand Baseline",
+  "drillId": "seed_free_handstand",
+  "drillType": "FREE_HANDSTAND",
+  "description": "Reference timing and control for a stable free handstand hold.",
+  "phaseTimingsMs": {
+    "setup": 800,
+    "stack": 1800,
+    "hold": 4500
+  },
+  "alignmentTargets": {
+    "alignment_score": 0.88,
+    "trunk_lean": 4.5
+  },
+  "stabilityTargets": {
+    "alignment_score": 0.05,
+    "trunk_lean": 2.0
+  }
+}

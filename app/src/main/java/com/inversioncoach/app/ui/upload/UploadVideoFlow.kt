@@ -38,19 +38,31 @@ import androidx.lifecycle.viewModelScope
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.AnnotatedExportFailureReason
-import com.inversioncoach.app.drills.core.DrillRegistry
+import com.inversioncoach.app.drills.DrillStatus
+import com.inversioncoach.app.drills.DrillCameraView
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.FrameMetricRecord
+import com.inversioncoach.app.model.ReferenceAssetRecord
 import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.SessionMode
+import com.inversioncoach.app.model.SessionComparisonRecord
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SessionSource
-import com.inversioncoach.app.calibration.CalibrationProfileProvider
+import com.inversioncoach.app.calibration.RuntimeBodyProfileResolver
 import com.inversioncoach.app.movementprofile.ExistingDrillToProfileAdapter
 import com.inversioncoach.app.movementprofile.AnalysisProgressObserver
 import com.inversioncoach.app.movementprofile.MlKitVideoPoseFrameSource
+import com.inversioncoach.app.movementprofile.MovementComparisonEngine
+import com.inversioncoach.app.movementprofile.MovementProfileExtractor
+import com.inversioncoach.app.movementprofile.ReferenceTemplateBuilder
 import com.inversioncoach.app.movementprofile.UploadedVideoAnalyzer
 import com.inversioncoach.app.movementprofile.VideoPoseFrameSource
+import com.inversioncoach.app.movementprofile.ReferenceTemplateDefinition
+import com.inversioncoach.app.movementprofile.MovementProfile
+import com.inversioncoach.app.movementprofile.MovementType
+import com.inversioncoach.app.movementprofile.CameraViewConstraint
+import com.inversioncoach.app.movementprofile.PhaseDefinition
+import com.inversioncoach.app.movementprofile.ReadinessRule
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.overlay.FreestyleOrientationClassifier
 import com.inversioncoach.app.recording.AnnotatedExportPipeline
@@ -78,6 +90,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
+import org.json.JSONObject
 
 private const val TAG = "UploadVideoFlow"
 private const val ANALYSIS_PROGRESS_UPDATE_FRAME_INTERVAL = 1
@@ -135,6 +148,9 @@ data class UploadVideoUiState(
     val analysisProcessedFrames: Int = 0,
     val analysisTotalFrames: Int = 0,
     val analysisPhasePercent: Int? = null,
+    val selectedReferenceTemplateId: String? = null,
+    val selectedDrillId: String? = null,
+    val isReferenceUpload: Boolean = false,
 )
 
 data class UploadFlowResult(
@@ -150,6 +166,9 @@ interface UploadVideoAnalysisRunner {
     suspend fun run(
         uri: Uri,
         trackingMode: UploadTrackingMode,
+        selectedDrillId: String? = null,
+        selectedReferenceTemplateId: String? = null,
+        isReferenceUpload: Boolean = false,
         onSessionCreated: (Long) -> Unit,
         onProgress: (UploadProgress) -> Unit,
         onLog: (String) -> Unit,
@@ -159,7 +178,7 @@ interface UploadVideoAnalysisRunner {
 class DefaultUploadVideoAnalysisRunner(
     private val context: Context,
     private val repository: SessionRepository,
-    private val calibrationProfileProvider: CalibrationProfileProvider,
+    private val runtimeBodyProfileResolver: RuntimeBodyProfileResolver? = null,
     private val frameSourceFactory: (Context, Int) -> VideoPoseFrameSource = { appContext, fps ->
         MlKitVideoPoseFrameSource(appContext, sampleFps = fps)
     },
@@ -169,7 +188,6 @@ class DefaultUploadVideoAnalysisRunner(
     },
 ) : UploadVideoAnalysisRunner {
     private val preset = ExportPreset.BALANCED
-    private val drillRegistry = DrillRegistry()
 
     private data class UploadSourceMetadata(
         val durationMs: Long,
@@ -178,19 +196,30 @@ class DefaultUploadVideoAnalysisRunner(
         val rotationDegrees: Int,
     )
 
+    private data class AnalysisStagePresentation(
+        val phaseLabel: String,
+        val progressDetail: String,
+    )
+
     override suspend fun run(
         uri: Uri,
         trackingMode: UploadTrackingMode,
+        selectedDrillId: String?,
+        selectedReferenceTemplateId: String?,
+        isReferenceUpload: Boolean,
         onSessionCreated: (Long) -> Unit,
         onProgress: (UploadProgress) -> Unit,
         onLog: (String) -> Unit,
     ): UploadFlowResult = withContext(Dispatchers.IO) {
         val startedAt = System.currentTimeMillis()
-        val drillType = drillRegistry.definitionFor(DrillType.FREESTYLE).drillType
-        val resolvedCalibrationProfile = calibrationProfileProvider.resolve(drillType)
+        val drillDefinition = selectedDrillId?.let { repository.getDrill(it) }
+        val activeProfileContext = runtimeBodyProfileResolver?.resolve()
+        validateSelectedDrillForUpload(selectedDrillId, drillDefinition)?.let { error(it) }
+        val drillType = DrillType.FREESTYLE
+        val resolvedCalibrationProfile: com.inversioncoach.app.calibration.DrillMovementProfile? = null
         val sessionId = repository.saveSession(
             SessionRecord(
-                title = "Uploaded Video Analysis",
+                title = drillDefinition?.name?.let { "$it Upload Analysis" } ?: "Uploaded Video Analysis",
                 drillType = drillType,
                 sessionSource = SessionSource.UPLOADED_VIDEO,
                 startedAtMs = startedAt,
@@ -200,11 +229,23 @@ class DefaultUploadVideoAnalysisRunner(
                 limitingFactor = "Pending analysis",
                 issues = "",
                 wins = "",
-                metricsJson = "trackingMode:${trackingMode.name}",
+                metricsJson = mergeMetricsJson(
+                    "",
+                    mapOf(
+                        "trackingMode" to trackingMode.name,
+                        "drillId" to (selectedDrillId ?: ""),
+                        "referenceTemplateId" to (selectedReferenceTemplateId ?: ""),
+                        "isReferenceUpload" to isReferenceUpload.toString(),
+                    ),
+                ),
                 annotatedVideoUri = null,
                 rawVideoUri = null,
-                calibrationProfileVersion = resolvedCalibrationProfile.profileVersion,
-                calibrationUpdatedAtMs = resolvedCalibrationProfile.updatedAtMs,
+                calibrationProfileVersion = null,
+                calibrationUpdatedAtMs = null,
+                userProfileId = activeProfileContext?.userProfileId,
+                bodyProfileId = activeProfileContext?.bodyProfileId,
+                bodyProfileVersion = activeProfileContext?.bodyProfileVersion,
+                usedDefaultBodyModel = activeProfileContext?.usedDefaultBodyModel ?: true,
                 notesUri = null,
                 bestFrameTimestampMs = null,
                 worstFrameTimestampMs = null,
@@ -277,14 +318,14 @@ class DefaultUploadVideoAnalysisRunner(
                     completedAtMs = startedAt + sourceDurationMs,
                     rawVideoUri = persistedRawUri,
                     bestPlayableUri = persistedRawUri,
-                    calibrationProfileVersion = resolvedCalibrationProfile.profileVersion,
-                    calibrationUpdatedAtMs = resolvedCalibrationProfile.updatedAtMs,
+                    calibrationProfileVersion = resolvedCalibrationProfile?.profileVersion,
+                    calibrationUpdatedAtMs = resolvedCalibrationProfile?.updatedAtMs,
                     metricsJson = mergeMetricsJson(
                         session.metricsJson,
                         mapOf(
                             "trackingMode" to trackingMode.name,
-                            "calibrationProfileVersion" to resolvedCalibrationProfile.profileVersion.toString(),
-                            "calibrationUpdatedAtMs" to resolvedCalibrationProfile.updatedAtMs.toString(),
+                            "calibrationProfileVersion" to (resolvedCalibrationProfile?.profileVersion?.toString() ?: ""),
+                            "calibrationUpdatedAtMs" to (resolvedCalibrationProfile?.updatedAtMs?.toString() ?: ""),
                             "sourceDurationMs" to sourceDurationMs.toString(),
                             "sourceWidth" to metadata.width.toString(),
                             "sourceHeight" to metadata.height.toString(),
@@ -307,7 +348,7 @@ class DefaultUploadVideoAnalysisRunner(
             currentStage = UploadStage.RAW_IMPORT_COMPLETE
             logStage("RAW_IMPORTED", "rawUri=$persistedRawUri durationMs=$sourceDurationMs width=${metadata.width} height=${metadata.height}")
 
-            val profile = ExistingDrillToProfileAdapter().fromDrill(drillType)
+            val profile = drillDefinition?.let { buildMovementProfileFromDrill(it) } ?: ExistingDrillToProfileAdapter().fromDrill(drillType)
             currentStage = UploadStage.PREPARING_ANALYSIS
             repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.VALIDATING_INPUT)
             repository.updateAnnotatedExportProgress(
@@ -414,26 +455,15 @@ class DefaultUploadVideoAnalysisRunner(
                         null
                     }
 
-                    val phaseLabel = when (event.stage) {
-                        "decode_start" -> "Analyzing uploaded video"
-                        "frame_sampled" -> "Sampling video frames"
-                        "analysis_complete" -> "Finalizing results..."
-                        else -> "Analyzing movement"
-                    }
-                    val progressDetail = when (event.stage) {
-                        "decode_start" -> "Analyzing uploaded video"
-                        "frame_sampled" -> if (estimatedTotal != null && boundedProcessed > 0) {
-                            "Sampling uploaded frames: $boundedProcessed / $estimatedTotal"
-                        } else {
-                            "Sampling uploaded frames"
-                        }
-                        "analysis_complete" -> "Finalizing results..."
-                        else -> if (totalFramesForUi > 0 && analyzedFramesForUi > 0) {
-                            "Analyzing movement: $analyzedFramesForUi / $totalFramesForUi frames"
-                        } else {
-                            "Analyzing movement"
-                        }
-                    }
+                    val presentation = analysisStagePresentation(
+                        stage = event.stage,
+                        estimatedTotal = estimatedTotal,
+                        boundedProcessed = boundedProcessed,
+                        analyzedFramesForUi = analyzedFramesForUi,
+                        totalFramesForUi = totalFramesForUi,
+                    )
+                    val phaseLabel = presentation.phaseLabel
+                    val progressDetail = presentation.progressDetail
                     val processedForPersistence = analyzedFramesForUi
                     val totalForPersistence = totalFramesForUi.takeIf { it > 0 } ?: (estimatedTotal ?: 0)
                     persistUploadProgressThrottled(
@@ -541,6 +571,112 @@ class DefaultUploadVideoAnalysisRunner(
                     "analysisDurationMs" to analysisDurationMs.toString(),
                 ),
             )
+            val extractor = MovementProfileExtractor()
+            val drillId = selectedDrillId ?: "legacy_${drillType.name}"
+            val assetId = "asset-$sessionId"
+            val profileId = "profile-$sessionId"
+            repository.saveReferenceAsset(
+                ReferenceAssetRecord(
+                    id = assetId,
+                    drillId = drillId,
+                    displayName = if (isReferenceUpload) "Reference Upload $sessionId" else "Attempt Upload $sessionId",
+                    ownerType = "USER",
+                    sourceType = "UPLOAD",
+                    videoUri = persistedRawUri,
+                    poseUri = null,
+                    profileUri = profileId,
+                    thumbnailUri = null,
+                    isReference = isReferenceUpload,
+                    qualityLabel = null,
+                    createdAtMs = System.currentTimeMillis(),
+                ),
+            )
+            val subjectProfile = extractor.fromAnalysis(
+                profileId = profileId,
+                assetId = assetId,
+                drillId = drillId,
+                extractionVersion = 1,
+                analysis = analysis,
+                createdAtMs = System.currentTimeMillis(),
+            )
+            repository.saveMovementProfile(subjectProfile)
+
+            if (isReferenceUpload) {
+                val template = ReferenceTemplateBuilder().buildFromSingleReference(
+                    drillId = drillId,
+                    displayName = "${drillDefinition?.name ?: drillType.displayName} Reference",
+                    sourceProfileId = subjectProfile.id,
+                    snapshot = extractor.toSnapshot(subjectProfile),
+                )
+                repository.saveReferenceTemplate(template)
+                repository.updateMediaPipelineState(sessionId) { session ->
+                    session.copy(
+                        metricsJson = mergeMetricsJson(
+                            session.metricsJson,
+                            mapOf("referenceTemplateId" to template.id, "referenceTemplateName" to template.displayName),
+                        ),
+                    )
+                }
+            } else {
+                val selectedTemplateRecord = selectedReferenceTemplateId?.let { repository.getReferenceTemplate(it) }
+                if (selectedTemplateRecord != null) {
+                    val referenceProfileId = selectedTemplateRecord.sourceProfileIdsJson.split('|').firstOrNull().orEmpty()
+                    val referenceProfile = repository.getMovementProfile(referenceProfileId)
+                    if (referenceProfile != null) {
+                        val comparison = MovementComparisonEngine().compareStoredProfiles(
+                            subject = extractor.toSnapshot(subjectProfile),
+                            reference = extractor.toSnapshot(referenceProfile),
+                        )
+                        repository.saveSessionComparison(
+                            SessionComparisonRecord(
+                                sessionId = sessionId,
+                                subjectAssetId = assetId,
+                                subjectProfileId = subjectProfile.id,
+                                drillId = drillId,
+                                templateId = selectedTemplateRecord.id,
+                                overallSimilarityScore = comparison.overallSimilarityScore,
+                                phaseScoresJson = comparison.phaseScores.entries.joinToString("|") { "${it.key}:${it.value}" },
+                                differencesJson = comparison.topDifferences.joinToString("|"),
+                                summary = "Compared against ${selectedTemplateRecord.displayName}",
+                                scoringVersion = 1,
+                                createdAtMs = System.currentTimeMillis(),
+                            ),
+                        )
+                        repository.updateMediaPipelineState(sessionId) { session ->
+                            session.copy(
+                                metricsJson = mergeMetricsJson(
+                                    session.metricsJson,
+                                    mapOf(
+                                        "referenceTemplateId" to selectedTemplateRecord.id,
+                                        "referenceTemplateName" to selectedTemplateRecord.displayName,
+                                        "comparisonOverall" to comparison.overallSimilarityScore.toString(),
+                                    ),
+                                ),
+                            )
+                        }
+                    } else {
+                        val templateDefinition = templateDefinitionFromRecord(selectedTemplateRecord)
+                        if (templateDefinition != null) {
+                            val comparison = MovementComparisonEngine().compare(templateDefinition, analysis)
+                            repository.saveSessionComparison(
+                                SessionComparisonRecord(
+                                    sessionId = sessionId,
+                                    subjectAssetId = assetId,
+                                    subjectProfileId = subjectProfile.id,
+                                    drillId = drillId,
+                                    templateId = selectedTemplateRecord.id,
+                                    overallSimilarityScore = comparison.overallSimilarityScore,
+                                    phaseScoresJson = comparison.phaseScores.entries.joinToString("|") { "${it.key}:${it.value}" },
+                                    differencesJson = comparison.topDifferences.joinToString("|"),
+                                    summary = "Compared against ${selectedTemplateRecord.displayName}",
+                                    scoringVersion = 1,
+                                    createdAtMs = System.currentTimeMillis(),
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
 
             val orientationClassifier = FreestyleOrientationClassifier()
             val overlayFrames = analysis.overlayTimeline.map { point ->
@@ -649,7 +785,7 @@ class DefaultUploadVideoAnalysisRunner(
                 sessionId = sessionId,
                 rawVideoUri = persistedRawUri,
                 drillType = drillType,
-                drillCameraSide = DrillCameraSide.LEFT,
+                drillCameraSide = drillDefinition?.let(::toDrillCameraSide) ?: DrillCameraSide.LEFT,
                 overlayTimeline = overlayTimeline,
                 preset = preset,
                 onRenderProgress = { rendered, total ->
@@ -722,14 +858,14 @@ class DefaultUploadVideoAnalysisRunner(
                     limitingFactor = if (isAnnotatedReady) "Consistency" else "Annotated export unavailable",
                     wins = "Processed uploaded video",
                     issues = if (analysis.droppedFrames > 0) "Dropped ${analysis.droppedFrames} low-confidence frames" else "",
-                    calibrationProfileVersion = resolvedCalibrationProfile.profileVersion,
-                    calibrationUpdatedAtMs = resolvedCalibrationProfile.updatedAtMs,
+                    calibrationProfileVersion = resolvedCalibrationProfile?.profileVersion,
+                    calibrationUpdatedAtMs = resolvedCalibrationProfile?.updatedAtMs,
                     metricsJson = mergeMetricsJson(
                         session.metricsJson,
                         mapOf(
                             "trackingMode" to trackingMode.name,
-                            "calibrationProfileVersion" to resolvedCalibrationProfile.profileVersion.toString(),
-                            "calibrationUpdatedAtMs" to resolvedCalibrationProfile.updatedAtMs.toString(),
+                            "calibrationProfileVersion" to (resolvedCalibrationProfile?.profileVersion?.toString() ?: ""),
+                            "calibrationUpdatedAtMs" to (resolvedCalibrationProfile?.updatedAtMs?.toString() ?: ""),
                             "validFrames" to analysis.overlayTimeline.size.toString(),
                             "invalidFrames" to analysis.droppedFrames.toString(),
                             "totalJobTimeMs" to (now - startedAt).toString(),
@@ -883,13 +1019,149 @@ class DefaultUploadVideoAnalysisRunner(
         }
         return pairs.entries.joinToString(separator = "|") { (key, value) -> "$key:$value" }
     }
+
+    private fun analysisStagePresentation(
+        stage: String,
+        estimatedTotal: Int?,
+        boundedProcessed: Int,
+        analyzedFramesForUi: Int,
+        totalFramesForUi: Int,
+    ): AnalysisStagePresentation {
+        val phaseLabel = when (stage) {
+            "decode_start" -> "Analyzing uploaded video"
+            "frame_sampled" -> "Sampling video frames"
+            "analysis_complete" -> "Finalizing results..."
+            else -> "Analyzing movement"
+        }
+        val progressDetail = when (stage) {
+            "decode_start" -> "Analyzing uploaded video"
+            "frame_sampled" -> if (estimatedTotal != null && boundedProcessed > 0) {
+                "Sampling uploaded frames: $boundedProcessed / $estimatedTotal"
+            } else {
+                "Sampling uploaded frames"
+            }
+            "analysis_complete" -> "Finalizing results..."
+            else -> if (totalFramesForUi > 0 && analyzedFramesForUi > 0) {
+                "Analyzing movement: $analyzedFramesForUi / $totalFramesForUi frames"
+            } else {
+                "Analyzing movement"
+            }
+        }
+        return AnalysisStagePresentation(
+            phaseLabel = phaseLabel,
+            progressDetail = progressDetail,
+        )
+    }
+
+    private fun buildMovementProfileFromDrill(drill: com.inversioncoach.app.model.DrillDefinitionRecord): MovementProfile {
+        val phases = drill.phaseSchemaJson.split('|').filter { it.isNotBlank() }
+        val movementType = if (drill.movementMode == "REP") MovementType.REP else MovementType.HOLD
+        val view = when (drill.cameraView) {
+            DrillCameraView.FRONT -> CameraViewConstraint.FRONT
+            DrillCameraView.LEFT -> CameraViewConstraint.SIDE_LEFT
+            DrillCameraView.RIGHT -> CameraViewConstraint.SIDE_RIGHT
+            DrillCameraView.BACK -> CameraViewConstraint.BACK
+            DrillCameraView.FREESTYLE -> CameraViewConstraint.ANY
+            "SIDE" -> CameraViewConstraint.SIDE_LEFT
+            else -> CameraViewConstraint.ANY
+        }
+        return MovementProfile(
+            id = drill.id,
+            displayName = drill.name,
+            drillType = null,
+            movementType = movementType,
+            allowedViews = setOf(view, CameraViewConstraint.ANY),
+            phaseDefinitions = phases.mapIndexed { index, phase ->
+                PhaseDefinition(id = phase, displayName = phase.replaceFirstChar { it.uppercase() }, sequenceIndex = index)
+            }.ifEmpty { listOf(PhaseDefinition(id = "setup", displayName = "Setup", sequenceIndex = 0)) },
+            alignmentRules = emptyList(),
+            readinessRule = ReadinessRule(
+                minConfidence = 0.35f,
+                requiredLandmarks = setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip"),
+                minVisibleLandmarkCount = 3,
+                sideViewPrimary = drill.cameraView in setOf(DrillCameraView.LEFT, DrillCameraView.RIGHT, "SIDE"),
+            ),
+            keyJoints = drill.keyJointsJson.split('|').filter { it.isNotBlank() }.toSet().ifEmpty { setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip") },
+        )
+    }
+
+    private fun toDrillCameraSide(drill: com.inversioncoach.app.model.DrillDefinitionRecord): DrillCameraSide = when (drill.cameraView) {
+        DrillCameraView.RIGHT -> DrillCameraSide.RIGHT
+        else -> DrillCameraSide.LEFT
+    }
+
+    private fun templateDefinitionFromRecord(record: com.inversioncoach.app.model.ReferenceTemplateRecord): ReferenceTemplateDefinition? {
+        return runCatching {
+            val checkpoint = JSONObject(record.checkpointJson)
+            val tolerance = JSONObject(record.toleranceJson)
+            val phase = checkpoint.optJSONObject("phaseTimingsMs") ?: JSONObject()
+            val alignment = tolerance.optJSONObject("alignmentTargets")
+                ?: tolerance.optJSONObject("featureMeans")
+                ?: JSONObject()
+            val stability = tolerance.optJSONObject("stabilityTargets")
+                ?: tolerance.optJSONObject("stabilityJitter")
+                ?: JSONObject()
+
+            ReferenceTemplateDefinition(
+                id = record.id,
+                templateName = record.displayName,
+                drillId = record.drillId,
+                description = record.displayName,
+                phaseTimingMs = jsonLongMap(phase),
+                alignmentTargets = jsonFloatMap(alignment),
+                stabilityTargets = jsonFloatMap(stability),
+                assetPath = "",
+            )
+        }.getOrNull()
+    }
+
+    private fun jsonLongMap(obj: JSONObject): Map<String, Long> {
+        val out = linkedMapOf<String, Long>()
+        val keys = obj.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            out[key] = obj.optLong(key)
+        }
+        return out
+    }
+
+    private fun jsonFloatMap(obj: JSONObject): Map<String, Float> {
+        val out = linkedMapOf<String, Float>()
+        val keys = obj.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            out[key] = obj.optDouble(key, 0.0).toFloat()
+        }
+        return out
+    }
+}
+
+internal fun validateSelectedDrillForUpload(
+    selectedDrillId: String?,
+    drillDefinition: com.inversioncoach.app.model.DrillDefinitionRecord?,
+): String? {
+    if (selectedDrillId == null) return null
+    if (drillDefinition == null) return "Selected drill no longer exists. Please choose another drill."
+    if (drillDefinition.status != DrillStatus.READY) {
+        return "Selected drill is not ready yet. Open Manage Drills and mark it ready first."
+    }
+    return null
 }
 
 class UploadVideoViewModel(
     private val runner: UploadVideoAnalysisRunner,
     private val repository: SessionRepository?,
+    private val selectedDrillId: String?,
+    private val selectedReferenceTemplateId: String?,
+    private val isReferenceUpload: Boolean,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(UploadVideoUiState())
+    private val _state = MutableStateFlow(
+        UploadVideoUiState(
+            selectedReferenceTemplateId = selectedReferenceTemplateId,
+            selectedDrillId = selectedDrillId,
+            isReferenceUpload = isReferenceUpload,
+        ),
+    )
     val state: StateFlow<UploadVideoUiState> = _state.asStateFlow()
     companion object {
         private val uploadScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -897,7 +1169,7 @@ class UploadVideoViewModel(
         private var activeSessionId: Long? = null
     }
 
-    constructor(runner: UploadVideoAnalysisRunner) : this(runner, null)
+    constructor(runner: UploadVideoAnalysisRunner) : this(runner, null, null, null, false)
 
     init {
         val repo = repository
@@ -990,6 +1262,9 @@ class UploadVideoViewModel(
                 runner.run(
                     uri = uri,
                     trackingMode = trackingMode,
+                    selectedDrillId = selectedDrillId,
+                    selectedReferenceTemplateId = selectedReferenceTemplateId,
+                    isReferenceUpload = isReferenceUpload,
                     onSessionCreated = { sessionId ->
                         activeSessionId = sessionId
                         _state.update { current -> current.copy(sessionId = sessionId) }
@@ -1153,17 +1428,23 @@ private fun rawReplayPlayableForStage(session: SessionRecord): Boolean {
 fun UploadVideoScreen(
     onBack: () -> Unit,
     onOpenResults: (Long) -> Unit,
+    selectedDrillId: String? = null,
+    selectedReferenceTemplateId: String? = null,
+    isReferenceUpload: Boolean = false,
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
-    val viewModel = remember {
+    val viewModel = remember(selectedDrillId, selectedReferenceTemplateId, isReferenceUpload) {
         UploadVideoViewModel(
             DefaultUploadVideoAnalysisRunner(
                 context = context.applicationContext,
                 repository = repository,
-                calibrationProfileProvider = ServiceLocator.calibrationProfileProvider(context),
+                runtimeBodyProfileResolver = ServiceLocator.runtimeBodyProfileResolver(context),
             ),
             repository,
+            selectedDrillId,
+            selectedReferenceTemplateId,
+            isReferenceUpload,
         )
     }
     val state by viewModel.state.collectAsState()
@@ -1214,6 +1495,12 @@ fun UploadVideoScreen(
             Text(state.stageText, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Current stage: ${state.currentProcessingStage.label}", style = MaterialTheme.typography.bodySmall)
             Text("Movement type: ${state.selectedTrackingMode?.name ?: "Not selected"}", style = MaterialTheme.typography.bodySmall)
+            Text("Drill: ${state.selectedDrillId ?: "Legacy freestyle"}", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "Reference template: ${state.selectedReferenceTemplateId ?: "None"}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text("Upload role: ${if (state.isReferenceUpload) "Reference" else "Attempt"}", style = MaterialTheme.typography.bodySmall)
             Text("Raw video status: ${state.rawVideoStatus.name}", style = MaterialTheme.typography.bodySmall)
             Text("Annotated video status: ${state.annotatedVideoStatus.name}", style = MaterialTheme.typography.bodySmall)
             state.selectedVideoUri?.let { Text("Selected: $it", style = MaterialTheme.typography.bodySmall) }

@@ -5,6 +5,9 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.inversioncoach.app.calibration.storage.CalibrationDao
 import com.inversioncoach.app.calibration.storage.CalibrationEntity
+import com.inversioncoach.app.model.CalibrationConfigRecord
+import com.inversioncoach.app.model.BodyProfileRecord
+import com.inversioncoach.app.model.DrillDefinitionRecord
 import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.model.ProfileCalibrationEntity

@@ -30,7 +30,6 @@ import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.drills.core.DrillRegistry
 import com.inversioncoach.app.motion.MotionAnalysisPipeline
-import com.inversioncoach.app.motion.QualityThresholds
 import com.inversioncoach.app.motion.UserCalibrationSettings
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.overlay.FreestyleOrientationClassifier
@@ -52,6 +51,7 @@ import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.summary.SummaryGenerator
 import com.inversioncoach.app.calibration.CalibrationProfileProvider
 import com.inversioncoach.app.calibration.DrillMovementProfile
+import com.inversioncoach.app.calibration.RuntimeBodyProfileResolver
 import com.inversioncoach.app.calibration.UserBodyProfile
 import com.inversioncoach.app.calibration.rep.SessionRepTemplateUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -85,6 +85,7 @@ class LiveCoachingViewModel(
     private val cueEngine: CueEngine,
     private val repository: SessionRepository,
     private val calibrationProfileProvider: CalibrationProfileProvider,
+    private val runtimeBodyProfileResolver: RuntimeBodyProfileResolver? = null,
     private val options: LiveSessionOptions,
     private val summaryGenerator: SummaryGenerator = SummaryGenerator(com.inversioncoach.app.summary.RecommendationEngine()),
     private val smoother: PoseSmoothingEngine = PoseSmoothingEngine(),
@@ -178,6 +179,11 @@ class LiveCoachingViewModel(
     private var activeSettings: UserSettings = UserSettings()
     private var sessionHadAnyVideo = false
     private var activeMovementProfile: DrillMovementProfile? = null
+    private var activeUserProfileId: String? = null
+    private var activeBodyProfileId: String? = null
+    private var activeBodyProfileVersion: Int? = null
+    private var activeUsesDefaultBodyModel: Boolean = true
+    private var legacyBodyProfileFallback: UserBodyProfile? = null
     private var startupCancelled = false
     private val drillConfig = DrillConfigs.byTypeOrNull(drillType)
     private val readinessEngine = drillConfig?.let { SharedReadinessEngine(drillType, it, options.drillCameraSide) }
@@ -367,27 +373,12 @@ class LiveCoachingViewModel(
             )
         }
         val smoothed = smoother.smooth(corrected.frame)
-        val calibration = if (settings.alignmentStrictness.name == "CUSTOM") {
-            UserCalibrationSettings(
-                strictness = settings.alignmentStrictness,
-                customThresholds = QualityThresholds(
-                    acceptableLineDeviation = settings.customLineDeviation,
-                    minimumGoodFormScore = settings.customMinimumGoodFormScore,
-                    repAcceptanceThreshold = settings.customRepAcceptanceThreshold,
-                    holdAlignedThreshold = settings.customHoldAlignedThreshold,
-                    alignmentPersistenceMs = 300L,
-                    allowedRepAlignmentDropMs = 300L,
-                ),
-            )
-        } else {
-            UserCalibrationSettings(settings.alignmentStrictness)
-        }
+        val calibration = UserCalibrationSettings()
         val motionEligible = sessionMode == SessionMode.DRILL && (readiness?.timerEligible ?: false)
         val freestyleViewMode = if (sessionMode == SessionMode.FREESTYLE) freestyleOrientationClassifier.classify(smoothed.joints) else FreestyleViewMode.UNKNOWN
         val motion = if (motionEligible) {
             motionPipeline.analyze(
                 frame = corrected.frame,
-                strictness = settings.alignmentStrictness,
                 calibration = calibration,
                 movementProfile = activeMovementProfile,
             )
@@ -579,7 +570,7 @@ class LiveCoachingViewModel(
             SessionDiagnostics.log("raw_faults drill=$drillType faults=${motionFaults.map { it.code }}")
         }
 
-        if (cue != null) {
+        if (cue != null && _uiState.value.startupState == SessionStartupState.ACTIVE) {
             _spokenCue.value = cue
         }
 
@@ -665,6 +656,7 @@ class LiveCoachingViewModel(
     fun beginStartupCountdown(countdownSeconds: Int): Boolean {
         if (_uiState.value.startupState != SessionStartupState.IDLE || startupJob?.isActive == true) return false
         startupCancelled = false
+        _spokenCue.value = null
         _uiState.value = _uiState.value.copy(
             startupState = SessionStartupState.COUNTDOWN,
             sessionCountdownRemainingSeconds = countdownSeconds.coerceAtLeast(0),
@@ -710,6 +702,7 @@ class LiveCoachingViewModel(
     fun activateSessionIfStartupReady(): Boolean {
         if (_uiState.value.startupState != SessionStartupState.COUNTDOWN || startupCancelled) return false
         val initiatedAtMs = System.currentTimeMillis()
+        _spokenCue.value = null
         sessionStartedAtMs = initiatedAtMs
         overlayFrames.clear()
         overlayTimelineRecorder = OverlayTimelineRecorder(
@@ -730,6 +723,7 @@ class LiveCoachingViewModel(
         startupJob = null
         if (_uiState.value.startupState == SessionStartupState.ACTIVE) return
         startupCancelled = true
+        _spokenCue.value = null
         _uiState.value = _uiState.value.copy(
             startupState = SessionStartupState.CANCELLED,
             sessionCountdownRemainingSeconds = null,
@@ -919,6 +913,10 @@ class LiveCoachingViewModel(
                         overlayTimelineUri = overlayTimelineUri,
                         calibrationProfileVersion = calibrationProfileForSession?.profileVersion,
                         calibrationUpdatedAtMs = calibrationProfileForSession?.updatedAtMs,
+                        userProfileId = activeUserProfileId,
+                        bodyProfileId = activeBodyProfileId,
+                        bodyProfileVersion = activeBodyProfileVersion,
+                        usedDefaultBodyModel = activeUsesDefaultBodyModel,
                         notesUri = null,
                         bestFrameTimestampMs = bestFrame,
                         worstFrameTimestampMs = worstFrame,
@@ -1000,6 +998,16 @@ class LiveCoachingViewModel(
             smoother.reset()
             correctionEngine.reset()
             activeMovementProfile = calibrationProfileProvider.resolve(drillType)
+            runtimeBodyProfileResolver?.resolve()?.let { resolved ->
+                activeUserProfileId = resolved.userProfileId
+                activeBodyProfileId = resolved.bodyProfileId
+                activeBodyProfileVersion = resolved.bodyProfileVersion
+                activeUsesDefaultBodyModel = resolved.usedDefaultBodyModel
+                legacyBodyProfileFallback = resolved.bodyProfile
+            } ?: run {
+                activeUsesDefaultBodyModel = activeMovementProfile?.userBodyProfile == null
+                legacyBodyProfileFallback = UserBodyProfile.decode(activeSettings.userBodyProfileJson)
+            }
             motionPipeline.setRepTemplate(activeMovementProfile?.repTemplate)
             val now = System.currentTimeMillis()
             sessionStartedAtMs = now
@@ -1037,6 +1045,10 @@ class LiveCoachingViewModel(
                     overlayTimelineUri = null,
                     calibrationProfileVersion = activeMovementProfile?.profileVersion,
                     calibrationUpdatedAtMs = activeMovementProfile?.updatedAtMs,
+                    userProfileId = activeUserProfileId,
+                    bodyProfileId = activeBodyProfileId,
+                    bodyProfileVersion = activeBodyProfileVersion,
+                    usedDefaultBodyModel = activeUsesDefaultBodyModel,
                     notesUri = null,
                     bestFrameTimestampMs = null,
                     worstFrameTimestampMs = null,
@@ -1318,24 +1330,7 @@ class LiveCoachingViewModel(
             }
 
             if (snapshot.overlayTimeline.frames.isEmpty()) {
-                setAnnotatedExportState(AnnotatedExportStatus.SKIPPED, AnnotatedExportFailureReason.OVERLAY_CAPTURE_EMPTY.name)
-                exportLifecycleState = ExportLifecycleState.IDLE
-                annotatedExportStage = AnnotatedExportStage.COMPLETED
-                annotatedExportPercent = 100
-                annotatedExportEtaSeconds = null
-                annotatedExportElapsedMs = 0L
-                annotatedExportLastUpdatedAt = System.currentTimeMillis()
-                repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.SKIPPED)
-                repository.updateAnnotatedExportFailureReason(activeSessionId, AnnotatedExportFailureReason.OVERLAY_CAPTURE_EMPTY.name)
-                SessionDiagnostics.logStructured(
-                    event = "annotated_export_skipped_no_overlay",
-                    sessionId = activeSessionId,
-                    drillType = drillType,
-                    rawUri = rawVideoUri,
-                    annotatedUri = null,
-                    overlayFrameCount = 0,
-                    failureReason = AnnotatedExportFailureReason.OVERLAY_CAPTURE_EMPTY.name,
-                )
+                markAnnotatedExportSkippedNoOverlay(activeSessionId)
                 return
             }
 
@@ -1379,17 +1374,7 @@ class LiveCoachingViewModel(
                 return
             }
 
-            exportLaunchAttemptCount += 1
-            if (AnnotatedExportJobTracker.isActive(activeSessionId) || annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY) {
-                SessionDiagnostics.logStructured(
-                    event = "duplicate_export_launch_ignored",
-                    sessionId = activeSessionId,
-                    drillType = drillType,
-                    rawUri = rawMasterUri,
-                    annotatedUri = annotatedVideoUri,
-                    overlayFrameCount = exportSnapshot.overlayFrameCount,
-                    failureReason = "exportLaunchAttemptCount=$exportLaunchAttemptCount",
-                )
+            if (shouldSkipDuplicateExportLaunch(activeSessionId, exportSnapshot)) {
                 return
             }
             SessionDiagnostics.logStructured(
@@ -1402,16 +1387,7 @@ class LiveCoachingViewModel(
                 failureReason = "exportLaunchAttemptCount=$exportLaunchAttemptCount",
             )
 
-            exportLifecycleState = ExportLifecycleState.PROCESSING
-            setAnnotatedExportState(AnnotatedExportStatus.PROCESSING, null)
-            annotatedExportStage = AnnotatedExportStage.PREPARING
-            annotatedExportPercent = 20
-            annotatedExportEtaSeconds = null
-            annotatedExportElapsedMs = 0L
-            annotatedExportLastUpdatedAt = System.currentTimeMillis()
-            repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.PROCESSING)
-            repository.updateAnnotatedExportFailureReason(activeSessionId, null)
-            repository.updateAnnotatedExportProgress(activeSessionId, AnnotatedExportStage.PREPARING, 20, null, 0L)
+            markAnnotatedExportLaunchStarted(activeSessionId)
             AnnotatedExportJobTracker.markStarted(activeSessionId)
             SessionDiagnostics.logStructured(
                 event = "annotated_export_launched",
@@ -1545,6 +1521,60 @@ class LiveCoachingViewModel(
             failureReason = "owner=$existingOwner",
         )
         return false
+    }
+
+    private suspend fun markAnnotatedExportSkippedNoOverlay(activeSessionId: Long) {
+        setAnnotatedExportState(AnnotatedExportStatus.SKIPPED, AnnotatedExportFailureReason.OVERLAY_CAPTURE_EMPTY.name)
+        exportLifecycleState = ExportLifecycleState.IDLE
+        annotatedExportStage = AnnotatedExportStage.COMPLETED
+        annotatedExportPercent = 100
+        annotatedExportEtaSeconds = null
+        annotatedExportElapsedMs = 0L
+        annotatedExportLastUpdatedAt = System.currentTimeMillis()
+        repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.SKIPPED)
+        repository.updateAnnotatedExportFailureReason(activeSessionId, AnnotatedExportFailureReason.OVERLAY_CAPTURE_EMPTY.name)
+        SessionDiagnostics.logStructured(
+            event = "annotated_export_skipped_no_overlay",
+            sessionId = activeSessionId,
+            drillType = drillType,
+            rawUri = rawVideoUri,
+            annotatedUri = null,
+            overlayFrameCount = 0,
+            failureReason = AnnotatedExportFailureReason.OVERLAY_CAPTURE_EMPTY.name,
+        )
+    }
+
+    private fun shouldSkipDuplicateExportLaunch(
+        activeSessionId: Long,
+        exportSnapshot: ExportSnapshot,
+    ): Boolean {
+        exportLaunchAttemptCount += 1
+        if (!AnnotatedExportJobTracker.isActive(activeSessionId) && annotatedExportStatus != AnnotatedExportStatus.ANNOTATED_READY) {
+            return false
+        }
+        SessionDiagnostics.logStructured(
+            event = "duplicate_export_launch_ignored",
+            sessionId = activeSessionId,
+            drillType = drillType,
+            rawUri = rawMasterUri,
+            annotatedUri = annotatedVideoUri,
+            overlayFrameCount = exportSnapshot.overlayFrameCount,
+            failureReason = "exportLaunchAttemptCount=$exportLaunchAttemptCount",
+        )
+        return true
+    }
+
+    private suspend fun markAnnotatedExportLaunchStarted(activeSessionId: Long) {
+        exportLifecycleState = ExportLifecycleState.PROCESSING
+        setAnnotatedExportState(AnnotatedExportStatus.PROCESSING, null)
+        annotatedExportStage = AnnotatedExportStage.PREPARING
+        annotatedExportPercent = 20
+        annotatedExportEtaSeconds = null
+        annotatedExportElapsedMs = 0L
+        annotatedExportLastUpdatedAt = System.currentTimeMillis()
+        repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.PROCESSING)
+        repository.updateAnnotatedExportFailureReason(activeSessionId, null)
+        repository.updateAnnotatedExportProgress(activeSessionId, AnnotatedExportStage.PREPARING, 20, null, 0L)
     }
 
     private suspend fun createExportSnapshot(activeSessionId: Long): ExportSnapshot {

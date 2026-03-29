@@ -6,6 +6,8 @@ import com.inversioncoach.app.biomechanics.AlignmentMetricsEngine
 import com.inversioncoach.app.calibration.CalibrationProfileProvider
 import com.inversioncoach.app.calibration.DefaultCalibrationProfileProvider
 import com.inversioncoach.app.calibration.DrillMovementProfileRepository
+import com.inversioncoach.app.calibration.RuntimeBodyProfileResolver
+import com.inversioncoach.app.calibration.UserProfileManager
 import com.inversioncoach.app.coaching.CueEngine
 import com.inversioncoach.app.calibration.storage.DrillMovementProfileJson
 import com.inversioncoach.app.calibration.storage.RoomDrillMovementProfileRepository
@@ -22,6 +24,10 @@ object ServiceLocator {
     private var calibrationProvider: CalibrationProfileProvider? = null
     @Volatile
     private var drillMovementProfileRepository: DrillMovementProfileRepository? = null
+    @Volatile
+    private var userProfileManager: UserProfileManager? = null
+    @Volatile
+    private var runtimeBodyProfileResolver: RuntimeBodyProfileResolver? = null
 
     private fun db(context: Context): InversionCoachDatabase {
         return db ?: synchronized(this) {
@@ -59,6 +65,7 @@ object ServiceLocator {
         return calibrationProvider ?: synchronized(this) {
             calibrationProvider ?: DefaultCalibrationProfileProvider(
                 drillMovementProfileRepository(context),
+                runtimeBodyProfileResolver(context),
             ).also { calibrationProvider = it }
         }
     }
@@ -69,6 +76,24 @@ object ServiceLocator {
                 dao = db(context).calibrationDao(),
                 json = DrillMovementProfileJson(),
             ).also { drillMovementProfileRepository = it }
+        }
+    }
+
+    fun userProfileManager(context: Context): UserProfileManager {
+        return userProfileManager ?: synchronized(this) {
+            userProfileManager ?: UserProfileManager(
+                userProfileDao = db(context).userProfileDao(),
+                bodyProfileDao = db(context).bodyProfileDao(),
+                userSettingsDao = db(context).userSettingsDao(),
+            ).also { userProfileManager = it }
+        }
+    }
+
+    fun runtimeBodyProfileResolver(context: Context): RuntimeBodyProfileResolver {
+        return runtimeBodyProfileResolver ?: synchronized(this) {
+            runtimeBodyProfileResolver ?: RuntimeBodyProfileResolver(
+                userProfileManager = userProfileManager(context),
+            ).also { runtimeBodyProfileResolver = it }
         }
     }
 }
