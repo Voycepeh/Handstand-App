@@ -184,10 +184,26 @@ private fun Content(
         )
         ActionTile(
             label = "Choose Drill",
-            subtitle = "Guided drill-specific coaching",
+            subtitle = "Pick a drill and start training",
             icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
             onClick = onStart,
         )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ActionTile(
+                "Reference Training",
+                "Build baseline templates",
+                { Icon(Icons.Default.Timeline, contentDescription = null) },
+                onReferenceTraining,
+                modifier = Modifier.weight(1f),
+            )
+            ActionTile(
+                "Manage Drills",
+                "Create & edit drills",
+                { Icon(Icons.Default.EditNote, contentDescription = null) },
+                onManageDrills,
+                modifier = Modifier.weight(1f),
+            )
+        }
         ActionTile(
             label = "Upload Video",
             subtitle = "Analyze a recorded video with pose overlay",

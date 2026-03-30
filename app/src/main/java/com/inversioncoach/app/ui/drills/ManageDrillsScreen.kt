@@ -45,7 +45,7 @@ fun ManageDrillsScreen(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Button(onClick = onCreateDrill, modifier = Modifier.fillMaxWidth()) { Text("Create Drill") }
+            Button(onClick = onCreateDrill, modifier = Modifier.fillMaxWidth()) { Text("New Drill") }
             OutlinedButton(onClick = { onOpenInStudio(null) }, modifier = Modifier.fillMaxWidth()) { Text("Open Drill Studio") }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(drills) { drill ->
