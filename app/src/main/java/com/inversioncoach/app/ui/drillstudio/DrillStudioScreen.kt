@@ -96,6 +96,7 @@ fun DrillStudioScreen(
                 padding = padding,
                 draft = state.draft,
                 sourceSeedId = state.sourceSeedId,
+                editingTemplateId = state.editingTemplateId,
                 validationErrors = state.validationErrors,
                 statusMessage = state.statusMessage,
                 onUpdateDraft = vm::updateDraft,
@@ -112,6 +113,8 @@ fun DrillStudioScreen(
                 onUpdatePhasePoseJoint = vm::updatePhasePoseJoint,
                 onSaveDraft = vm::saveDraft,
                 onSaveAndMarkReady = vm::saveAndMarkReady,
+                onSaveTemplate = vm::saveTemplate,
+                onSaveAsNewTemplate = vm::saveAsNewTemplate,
                 bodyProfile = bodyProfile,
             )
         }
@@ -154,6 +157,7 @@ private fun DrillStudioEditor(
     padding: PaddingValues,
     draft: DrillTemplate,
     sourceSeedId: String?,
+    editingTemplateId: String?,
     validationErrors: List<String>,
     statusMessage: String?,
     onUpdateDraft: ((DrillTemplate) -> DrillTemplate) -> Unit,
@@ -170,6 +174,8 @@ private fun DrillStudioEditor(
     onUpdatePhasePoseJoint: (String, String, JointPoint) -> Unit,
     onSaveDraft: () -> Unit,
     onSaveAndMarkReady: () -> Unit,
+    onSaveTemplate: (Boolean) -> Unit,
+    onSaveAsNewTemplate: (Boolean) -> Unit,
     bodyProfile: UserBodyProfile?,
 ) {
     val phasePoses = draft.skeletonTemplate.phasePoses
@@ -179,6 +185,7 @@ private fun DrillStudioEditor(
     var previewProgress by remember(draft.id) { mutableFloatStateOf(0f) }
     var autoPlay by remember(draft.id) { mutableStateOf(true) }
     var advancedMode by remember(draft.id) { mutableStateOf(false) }
+    var setAsBaseline by remember(draft.id) { mutableStateOf(false) }
     var selectedJoint by remember(draft.id, selectedPhaseId) {
         mutableStateOf(phasePoses.firstOrNull { it.phaseId == selectedPhaseId }?.joints?.keys?.firstOrNull())
     }
@@ -392,6 +399,16 @@ private fun DrillStudioEditor(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(onClick = onSaveDraft) { Text("Save Draft") }
                 Button(onClick = onSaveAndMarkReady) { Text("Validate and Save") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                if (editingTemplateId != null) {
+                    Button(onClick = { onSaveTemplate(setAsBaseline) }) { Text("Save Template") }
+                }
+                Button(onClick = { onSaveAsNewTemplate(setAsBaseline) }) { Text("Save as New Template") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Set as baseline")
+                Switch(checked = setAsBaseline, onCheckedChange = { setAsBaseline = it })
             }
         }
     }

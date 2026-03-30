@@ -20,6 +20,8 @@ class SessionRepositoryPortableDrillContractTest {
             "saveMovementProfile",
             "saveCalibrationConfig",
             "saveReferenceTemplate",
+            "updateTemplateFromDraft",
+            "createTemplateFromDraft",
             "createTemplateFromReferenceUpload",
             "createDrillFromReferenceUpload",
             "promoteSessionToTemplate",

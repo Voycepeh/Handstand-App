@@ -10,7 +10,9 @@ import com.inversioncoach.app.drills.catalog.DrillTemplate
 import com.inversioncoach.app.drills.catalog.PhaseWindow
 import com.inversioncoach.app.drills.catalog.SkeletonKeyframeTemplate
 import com.inversioncoach.app.drills.catalog.SkeletonTemplate
+import com.inversioncoach.app.drills.studio.ReferenceTemplateDraftSerializer
 import com.inversioncoach.app.model.ReferenceTemplateRecord
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -58,6 +60,23 @@ class ReferenceTemplateDraftMapperTest {
 
         assertTrue(result.statusMessage?.contains("Template parsing failed") == true)
         assertEquals(seed.id, result.draft.sourceSeedId)
+    }
+
+    @Test
+    fun roundTripTemplateMappingPreservesPhaseAndKeyframeShape() {
+        val mapped = ReferenceTemplateDraftMapper.toDraft(referenceRecord(
+            phasePosesJson = """{"phases":[{"phaseId":"setup","sequenceIndex":0,"durationMs":1000},{"phaseId":"stack","sequenceIndex":1,"durationMs":1500}]}""",
+            keyframesJson = """{"keyframes":[{"phaseId":"setup","progress":0.0},{"phaseId":"stack","progress":0.65},{"phaseId":"stack","progress":1.0}]}""",
+        ), seedDrill())
+        val payload = ReferenceTemplateDraftSerializer.toPayload(mapped.draft)
+        val phases = JSONObject(payload.phasePosesJson).getJSONArray("phases")
+        val keyframes = JSONObject(payload.keyframesJson).getJSONArray("keyframes")
+
+        assertEquals(2, phases.length())
+        assertEquals("setup", phases.getJSONObject(0).getString("phaseId"))
+        assertEquals("stack", phases.getJSONObject(1).getString("phaseId"))
+        assertEquals(3, keyframes.length())
+        assertEquals("setup", keyframes.getJSONObject(0).getString("phaseId"))
     }
 
     private fun seedDrill(): DrillTemplate = DrillTemplate(

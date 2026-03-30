@@ -25,6 +25,8 @@ import com.inversioncoach.app.drills.DrillSourceType
 import com.inversioncoach.app.drills.DrillDefinitionValidator
 import com.inversioncoach.app.drills.DrillDefinitionResolver
 import com.inversioncoach.app.drills.DrillStatus
+import com.inversioncoach.app.drills.catalog.DrillTemplate
+import com.inversioncoach.app.drills.studio.ReferenceTemplateDraftSerializer
 import com.inversioncoach.app.movementprofile.MovementProfileExtractor
 import com.inversioncoach.app.movementprofile.ReferenceTemplateBuilder
 import com.inversioncoach.app.overlay.DrillCameraSide
@@ -72,6 +74,48 @@ class SessionRepository(
     suspend fun getReferenceTemplate(templateId: String): ReferenceTemplateRecord? = referenceTemplateDao.getById(templateId)
 
     suspend fun saveReferenceTemplate(record: ReferenceTemplateRecord) = referenceTemplateDao.upsert(record)
+    suspend fun updateTemplateFromDraft(
+        templateId: String,
+        draft: DrillTemplate,
+        displayName: String? = null,
+        setAsBaseline: Boolean? = null,
+    ): ReferenceTemplateRecord? {
+        val existing = referenceTemplateDao.getById(templateId) ?: return null
+        val now = System.currentTimeMillis()
+        val updated = buildUpdatedTemplateRecord(existing, draft, displayName, setAsBaseline, now)
+        return if (updated.isBaseline) {
+            setBaselineTemplateForDrill(drillId = existing.drillId, template = updated)
+        } else {
+            referenceTemplateDao.upsert(updated)
+            updated
+        }
+    }
+
+    suspend fun createTemplateFromDraft(
+        drillId: String,
+        draft: DrillTemplate,
+        displayName: String,
+        basedOnTemplateId: String? = null,
+        setAsBaseline: Boolean = false,
+    ): ReferenceTemplateRecord {
+        val parent = basedOnTemplateId?.let { referenceTemplateDao.getById(it) }
+        val now = System.currentTimeMillis()
+        val created = buildNewTemplateRecord(
+            drillId = drillId,
+            draft = draft,
+            displayName = displayName,
+            parent = parent,
+            setAsBaseline = setAsBaseline,
+            now = now,
+        )
+        return if (setAsBaseline) {
+            setBaselineTemplateForDrill(drillId = drillId, template = created)
+            created.copy(isBaseline = true)
+        } else {
+            referenceTemplateDao.upsert(created)
+            created
+        }
+    }
     fun listTemplatesForDrill(drillId: String): Flow<List<ReferenceTemplateRecord>> = referenceTemplateDao.observeByDrillId(drillId)
     fun getSessionsForDrill(drillId: String): Flow<List<SessionRecord>> = sessionDao.observeByDrillId(drillId)
 
@@ -678,4 +722,54 @@ class SessionRepository(
                 val side = DrillCameraSide.entries.firstOrNull { it.name == parts[1] } ?: return@mapNotNull null
                 drill to side
             }.toMap()
+}
+
+internal fun buildUpdatedTemplateRecord(
+    existing: ReferenceTemplateRecord,
+    draft: DrillTemplate,
+    displayName: String?,
+    setAsBaseline: Boolean?,
+    now: Long,
+): ReferenceTemplateRecord {
+    val payload = ReferenceTemplateDraftSerializer.toPayload(draft)
+    return existing.copy(
+        displayName = displayName ?: existing.displayName,
+        title = draft.title.ifBlank { displayName ?: existing.displayName },
+        phasePosesJson = payload.phasePosesJson,
+        keyframesJson = payload.keyframesJson,
+        fpsHint = payload.fpsHint,
+        durationMs = payload.durationMs,
+        updatedAtMs = now,
+        isBaseline = setAsBaseline ?: existing.isBaseline,
+    )
+}
+
+internal fun buildNewTemplateRecord(
+    drillId: String,
+    draft: DrillTemplate,
+    displayName: String,
+    parent: ReferenceTemplateRecord?,
+    setAsBaseline: Boolean,
+    now: Long,
+): ReferenceTemplateRecord {
+    val payload = ReferenceTemplateDraftSerializer.toPayload(draft)
+    return ReferenceTemplateRecord(
+        id = "template_${UUID.randomUUID()}",
+        drillId = drillId,
+        displayName = displayName,
+        templateType = parent?.templateType ?: "SINGLE_REFERENCE",
+        sourceType = parent?.sourceType ?: "DRILL_STUDIO",
+        sourceSessionId = parent?.sourceSessionId,
+        title = draft.title.ifBlank { displayName },
+        phasePosesJson = payload.phasePosesJson,
+        keyframesJson = payload.keyframesJson,
+        fpsHint = payload.fpsHint,
+        durationMs = payload.durationMs,
+        updatedAtMs = now,
+        isBaseline = setAsBaseline,
+        sourceProfileIdsJson = parent?.sourceProfileIdsJson ?: "",
+        checkpointJson = parent?.checkpointJson ?: "{}",
+        toleranceJson = parent?.toleranceJson ?: "{}",
+        createdAtMs = now,
+    )
 }

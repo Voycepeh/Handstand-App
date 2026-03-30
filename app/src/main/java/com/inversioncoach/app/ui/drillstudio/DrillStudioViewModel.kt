@@ -34,6 +34,8 @@ sealed interface DrillStudioUiState {
     data class Ready(
         val draft: DrillTemplate,
         val sourceSeedId: String?,
+        val editingDrillId: String? = null,
+        val editingTemplateId: String? = null,
         val validationErrors: List<String> = emptyList(),
         val statusMessage: String? = null,
     ) : DrillStudioUiState
@@ -68,6 +70,8 @@ class DrillStudioViewModel(
                 DrillStudioUiState.Ready(
                     draft = normalized,
                     sourceSeedId = draftResult.draft.sourceSeedId,
+                    editingDrillId = templateRecord?.drillId ?: request.drillId ?: seed?.id,
+                    editingTemplateId = templateRecord?.id,
                     statusMessage = draftResult.statusMessage,
                 )
             }
@@ -234,6 +238,50 @@ class DrillStudioViewModel(
             validationErrors = errors,
             statusMessage = if (errors.isEmpty()) "Draft validated and saved" else null,
         )
+    }
+
+    fun saveTemplate(setAsBaseline: Boolean) {
+        val current = _uiState.value as? DrillStudioUiState.Ready ?: return
+        val templateId = current.editingTemplateId
+        val repository = sessionRepository
+        if (templateId == null || repository == null) {
+            _uiState.value = current.copy(statusMessage = "This draft is not linked to an existing template.")
+            return
+        }
+        viewModelScope.launch {
+            val saved = repository.updateTemplateFromDraft(
+                templateId = templateId,
+                draft = current.draft,
+                setAsBaseline = if (setAsBaseline) true else null,
+            )
+            val message = if (saved == null) "Template save failed." else "Template saved"
+            val refreshed = (_uiState.value as? DrillStudioUiState.Ready) ?: current
+            _uiState.value = refreshed.copy(statusMessage = message)
+        }
+    }
+
+    fun saveAsNewTemplate(setAsBaseline: Boolean) {
+        val current = _uiState.value as? DrillStudioUiState.Ready ?: return
+        val drillId = current.editingDrillId
+        val repository = sessionRepository
+        if (drillId.isNullOrBlank() || repository == null) {
+            _uiState.value = current.copy(statusMessage = "Unable to determine drill for new template save.")
+            return
+        }
+        viewModelScope.launch {
+            val created = repository.createTemplateFromDraft(
+                drillId = drillId,
+                draft = current.draft,
+                displayName = current.draft.title.ifBlank { "Studio Template" },
+                basedOnTemplateId = current.editingTemplateId,
+                setAsBaseline = setAsBaseline,
+            )
+            val refreshed = (_uiState.value as? DrillStudioUiState.Ready) ?: current
+            _uiState.value = refreshed.copy(
+                editingTemplateId = created.id,
+                statusMessage = "Saved as new template",
+            )
+        }
     }
 
     private fun mutateReadyDraft(transform: (DrillTemplate) -> DrillTemplate) {
