@@ -184,12 +184,6 @@ class CalibrationViewModel(
                 bodyProfile = builtProfile,
                 frames = controlledHoldFrames,
             )
-            val finalHoldTemplate = when {
-                existing.holdTemplate != null && learnedHoldTemplate != null -> holdTemplateBlender.blend(existing.holdTemplate, learnedHoldTemplate)
-                learnedHoldTemplate != null -> learnedHoldTemplate
-                else -> existing.holdTemplate
-            }
-
             val updatedAtMs = System.currentTimeMillis()
             val finalHoldTemplate = when {
                 existing.holdTemplate != null && learnedHoldTemplate != null ->
