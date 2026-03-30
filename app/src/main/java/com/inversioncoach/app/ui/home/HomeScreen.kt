@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,7 +36,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,9 +48,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.menuAnchor
-import com.inversioncoach.app.calibration.ActiveProfileContext
-import com.inversioncoach.app.model.UserProfileRecord
 import com.inversioncoach.app.storage.ServiceLocator
+import com.inversioncoach.app.storage.repository.UserProfileStatus
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
@@ -71,27 +70,12 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
 
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
-    val profiles by userProfileManager.observeAvailableProfiles().collectAsState(initial = emptyList())
-    var activeProfileContext by remember { mutableStateOf<ActiveProfileContext?>(null) }
-    var expanded by remember { mutableStateOf(false) }
-    var showOverwriteDialog by remember { mutableStateOf(false) }
-    var showCreateDialog by remember { mutableStateOf(false) }
-    var newProfileName by remember { mutableStateOf("") }
-    var renameTargetProfileId by remember { mutableStateOf<String?>(null) }
-    var renameTargetName by remember { mutableStateOf("") }
-
-    LaunchedEffect(profiles) {
-        activeProfileContext = runCatching { userProfileManager.resolveActiveProfileContext() }.getOrNull()
-    }
+    val profileStatuses by repository.observeProfileStatuses().collectAsState(initial = emptyList())
 
     val latestSession = sessions.maxByOrNull { it.startedAtMs }
-    val activeProfile = activeProfileContext?.userProfile
-    val activeProfileName = activeProfile?.displayName ?: "No active profile"
-    val activeHasCalibration = activeProfileContext?.bodyProfileRecord != null
-    val activeBodyProfileVersion = activeProfileContext?.bodyProfileRecord?.version
 
     ScaffoldedScreen(title = "Inversion Coach") { padding ->
         Content(
@@ -107,6 +91,7 @@ fun HomeScreen(
             onManageDrills = onManageDrills,
             latestSessionStartMs = latestSession?.startedAtMs ?: 0L,
             latestSessionDurationMs = computeSessionDurationMs(latestSession?.startedAtMs ?: 0L, latestSession?.completedAtMs ?: 0L),
+            profileStatuses = profileStatuses,
             onSelectProfile = { profileId ->
                 scope.launch { repository.setActiveProfile(profileId) }
             },
@@ -122,16 +107,6 @@ fun HomeScreen(
             onArchiveProfile = { profileId ->
                 scope.launch { repository.archiveProfile(profileId) }
             },
-            showOverwriteDialog = showOverwriteDialog,
-            onShowOverwriteDialogChange = { showOverwriteDialog = it },
-            showCreateDialog = showCreateDialog,
-            onShowCreateDialogChange = { showCreateDialog = it },
-            newProfileName = newProfileName,
-            onNewProfileNameChange = { newProfileName = it },
-            renameTargetProfileId = renameTargetProfileId,
-            onRenameTargetProfileIdChange = { renameTargetProfileId = it },
-            renameTargetName = renameTargetName,
-            onRenameTargetNameChange = { renameTargetName = it },
         )
     }
 }
@@ -150,6 +125,7 @@ private fun Content(
     onManageDrills: () -> Unit,
     latestSessionStartMs: Long,
     latestSessionDurationMs: Long,
+    profileStatuses: List<UserProfileStatus>,
     onSelectProfile: (Long) -> Unit,
     onCreateProfile: (String) -> Unit,
     onRenameProfile: (Long, String) -> Unit,
@@ -326,7 +302,7 @@ private fun Content(
 
     if (showOverwriteDialog) {
         AlertDialog(
-            onDismissRequest = { onShowOverwriteDialogChange(false) },
+            onDismissRequest = { showOverwriteDialog = false },
             title = { Text("Overwrite calibration?") },
             text = { Text("This will replace the saved body calibration for the active profile.") },
             confirmButton = {
