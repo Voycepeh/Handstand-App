@@ -170,6 +170,17 @@ class DrillStudioViewModel(
         )
     }
 
+    fun applyPosePreset(phaseId: String, presetId: String) = mutateReadyDraft { current ->
+        val preset = DrillStudioPosePresets.all.firstOrNull { it.id == presetId } ?: return@mutateReadyDraft current
+        current.copy(
+            skeletonTemplate = current.skeletonTemplate.copy(
+                phasePoses = current.skeletonTemplate.phasePoses.map { pose ->
+                    if (pose.phaseId == phaseId) pose.copy(joints = DrillStudioPoseUtils.normalizeJointNames(preset.joints)) else pose
+                },
+            ),
+        )
+    }
+
     private fun mutateReadyDraft(transform: (DrillTemplate) -> DrillTemplate) {
         updateDraft(transform)
     }
@@ -259,17 +270,8 @@ class DrillStudioViewModel(
             end = window.end.coerceIn(window.start.coerceIn(0f, 1f), 1f),
         )
 
-    private fun defaultJoints(): Map<String, JointPoint> = mapOf(
-        "head" to JointPoint(0.5f, 0.2f),
-        "shoulder_left" to JointPoint(0.42f, 0.35f),
-        "shoulder_right" to JointPoint(0.58f, 0.35f),
-        "wrist_left" to JointPoint(0.40f, 0.45f),
-        "wrist_right" to JointPoint(0.60f, 0.45f),
-        "hip_left" to JointPoint(0.45f, 0.55f),
-        "hip_right" to JointPoint(0.55f, 0.55f),
-        "ankle_left" to JointPoint(0.45f, 0.85f),
-        "ankle_right" to JointPoint(0.55f, 0.85f),
-    )
+    private fun defaultJoints(): Map<String, JointPoint> =
+        DrillStudioPoseUtils.normalizeJointNames(DrillStudioPosePresets.neutralUpright.joints)
 
     private fun phasePosesFromKeyframes(
         phases: List<DrillPhaseTemplate>,

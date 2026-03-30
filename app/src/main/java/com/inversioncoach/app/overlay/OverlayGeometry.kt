@@ -5,21 +5,6 @@ import com.inversioncoach.app.model.JointPoint
 import com.inversioncoach.app.model.SessionMode
 
 private const val MIN_RENDER_VISIBILITY = 0.35f
-private val SELECTED_JOINTS = listOf("nose", "shoulder", "elbow", "wrist", "hip", "knee", "ankle")
-
-private val SIDE_CONNECTIONS = listOf(
-    "nose" to "{side}_shoulder",
-    "{side}_shoulder" to "{side}_elbow",
-    "{side}_elbow" to "{side}_wrist",
-    "{side}_shoulder" to "{side}_hip",
-    "{side}_hip" to "{side}_knee",
-    "{side}_knee" to "{side}_ankle",
-)
-
-private val BILATERAL_CONNECTORS = listOf(
-    "left_shoulder" to "right_shoulder",
-    "left_hip" to "right_hip",
-)
 
 data class OverlayRenderModel(
     val joints: List<JointPoint>,
@@ -99,16 +84,16 @@ private class FreestyleOverlayStrategy {
                 FreestyleViewMode.BACK,
                 FreestyleViewMode.UNKNOWN,
                 -> {
-                    SELECTED_JOINTS.filter { it != "nose" }.forEach { base ->
+                    OverlaySkeletonSpec.baseJoints.forEach { base ->
                         add("left_$base")
                         add("right_$base")
                     }
                 }
 
-                FreestyleViewMode.LEFT_PROFILE -> SELECTED_JOINTS.filter { it != "nose" }
+                FreestyleViewMode.LEFT_PROFILE -> OverlaySkeletonSpec.baseJoints
                     .forEach { base -> add("left_$base") }
 
-                FreestyleViewMode.RIGHT_PROFILE -> SELECTED_JOINTS.filter { it != "nose" }
+                FreestyleViewMode.RIGHT_PROFILE -> OverlaySkeletonSpec.baseJoints
                     .forEach { base -> add("right_$base") }
             }
         }
@@ -120,13 +105,13 @@ private class FreestyleOverlayStrategy {
                 FreestyleViewMode.BACK,
                 FreestyleViewMode.UNKNOWN,
                 -> {
-                    addAll(sideConnections("left"))
-                    addAll(sideConnections("right"))
-                    addAll(BILATERAL_CONNECTORS)
+                    addAll(OverlaySkeletonSpec.sideConnections("left"))
+                    addAll(OverlaySkeletonSpec.sideConnections("right"))
+                    addAll(OverlaySkeletonSpec.bilateralConnectors)
                 }
 
-                FreestyleViewMode.LEFT_PROFILE -> addAll(sideConnections("left"))
-                FreestyleViewMode.RIGHT_PROFILE -> addAll(sideConnections("right"))
+                FreestyleViewMode.LEFT_PROFILE -> addAll(OverlaySkeletonSpec.sideConnections("left"))
+                FreestyleViewMode.RIGHT_PROFILE -> addAll(OverlaySkeletonSpec.sideConnections("right"))
             }
         }.filter { (from, to) -> visible[from] != null && visible[to] != null }
 
@@ -153,17 +138,12 @@ private class FixedDrillSideOverlayStrategy {
     fun build(joints: List<JointPoint>, side: DrillCameraSide): OverlayRenderModel {
         val sidePrefix = if (side == DrillCameraSide.LEFT) "left" else "right"
         val visible = joints.filter { it.visibility >= MIN_RENDER_VISIBILITY }.associateBy { it.name }
-        val names = listOf("nose") + SELECTED_JOINTS.filter { it != "nose" }.map { "${sidePrefix}_$it" }
+        val names = listOf(OverlaySkeletonSpec.Nose) + OverlaySkeletonSpec.baseJoints.map { "${sidePrefix}_$it" }
         val filtered = names.mapNotNull { visible[it] }
-        val connections = sideConnections(sidePrefix).filter { (from, to) -> visible[from] != null && visible[to] != null }
+        val connections = OverlaySkeletonSpec.sideConnections(sidePrefix).filter { (from, to) -> visible[from] != null && visible[to] != null }
         return OverlayRenderModel(filtered, connections, idealLine = buildSupportLine(0.5f))
     }
 }
-
-private fun sideConnections(side: String): List<Pair<String, String>> =
-    SIDE_CONNECTIONS.map { (from, to) ->
-        from.replace("{side}", side) to to.replace("{side}", side)
-    }
 
 
 private fun buildSupportLine(x: Float): Pair<JointPoint, JointPoint> {
