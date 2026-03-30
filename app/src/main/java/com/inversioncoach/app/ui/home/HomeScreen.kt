@@ -418,14 +418,14 @@ private fun ProfileCalibrationCard(
                             OutlinedButton(
                                 onClick = { onCalibrateProfile(profile) },
                                 modifier = Modifier.weight(1f).heightIn(min = 34.dp),
-                                contentPadding = ButtonDefaults.ContentPadding.copy(horizontal = 8.dp, vertical = 6.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                             ) {
                                 Text("Calibrate", maxLines = 1, overflow = TextOverflow.Clip)
                             }
                             OutlinedButton(
                                 onClick = { onRenameProfile(profile) },
                                 modifier = Modifier.weight(1f).heightIn(min = 34.dp),
-                                contentPadding = ButtonDefaults.ContentPadding.copy(horizontal = 8.dp, vertical = 6.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                             ) {
                                 Text("Rename", maxLines = 1, overflow = TextOverflow.Clip)
                             }
@@ -433,7 +433,7 @@ private fun ProfileCalibrationCard(
                                 onClick = { onArchiveProfile(profile) },
                                 enabled = activeCount > 1 && !profile.isActive,
                                 modifier = Modifier.weight(1f).heightIn(min = 34.dp),
-                                contentPadding = ButtonDefaults.ContentPadding.copy(horizontal = 8.dp, vertical = 6.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                             ) {
                                 Text("Archive", maxLines = 1, overflow = TextOverflow.Clip)
                             }
