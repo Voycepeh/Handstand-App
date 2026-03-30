@@ -19,16 +19,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowOutward
 import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.SportsMartialArts
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -50,26 +48,29 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.menuAnchor
+import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.storage.repository.UserProfileStatus
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import java.time.Instant
+import java.time.ZoneId
+import java.time.temporal.TemporalAdjusters
 import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
     onStart: () -> Unit,
     onStartFreestyle: () -> Unit,
+    onLatestSession: (Long) -> Unit,
     onHistory: () -> Unit,
     onProgress: () -> Unit,
+    onDrillHub: () -> Unit,
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
     onCalibration: () -> Unit,
-    onReferenceTraining: () -> Unit = {},
-    onManageDrills: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
@@ -85,13 +86,15 @@ fun HomeScreen(
             padding = padding,
             onStart = onStart,
             onStartFreestyle = onStartFreestyle,
+            onLatestSession = onLatestSession,
             onHistory = onHistory,
             onProgress = onProgress,
+            onDrillHub = onDrillHub,
             onSettings = onSettings,
             onUploadVideo = onUploadVideo,
             onCalibration = onCalibration,
-            onReferenceTraining = onReferenceTraining,
-            onManageDrills = onManageDrills,
+            sessionSummaries = sessions,
+            latestSessionId = latestSession?.id,
             latestSessionStartMs = latestSession?.startedAtMs ?: 0L,
             latestSessionDurationMs = computeSessionDurationMs(latestSession?.startedAtMs ?: 0L, latestSession?.completedAtMs ?: 0L),
             profileStatuses = profileStatuses,
@@ -119,13 +122,15 @@ private fun Content(
     padding: PaddingValues,
     onStart: () -> Unit,
     onStartFreestyle: () -> Unit,
+    onLatestSession: (Long) -> Unit,
     onHistory: () -> Unit,
     onProgress: () -> Unit,
+    onDrillHub: () -> Unit,
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
     onCalibration: () -> Unit,
-    onReferenceTraining: () -> Unit,
-    onManageDrills: () -> Unit,
+    sessionSummaries: List<SessionRecord>,
+    latestSessionId: Long?,
     latestSessionStartMs: Long,
     latestSessionDurationMs: Long,
     profileStatuses: List<UserProfileStatus>,
@@ -134,6 +139,7 @@ private fun Content(
     onRenameProfile: (Long, String) -> Unit,
     onArchiveProfile: (Long) -> Unit,
 ) {
+    val progressSummary = remember(sessionSummaries) { sessionSummaries.toProgressSummary() }
     val orderedProfiles = remember(profileStatuses) {
         profileStatuses.sortedWith(
             compareByDescending<UserProfileStatus> { it.isActive }
@@ -191,22 +197,6 @@ private fun Content(
             icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
             onClick = onStart,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ActionTile(
-                "Reference Training",
-                "Build baseline templates",
-                { Icon(Icons.Default.Timeline, contentDescription = null) },
-                onReferenceTraining,
-                modifier = Modifier.weight(1f),
-            )
-            ActionTile(
-                "Manage Drills",
-                "Create & edit drills",
-                { Icon(Icons.Default.EditNote, contentDescription = null) },
-                onManageDrills,
-                modifier = Modifier.weight(1f),
-            )
-        }
         ActionTile(
             label = "Upload Video",
             subtitle = "Analyze a recorded video with pose overlay",
@@ -215,14 +205,15 @@ private fun Content(
         )
         ActionTile(
             label = "Latest Session",
-            subtitle = if (latestSessionStartMs > 0L) "${formatSessionDateTime(latestSessionStartMs)} • ${formatSessionDuration(latestSessionDurationMs)}" else "Open history to review saved sessions",
+            subtitle = if (latestSessionStartMs > 0L) "${formatSessionDateTime(latestSessionStartMs)} • ${formatSessionDuration(latestSessionDurationMs)}" else "No sessions yet",
             icon = { Icon(Icons.Default.History, contentDescription = null) },
-            onClick = onHistory,
+            onClick = { latestSessionId?.let(onLatestSession) ?: onHistory() },
         )
+        ProgressSummaryCard(summary = progressSummary, onClick = onProgress)
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ActionTile("Review", "Session history", { Icon(Icons.Default.History, contentDescription = null) }, onHistory, modifier = Modifier.weight(1f))
-            ActionTile("Progress", "Patterns & trends", { Icon(Icons.Default.BarChart, contentDescription = null) }, onProgress, modifier = Modifier.weight(1f))
+            ActionTile("History", "Session history", { Icon(Icons.Default.History, contentDescription = null) }, onHistory, modifier = Modifier.weight(1f))
+            ActionTile("Drills", "Hub for drill tools", { Icon(Icons.Default.SportsMartialArts, contentDescription = null) }, onDrillHub, modifier = Modifier.weight(1f))
         }
 
         ActionTile(
@@ -335,6 +326,70 @@ private fun Content(
             },
         )
     }
+}
+
+private data class ProgressSummary(
+    val sessionsThisWeek: Int,
+    val totalPracticeTimeMsThisWeek: Long,
+    val mostUsedDrillLabel: String?,
+    val lastActivityAtMs: Long?,
+)
+
+private fun List<SessionRecord>.toProgressSummary(nowMs: Long = System.currentTimeMillis()): ProgressSummary {
+    if (isEmpty()) {
+        return ProgressSummary(0, 0L, null, null)
+    }
+    val zoneId = ZoneId.systemDefault()
+    val now = Instant.ofEpochMilli(nowMs).atZone(zoneId)
+    val weekStart = now.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+        .toLocalDate()
+        .atStartOfDay(zoneId)
+        .toInstant()
+        .toEpochMilli()
+
+    val thisWeek = filter { it.startedAtMs >= weekStart }
+    val totalPracticeTimeMs = thisWeek.sumOf { computeSessionDurationMs(it.startedAtMs, it.completedAtMs) }
+    val mostUsedDrill = thisWeek
+        .groupingBy { it.drillType.displayName }
+        .eachCount()
+        .maxByOrNull { it.value }
+        ?.key
+    val lastActivity = maxByOrNull { it.startedAtMs }?.startedAtMs
+
+    return ProgressSummary(
+        sessionsThisWeek = thisWeek.size,
+        totalPracticeTimeMsThisWeek = totalPracticeTimeMs,
+        mostUsedDrillLabel = mostUsedDrill,
+        lastActivityAtMs = lastActivity,
+    )
+}
+
+@Composable
+private fun ProgressSummaryCard(
+    summary: ProgressSummary,
+    onClick: () -> Unit,
+) {
+    val hasActivity = summary.lastActivityAtMs != null
+    ActionTile(
+        label = "Progress",
+        subtitle = if (hasActivity) {
+            "This week: ${summary.sessionsThisWeek} sessions • ${formatSessionDuration(summary.totalPracticeTimeMsThisWeek)}"
+        } else {
+            "No activity yet. Start live coaching or upload a video."
+        },
+        icon = { Icon(Icons.Default.BarChart, contentDescription = null) },
+        details = if (hasActivity) {
+            buildString {
+                append("Most used: ")
+                append(summary.mostUsedDrillLabel ?: "N/A")
+                append(" • Last activity: ")
+                append(formatSessionDateTime(summary.lastActivityAtMs ?: 0L))
+            }
+        } else {
+            null
+        },
+        onClick = onClick,
+    )
 }
 
 @Composable
@@ -458,6 +513,7 @@ private fun ActionTile(
     modifier: Modifier = Modifier,
     featured: Boolean = false,
     hero: Boolean = false,
+    details: String? = null,
 ) {
     val colors = if (featured) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f), contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
     else CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f), contentColor = MaterialTheme.colorScheme.onSurface)
@@ -471,6 +527,15 @@ private fun ActionTile(
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(label, style = if (hero) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(subtitle, style = if (hero) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!details.isNullOrBlank()) {
+                        Text(
+                            details,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
             Spacer(modifier = Modifier.width(10.dp))
