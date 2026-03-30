@@ -67,6 +67,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val session by repository.observeSession(sessionId).collectAsState(initial = null)
     val comparison by repository.observeSessionComparison(sessionId).collectAsState(initial = null)
     val drills by repository.getAllDrills().collectAsState(initial = emptyList())
+    val templates by repository.observeReferenceTemplates().collectAsState(initial = emptyList())
     val issueTimeline by repository.observeIssueTimeline(sessionId).collectAsState(initial = emptyList())
     var replaySelection by remember(sessionId) { mutableStateOf(ReplayAssetSelection(uri = null, label = "Replay unavailable")) }
     var replaySelectionKey by remember(sessionId) { mutableStateOf<String?>(null) }
@@ -282,10 +283,15 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                         Text("Drill: $drillContext")
                     }
                     if (!contextTemplateId.isNullOrBlank()) {
-                        Text("Template context: $contextTemplateId")
+                        val contextTemplateName = templates.firstOrNull { it.id == contextTemplateId }?.displayName
+                        Text("Template context: ${contextTemplateName ?: contextTemplateId}")
                     }
                     session?.referenceTemplateId?.let { linkedTemplateId ->
-                        Text("Linked template: $linkedTemplateId", style = MaterialTheme.typography.bodySmall)
+                        val linkedTemplateName = templates.firstOrNull { it.id == linkedTemplateId }?.displayName
+                        Text(
+                            "Linked template: ${linkedTemplateName ?: linkedTemplateId}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                     Text("Started: ${formatSessionDateTime(session?.startedAtMs ?: 0L)}")
                     Text("Duration: ${formatSessionDuration(displayDurationMs)}")
@@ -325,7 +331,10 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                         val drillId = metrics["drillId"] ?: comparisonRecord.drillId
                         val drillName = drills.firstOrNull { it.id == drillId }?.name ?: drillId
                         Text("Selected drill: $drillName")
-                        Text("Reference template: ${metrics["referenceTemplateName"] ?: comparisonRecord.templateId}")
+                        val resolvedTemplateName = metrics["referenceTemplateName"]
+                            ?: templates.firstOrNull { it.id == comparisonRecord.templateId }?.displayName
+                            ?: comparisonRecord.templateId
+                        Text("Reference template: $resolvedTemplateName")
                         Text("Overall similarity: ${comparisonRecord.overallSimilarityScore}/100")
                         Text(
                             "Phase scores: ${formatInlinePairs(comparisonRecord.phaseScoresJson)}",

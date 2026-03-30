@@ -42,6 +42,7 @@ sealed interface DrillStudioUiState {
 class DrillStudioViewModel(
     private val repository: DrillCatalogRepository,
     private val sessionRepository: SessionRepository? = null,
+    private val catalogLoader: (() -> com.inversioncoach.app.drills.catalog.DrillCatalog)? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<DrillStudioUiState>(DrillStudioUiState.Loading)
     val uiState: StateFlow<DrillStudioUiState> = _uiState.asStateFlow()
@@ -50,7 +51,7 @@ class DrillStudioViewModel(
         viewModelScope.launch {
             _uiState.value = DrillStudioUiState.Loading
             val result = runCatching {
-                val catalog = repository.loadCatalog()
+                val catalog = catalogLoader?.invoke() ?: repository.loadCatalog()
                 val templateRecord = request.templateId?.let { templateId -> sessionRepository?.getReferenceTemplate(templateId) }
                 val seedDrillId = templateRecord?.drillId ?: request.drillId
                 val seed = when {
@@ -58,16 +59,16 @@ class DrillStudioViewModel(
                     seedDrillId != null -> resolveSeedById(catalog.drills, seedDrillId)
                     else -> catalog.drills.firstOrNull()
                 }
-                val draft = when {
-                    request.mode == "create" -> DrillStudioDraftRepository.createBlankDraft()
-                    seed != null -> DrillStudioDraftRepository.resolveEditableDraft(seed)
-                    else -> DrillStudioDraftRepository.createBlankDraft()
-                }
-                val normalized = normalizeDraft(draft.template)
+                val draftResult = resolveInitialDraft(
+                    mode = request.mode,
+                    templateRecord = templateRecord,
+                    seed = seed,
+                )
+                val normalized = normalizeDraft(draftResult.draft.template)
                 DrillStudioUiState.Ready(
                     draft = normalized,
-                    sourceSeedId = draft.sourceSeedId,
-                    statusMessage = templateRecord?.let { "Loaded from template: ${it.displayName}" },
+                    sourceSeedId = draftResult.draft.sourceSeedId,
+                    statusMessage = draftResult.statusMessage,
                 )
             }
 
@@ -389,6 +390,53 @@ class DrillStudioViewModel(
     }
 }
 
+
+
+internal fun resolveInitialDraft(
+    mode: String,
+    templateRecord: com.inversioncoach.app.model.ReferenceTemplateRecord?,
+    seed: DrillTemplate?,
+    mapper: (com.inversioncoach.app.model.ReferenceTemplateRecord, DrillTemplate?) -> TemplateDraftMappingResult = ReferenceTemplateDraftMapper::toDraft,
+): EditorDraftResult = when {
+    mode == "create" -> EditorDraftResult(DrillStudioDraftRepository.createBlankDraft())
+    templateRecord != null -> {
+        runCatching {
+            val mapped = mapper(templateRecord, seed)
+            val editable = DrillStudioDraftRepository.createDraftFromTemplate(
+                template = mapped.draft,
+                sourceSeedId = seed?.id,
+            )
+            EditorDraftResult(
+                draft = editable,
+                statusMessage = buildTemplateStatusMessage(templateRecord.displayName, mapped.warnings),
+            )
+        }.getOrElse {
+            val fallback = when {
+                seed != null -> DrillStudioDraftRepository.resolveEditableDraft(seed)
+                else -> DrillStudioDraftRepository.createBlankDraft()
+            }
+            EditorDraftResult(
+                draft = fallback,
+                statusMessage = "Template parsing failed for ${templateRecord.displayName}; loaded drill-seeded draft instead.",
+            )
+        }
+    }
+    seed != null -> EditorDraftResult(DrillStudioDraftRepository.resolveEditableDraft(seed))
+    else -> EditorDraftResult(DrillStudioDraftRepository.createBlankDraft())
+}
+
+internal data class EditorDraftResult(
+    val draft: EditableDraft,
+    val statusMessage: String? = null,
+)
+
+private fun buildTemplateStatusMessage(displayName: String, warnings: List<String>): String =
+    if (warnings.isEmpty()) {
+        "Loaded editable template draft: $displayName"
+    } else {
+        "Loaded editable template draft: $displayName (${warnings.joinToString(" ")})"
+    }
+
 internal fun analysisPlaneForPrimaryView(primaryView: CameraView): AnalysisPlane = when (primaryView) {
     CameraView.FRONT -> AnalysisPlane.FRONTAL
     CameraView.SIDE,
@@ -416,6 +464,12 @@ private object DrillStudioDraftRepository {
         val draftId = "draft_${seed.id}_${System.currentTimeMillis()}"
         val draft = seed.copy(id = draftId, title = "${seed.title} (Draft)")
         return EditableDraft(draft, seed.id).also { drafts[draftId] = it }
+    }
+
+
+    fun createDraftFromTemplate(template: DrillTemplate, sourceSeedId: String?): EditableDraft {
+        val draft = template.copy(id = template.id.ifBlank { "draft_template_${System.currentTimeMillis()}" })
+        return EditableDraft(draft, sourceSeedId).also { drafts[draft.id] = it }
     }
 
     fun createBlankDraft(): EditableDraft {
