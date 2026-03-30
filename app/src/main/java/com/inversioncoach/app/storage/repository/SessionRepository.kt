@@ -3,6 +3,9 @@ package com.inversioncoach.app.storage.repository
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.CalibrationConfigRecord
+import com.inversioncoach.app.model.ReferenceAssetRecord
+import com.inversioncoach.app.model.ReferenceTemplateRecord
+import com.inversioncoach.app.model.MovementProfileRecord
 import com.inversioncoach.app.model.CleanupStatus
 import com.inversioncoach.app.model.CompressionStatus
 import com.inversioncoach.app.model.DrillDefinitionRecord
@@ -44,6 +47,12 @@ class SessionRepository(
     private val userSettingsDao: UserSettingsDao,
     private val frameMetricDao: FrameMetricDao,
     private val profileDao: ProfileDao,
+    private val referenceTemplateDao: com.inversioncoach.app.storage.db.ReferenceTemplateDao,
+    private val sessionComparisonDao: SessionComparisonDao,
+    private val drillDefinitionDao: com.inversioncoach.app.storage.db.DrillDefinitionDao,
+    private val referenceAssetDao: com.inversioncoach.app.storage.db.ReferenceAssetDao,
+    private val movementProfileDao: com.inversioncoach.app.storage.db.MovementProfileDao,
+    private val calibrationConfigDao: com.inversioncoach.app.storage.db.CalibrationConfigDao,
     private val sessionBlobStorage: SessionBlobStorage,
 ) {
     fun observeSessions(drillType: DrillType? = null): Flow<List<SessionRecord>> =

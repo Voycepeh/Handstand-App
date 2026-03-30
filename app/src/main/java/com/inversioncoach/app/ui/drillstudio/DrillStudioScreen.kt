@@ -55,6 +55,7 @@ import com.inversioncoach.app.ui.components.DropdownOption
 import com.inversioncoach.app.ui.components.MultiSelectChipsField
 import com.inversioncoach.app.ui.components.ReliableDropdownField
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import com.inversioncoach.app.calibration.UserBodyProfile
 import com.inversioncoach.app.storage.ServiceLocator
 import kotlinx.coroutines.isActive
 
@@ -353,6 +354,8 @@ private fun PoseCanvas(
     onJointMoved: (String, JointPoint) -> Unit,
 ) {
     var activeJoint by remember(phasePose.phaseId) { mutableStateOf<String?>(null) }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
     Box(modifier = Modifier.fillMaxWidth().height(260.dp).background(MaterialTheme.colorScheme.surface)) {
         Canvas(
             modifier = Modifier
@@ -387,7 +390,7 @@ private fun PoseCanvas(
                 val b = phasePose.joints[end]
                 if (a != null && b != null) {
                     drawLine(
-                        color = MaterialTheme.colorScheme.primary,
+                        color = primaryColor,
                         start = Offset(a.x * size.width, a.y * size.height),
                         end = Offset(b.x * size.width, b.y * size.height),
                         strokeWidth = 4f,
@@ -397,7 +400,7 @@ private fun PoseCanvas(
             }
             phasePose.joints.values.forEach { point ->
                 drawCircle(
-                    color = MaterialTheme.colorScheme.secondary,
+                    color = secondaryColor,
                     radius = 7f,
                     center = Offset(point.x * size.width, point.y * size.height),
                     style = Stroke(width = 3f),
@@ -412,13 +415,15 @@ private fun PreviewCard(drill: DrillTemplate, progress: Float) {
     val pose = remember(drill.id, progress, drill.skeletonTemplate.keyframes) {
         StickFigureAnimator.poseAt(drill.skeletonTemplate, progress)
     }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
     Canvas(modifier = Modifier.fillMaxWidth().height(140.dp).background(MaterialTheme.colorScheme.surface)) {
         StickFigureAnimator.canonicalBones.forEach { (start, end) ->
             val a = pose[start]
             val b = pose[end]
             if (a != null && b != null) {
                 drawLine(
-                    color = MaterialTheme.colorScheme.primary,
+                    color = primaryColor,
                     start = Offset(a.x * size.width, a.y * size.height),
                     end = Offset(b.x * size.width, b.y * size.height),
                     strokeWidth = 4f,
@@ -428,7 +433,7 @@ private fun PreviewCard(drill: DrillTemplate, progress: Float) {
         }
         pose.values.forEach { point ->
             drawCircle(
-                color = MaterialTheme.colorScheme.secondary,
+                color = secondaryColor,
                 radius = 6f,
                 center = Offset(point.x * size.width, point.y * size.height),
                 style = Stroke(width = 3f),
@@ -452,4 +457,3 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
 }
 
 private fun String.pretty(): String = lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
-import com.inversioncoach.app.calibration.UserBodyProfile

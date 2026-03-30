@@ -18,12 +18,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowOutward
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,18 +35,22 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.menuAnchor
+import com.inversioncoach.app.calibration.ActiveProfileContext
+import com.inversioncoach.app.model.UserProfileRecord
 import com.inversioncoach.app.storage.ServiceLocator
-import com.inversioncoach.app.storage.repository.UserProfileStatus
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
@@ -61,15 +66,32 @@ fun HomeScreen(
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
     onCalibration: () -> Unit,
+    onReferenceTraining: () -> Unit = {},
+    onManageDrills: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
-    val activeProfile by repository.observeActiveProfile().collectAsState(initial = null)
-    val profileStatuses by repository.observeProfileStatuses().collectAsState(initial = emptyList())
+    val profiles by userProfileManager.observeAvailableProfiles().collectAsState(initial = emptyList())
+    var activeProfileContext by remember { mutableStateOf<ActiveProfileContext?>(null) }
+    var expanded by remember { mutableStateOf(false) }
+    var showOverwriteDialog by remember { mutableStateOf(false) }
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var newProfileName by remember { mutableStateOf("") }
+    var renameTargetProfileId by remember { mutableStateOf<String?>(null) }
+    var renameTargetName by remember { mutableStateOf("") }
+
+    LaunchedEffect(profiles) {
+        activeProfileContext = runCatching { userProfileManager.resolveActiveProfileContext() }.getOrNull()
+    }
+
     val latestSession = sessions.maxByOrNull { it.startedAtMs }
+    val activeProfile = activeProfileContext?.userProfile
+    val activeProfileName = activeProfile?.displayName ?: "No active profile"
+    val activeHasCalibration = activeProfileContext?.bodyProfileRecord != null
+    val activeBodyProfileVersion = activeProfileContext?.bodyProfileRecord?.version
 
     ScaffoldedScreen(title = "Inversion Coach") { padding ->
         Content(
@@ -81,8 +103,8 @@ fun HomeScreen(
             onSettings = onSettings,
             onUploadVideo = onUploadVideo,
             onCalibration = onCalibration,
-            activeProfile = activeProfile,
-            profileStatuses = profileStatuses,
+            onReferenceTraining = onReferenceTraining,
+            onManageDrills = onManageDrills,
             latestSessionStartMs = latestSession?.startedAtMs ?: 0L,
             latestSessionDurationMs = computeSessionDurationMs(latestSession?.startedAtMs ?: 0L, latestSession?.completedAtMs ?: 0L),
             onSelectProfile = { profileId ->
@@ -100,6 +122,16 @@ fun HomeScreen(
             onArchiveProfile = { profileId ->
                 scope.launch { repository.archiveProfile(profileId) }
             },
+            showOverwriteDialog = showOverwriteDialog,
+            onShowOverwriteDialogChange = { showOverwriteDialog = it },
+            showCreateDialog = showCreateDialog,
+            onShowCreateDialogChange = { showCreateDialog = it },
+            newProfileName = newProfileName,
+            onNewProfileNameChange = { newProfileName = it },
+            renameTargetProfileId = renameTargetProfileId,
+            onRenameTargetProfileIdChange = { renameTargetProfileId = it },
+            renameTargetName = renameTargetName,
+            onRenameTargetNameChange = { renameTargetName = it },
         )
     }
 }
@@ -114,8 +146,8 @@ private fun Content(
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
     onCalibration: () -> Unit,
-    activeProfile: UserProfileStatus?,
-    profileStatuses: List<UserProfileStatus>,
+    onReferenceTraining: () -> Unit,
+    onManageDrills: () -> Unit,
     latestSessionStartMs: Long,
     latestSessionDurationMs: Long,
     onSelectProfile: (Long) -> Unit,
@@ -141,11 +173,7 @@ private fun Content(
     var showOverwriteDialog by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(padding)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text("Train smarter", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -192,30 +220,14 @@ private fun Content(
         )
         ActionTile(
             label = "Latest Session",
-            subtitle = if (latestSessionStartMs > 0L) {
-                "${formatSessionDateTime(latestSessionStartMs)} • ${formatSessionDuration(latestSessionDurationMs)}"
-            } else {
-                "Open history to review saved sessions"
-            },
+            subtitle = if (latestSessionStartMs > 0L) "${formatSessionDateTime(latestSessionStartMs)} • ${formatSessionDuration(latestSessionDurationMs)}" else "Open history to review saved sessions",
             icon = { Icon(Icons.Default.History, contentDescription = null) },
             onClick = onHistory,
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ActionTile(
-                label = "Review",
-                subtitle = "Session history",
-                icon = { Icon(Icons.Default.History, contentDescription = null) },
-                onClick = onHistory,
-                modifier = Modifier.weight(1f),
-            )
-            ActionTile(
-                label = "Progress",
-                subtitle = "Patterns & trends",
-                icon = { Icon(Icons.Default.BarChart, contentDescription = null) },
-                onClick = onProgress,
-                modifier = Modifier.weight(1f),
-            )
+            ActionTile("Review", "Session history", { Icon(Icons.Default.History, contentDescription = null) }, onHistory, modifier = Modifier.weight(1f))
+            ActionTile("Progress", "Patterns & trends", { Icon(Icons.Default.BarChart, contentDescription = null) }, onProgress, modifier = Modifier.weight(1f))
         }
 
         ActionTile(
@@ -314,7 +326,7 @@ private fun Content(
 
     if (showOverwriteDialog) {
         AlertDialog(
-            onDismissRequest = { showOverwriteDialog = false },
+            onDismissRequest = { onShowOverwriteDialogChange(false) },
             title = { Text("Overwrite calibration?") },
             text = { Text("This will replace the saved body calibration for the active profile.") },
             confirmButton = {
@@ -409,61 +421,22 @@ private fun ActionTile(
     featured: Boolean = false,
     hero: Boolean = false,
 ) {
-    val colors = if (featured) {
-        CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
-    } else {
-        CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        )
-    }
+    val colors = if (featured) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f), contentColor = MaterialTheme.colorScheme.onPrimaryContainer)
+    else CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f), contentColor = MaterialTheme.colorScheme.onSurface)
 
-    Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(if (hero) 28.dp else 24.dp),
-        colors = colors,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = if (hero) 20.dp else 16.dp, vertical = if (hero) 24.dp else 18.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
+    Card(onClick = onClick, modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(if (hero) 28.dp else 24.dp), colors = colors) {
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = if (hero) 20.dp else 16.dp, vertical = if (hero) 24.dp else 18.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                    shape = RoundedCornerShape(12.dp),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                ) {
-                    Row(modifier = Modifier.padding(if (hero) 10.dp else 8.dp)) {
-                        icon()
-                    }
+                Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), shape = RoundedCornerShape(12.dp), tonalElevation = 0.dp, shadowElevation = 0.dp) {
+                    Row(modifier = Modifier.padding(if (hero) 10.dp else 8.dp)) { icon() }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = label,
-                        style = if (hero) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = subtitle,
-                        style = if (hero) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text(label, style = if (hero) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(subtitle, style = if (hero) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(modifier = Modifier.width(10.dp))
-            Icon(
-                imageVector = Icons.Default.ArrowOutward,
-                contentDescription = null,
-                modifier = Modifier.size(if (hero) 22.dp else 18.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
+            Icon(imageVector = Icons.Default.ArrowOutward, contentDescription = null, modifier = Modifier.size(if (hero) 22.dp else 18.dp), tint = MaterialTheme.colorScheme.primary)
         }
     }
 }

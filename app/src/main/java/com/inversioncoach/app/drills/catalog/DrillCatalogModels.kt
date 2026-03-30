@@ -1,25 +1,33 @@
 package com.inversioncoach.app.drills.catalog
 
+import com.inversioncoach.app.motion.SkeletonAnimationSpec
+
 enum class CatalogMovementType {
     HOLD,
     REP,
 }
 
-enum class CameraView {
+enum class CatalogCameraView {
+    SIDE,
+    FRONT,
     LEFT_PROFILE,
     RIGHT_PROFILE,
-    FRONT,
 }
 
-enum class AnalysisPlane {
+enum class CatalogAnalysisPlane {
     SAGITTAL,
     FRONTAL,
 }
 
-enum class ComparisonMode {
+enum class CatalogComparisonMode {
+    OVERLAY,
     POSE_TIMELINE,
     PHASE_CHECKPOINTS,
 }
+
+typealias CameraView = CatalogCameraView
+typealias AnalysisPlane = CatalogAnalysisPlane
+typealias ComparisonMode = CatalogComparisonMode
 
 data class DrillCatalog(
     val schemaVersion: Int,
@@ -33,20 +41,38 @@ data class DrillTemplate(
     val family: String,
     val movementType: CatalogMovementType,
     val tags: List<String>,
-    val cameraView: CameraView,
-    val supportedViews: List<CameraView>,
-    val analysisPlane: AnalysisPlane,
-    val comparisonMode: ComparisonMode,
+    val cameraView: CatalogCameraView,
+    val supportedViews: List<CatalogCameraView>,
+    val analysisPlane: CatalogAnalysisPlane,
+    val comparisonMode: CatalogComparisonMode,
     val phases: List<DrillPhaseTemplate>,
     val skeletonTemplate: SkeletonTemplate,
     val calibration: CalibrationTemplate,
-)
+) {
+    val metricThresholds: Map<String, Float> get() = calibration.metricThresholds
+    val animationSpec: SkeletonAnimationSpec
+        get() = SkeletonAnimationSpec(
+            id = skeletonTemplate.id,
+            fpsHint = skeletonTemplate.framesPerSecond,
+            loop = skeletonTemplate.loop,
+            keyframes = skeletonTemplate.keyframes.mapIndexed { index, keyframe ->
+                com.inversioncoach.app.motion.SkeletonKeyframe(
+                    name = "kf_$index",
+                    progress = keyframe.progress,
+                    joints = keyframe.joints.mapNotNull { (name, pt) ->
+                    val joint = runCatching { com.inversioncoach.app.motion.BodyJoint.valueOf(name) }.getOrNull()
+                    joint?.let { it to com.inversioncoach.app.motion.NormalizedPoint(pt.x, pt.y) }
+                }.toMap(),
+                )
+            },
+        )
+}
 
 data class DrillPhaseTemplate(
     val id: String,
     val label: String,
     val order: Int,
-    val progressWindow: PhaseWindow? = null,
+    val progressWindow: PhaseWindow = PhaseWindow(0f, 1f),
 )
 
 data class SkeletonTemplate(

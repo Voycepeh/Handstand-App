@@ -56,7 +56,7 @@ object DrillCatalogJson {
                     order = obj.getInt("order"),
                     progressWindow = obj.optJSONArray("progressWindow")?.let {
                         PhaseWindow(it.getDouble(0).toFloat(), it.getDouble(1).toFloat())
-                    },
+                    } ?: PhaseWindow(0f, 1f),
                 ),
             )
         }
