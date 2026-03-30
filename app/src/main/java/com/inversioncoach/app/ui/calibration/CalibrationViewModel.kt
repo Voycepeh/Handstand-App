@@ -191,20 +191,25 @@ class CalibrationViewModel(
             }
 
             val updatedAtMs = System.currentTimeMillis()
-            drillMovementProfileRepository.save(
-                existing.copy(
-                    profileVersion = nextVersion,
-                    userBodyProfile = builtProfile,
-                    holdTemplate = finalHoldTemplate,
-                    updatedAtMs = updatedAtMs,
-                ),
+            val finalHoldTemplate = when {
+                existing.holdTemplate != null && learnedHoldTemplate != null ->
+                    holdTemplateBlender.blend(existing.holdTemplate, learnedHoldTemplate)
+
+                learnedHoldTemplate != null -> learnedHoldTemplate
+                else -> existing.holdTemplate
+            }
+            val newProfile = existing.copy(
+                profileVersion = nextVersion,
+                userBodyProfile = builtProfile,
+                holdTemplate = finalHoldTemplate,
+                updatedAtMs = updatedAtMs,
             )
             repository.saveCalibrationForActiveProfile(builtProfile)
 
             _state.update {
                 it.copy(
                     phase = CalibrationPhase.COMPLETED,
-                    stepResultMessage = "Calibration saved.",
+                    stepResultMessage = "Calibration saved for active profile.",
                     completedSteps = steps.toSet(),
                     savedProfileSummary = summarizeProfile(builtProfile),
                     savedAtMs = updatedAtMs,

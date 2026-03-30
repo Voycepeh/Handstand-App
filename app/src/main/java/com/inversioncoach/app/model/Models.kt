@@ -453,6 +453,8 @@ data class UserSettings(
     val startupCountdownSeconds: Int = 10,
     val minSessionDurationSeconds: Int = 3,
     val drillCameraSideSelections: String = "",
+    val activeUserProfileId: String? = null,
+    val userBodyProfileJson: String? = null,
 )
 
 data class LiveSessionUiState(

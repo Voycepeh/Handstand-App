@@ -496,6 +496,11 @@ class SessionRepository(
         return getCalibration(activeProfile.id)
     }
 
+    suspend fun getActiveProfileCalibrationVersion(): Int? {
+        val activeProfile = getActiveProfile() ?: return null
+        return profileDao.getCalibration(activeProfile.id)?.profileVersion
+    }
+
     suspend fun saveCalibration(profileId: Long, profile: UserBodyProfile?) {
         if (profile == null) {
             profileDao.deleteCalibration(profileId)

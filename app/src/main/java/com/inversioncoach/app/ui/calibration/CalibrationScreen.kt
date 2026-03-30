@@ -339,13 +339,11 @@ private fun CalibrationGuideOverlay(modifier: Modifier, state: CalibrationUiStat
             )
             val projectedPreviewRect = mapper.diagnostics(projectionInput).contentRect
             val visiblePreviewRect = projectedPreviewRect.intersectWithin(size.width, size.height)
-            val horizontalMargin = (visiblePreviewRect.width * 0.03f).coerceAtLeast(10f)
-            val verticalMargin = (visiblePreviewRect.height * 0.03f).coerceAtLeast(10f)
             val guideRect = androidx.compose.ui.geometry.Rect(
-                left = visiblePreviewRect.left + horizontalMargin,
-                top = visiblePreviewRect.top + verticalMargin,
-                right = visiblePreviewRect.right - horizontalMargin,
-                bottom = visiblePreviewRect.bottom - verticalMargin,
+                left = visiblePreviewRect.left,
+                top = visiblePreviewRect.top,
+                right = visiblePreviewRect.right,
+                bottom = visiblePreviewRect.bottom,
             )
 
             drawRect(
