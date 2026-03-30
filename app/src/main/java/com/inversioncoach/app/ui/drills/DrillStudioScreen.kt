@@ -328,8 +328,9 @@ private fun JointEditor(
 ) {
     val phase = draft.phases.getOrNull(phaseIndex) ?: return
     val resolvedFrameIndex = resolveFrameIndexForPhase(draft, phase)
-    val frame = draft.animationSpec.keyframes.getOrNull(resolvedFrameIndex) ?: return
-    val point = frame.joints[selectedJoint] ?: NormalizedPoint(0.5f, 0.5f)
+    val frame = draft.animationSpec.keyframes.getOrNull(resolvedFrameIndex)
+    val joints = frame?.joints.orEmpty()
+    val point = joints[selectedJoint] ?: NormalizedPoint(0.5f, 0.5f)
 
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -352,8 +353,9 @@ private fun JointEditor(
     }
 }
 
-private fun resolveFrameIndexForPhase(draft: DrillStudioDocument, phase: DrillStudioPhase): Int {
+internal fun resolveFrameIndexForPhase(draft: DrillStudioDocument, phase: DrillStudioPhase): Int {
     val keyframes = draft.animationSpec.keyframes
+    if (keyframes.isEmpty()) return -1
     val anchor = phase.anchorKeyframeName
     if (anchor != null) {
         val anchored = keyframes.indexOfFirst { it.name == anchor }
@@ -363,9 +365,10 @@ private fun resolveFrameIndexForPhase(draft: DrillStudioDocument, phase: DrillSt
     return keyframes.withIndex().minByOrNull { (_, frame) -> kotlin.math.abs(frame.progress - midpoint) }?.index ?: 0
 }
 
-private fun updateJoint(draft: DrillStudioDocument, phaseIndex: Int, joint: BodyJoint, x: Float, y: Float): DrillStudioDocument {
+internal fun updateJoint(draft: DrillStudioDocument, frameIndex: Int, joint: BodyJoint, x: Float, y: Float): DrillStudioDocument {
     val frames = draft.animationSpec.keyframes.toMutableList()
-    val target = frames.getOrNull(phaseIndex) ?: return draft
-    frames[phaseIndex] = target.copy(joints = target.joints + (joint to NormalizedPoint(x, y)))
+    val target = frames.getOrNull(frameIndex) ?: return draft
+    val safeJoints = target.joints.orEmpty()
+    frames[frameIndex] = target.copy(joints = safeJoints + (joint to NormalizedPoint(x, y)))
     return draft.copy(animationSpec = draft.animationSpec.copy(keyframes = frames))
 }
