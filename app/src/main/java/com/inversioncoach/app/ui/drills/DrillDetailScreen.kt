@@ -46,7 +46,7 @@ fun DrillDetailScreen(
             Text("Reference assets: ${referenceAssets.size}")
             Text("Templates: ${templates.size}")
             Text("Active calibration: ${calibrations.firstOrNull { it.isActive }?.displayName ?: "none"}")
-            val isReady = drill?.status == DrillStatus.READY.name
+            val isReady = drill?.status == DrillStatus.READY
             if (!isReady) {
                 Text("This drill is not READY yet. Save and mark ready before using upload/compare.")
             }

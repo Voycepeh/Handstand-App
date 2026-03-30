@@ -221,7 +221,7 @@ private fun DrillStudioEditor(
                         Card(
                             modifier = Modifier.width(190.dp).border(
                                 width = if (selected) 2.dp else 0.dp,
-                                color = primaryColor,
+                                color = MaterialTheme.colorScheme.primary,
                                 shape = RoundedCornerShape(12.dp),
                             ),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

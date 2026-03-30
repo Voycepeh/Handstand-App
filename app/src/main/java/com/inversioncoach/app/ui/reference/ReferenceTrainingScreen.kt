@@ -37,7 +37,7 @@ fun ReferenceTrainingScreen(
     val templates by repo.getTemplatesForDrill(drillId).collectAsState(initial = emptyList())
     var selectedTemplateId by remember { mutableStateOf<String?>(null) }
     val selectedDrill = drills.firstOrNull { it.id == drillId }
-    val isReady = selectedDrill?.status == DrillStatus.READY.name
+    val isReady = selectedDrill?.status == DrillStatus.READY
 
     ScaffoldedScreen(title = "Reference Training", onBack = onBack) { padding ->
         Column(
