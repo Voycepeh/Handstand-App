@@ -97,8 +97,6 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             StartDrillScreen(
                 onBack = { navController.popBackStack() },
                 onStart = { drillType, options -> navController.navigate(Route.Live.create(drillType, options)) },
-                onCreateDrill = { navController.navigate(Route.DrillStudio.createNew()) },
-                onEditDrill = { drillType -> navController.navigate(Route.DrillStudio.createForDrill(drillType.name)) },
             )
         }
         composable(Route.DrillDetail.value, arguments = listOf(navArgument("drill") { type = NavType.StringType })) {
@@ -182,7 +180,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         composable(Route.ManageDrills.value) {
             ManageDrillsScreen(
                 onBack = { navController.popBackStack() },
-                onCreateDrill = { navController.navigate(Route.EditDrill.create(null)) },
+                onCreateDrill = { navController.navigate(Route.DrillStudio.createNew()) },
                 onEditDrill = { drillId -> navController.navigate(Route.EditDrill.create(drillId)) },
                 onOpenDrill = { drillId -> navController.navigate(Route.DrillPackageDetail.create(drillId)) },
                 onOpenInStudio = { drillId -> navController.navigate(if (drillId == null) Route.DrillStudio.createNew() else Route.DrillStudio.createForDrill(drillId)) },
