@@ -42,7 +42,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.inversioncoach.app.drills.catalog.AnalysisPlane
 import com.inversioncoach.app.drills.catalog.CameraView
 import com.inversioncoach.app.drills.catalog.CatalogMovementType
 import com.inversioncoach.app.drills.catalog.ComparisonMode
@@ -185,7 +184,6 @@ private fun DrillStudioEditor(
 
     val currentPose = phasePoses.firstOrNull { it.phaseId == selectedPhaseId } ?: phasePoses.first()
     val cameraOptions = remember { CameraView.entries.map { DropdownOption(it, it.name.pretty()) } }
-    val planeOptions = remember { AnalysisPlane.entries.map { DropdownOption(it, it.name.pretty()) } }
     val movementOptions = remember { CatalogMovementType.entries.map { DropdownOption(it, it.name.pretty()) } }
     val comparisonOptions = remember { ComparisonMode.entries.map { DropdownOption(it, it.name.pretty()) } }
 
@@ -314,7 +312,17 @@ private fun DrillStudioEditor(
                     onToggle = { view ->
                         onUpdateDraft { current ->
                             val next = if (view in current.supportedViews) current.supportedViews - view else current.supportedViews + view
-                            current.copy(supportedViews = next.ifEmpty { listOf(current.cameraView) }.distinct())
+                            val resolvedSupportedViews = next.ifEmpty { listOf(current.cameraView) }.distinct()
+                            val resolvedPrimaryView = if (current.cameraView in resolvedSupportedViews) {
+                                current.cameraView
+                            } else {
+                                resolvedSupportedViews.first()
+                            }
+                            current.copy(
+                                supportedViews = resolvedSupportedViews,
+                                cameraView = resolvedPrimaryView,
+                                analysisPlane = analysisPlaneForPrimaryView(resolvedPrimaryView),
+                            )
                         }
                     },
                 )
@@ -322,13 +330,14 @@ private fun DrillStudioEditor(
                     label = "Primary/default view",
                     selected = cameraOptions.firstOrNull { it.value == draft.cameraView } ?: cameraOptions.first(),
                     options = cameraOptions.filter { it.value in draft.supportedViews },
-                    onOptionSelected = { option -> onUpdateDraft { it.copy(cameraView = option.value) } },
-                )
-                ReliableDropdownField(
-                    label = "Analysis plane",
-                    selected = planeOptions.firstOrNull { it.value == draft.analysisPlane } ?: planeOptions.first(),
-                    options = planeOptions,
-                    onOptionSelected = { option -> onUpdateDraft { it.copy(analysisPlane = option.value) } },
+                    onOptionSelected = { option ->
+                        onUpdateDraft {
+                            it.copy(
+                                cameraView = option.value,
+                                analysisPlane = analysisPlaneForPrimaryView(option.value),
+                            )
+                        }
+                    },
                 )
             }
         }

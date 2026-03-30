@@ -199,6 +199,7 @@ class DrillStudioViewModel(
         } else {
             supportedViews.first()
         }
+        val analysisPlane = analysisPlaneForPrimaryView(primaryView)
         val phases = template.phases
             .ifEmpty {
                 listOf(
@@ -237,6 +238,7 @@ class DrillStudioViewModel(
         return template.copy(
             cameraView = primaryView,
             supportedViews = supportedViews.distinct(),
+            analysisPlane = analysisPlane,
             phases = phases,
             skeletonTemplate = template.skeletonTemplate.copy(
                 framesPerSecond = template.skeletonTemplate.framesPerSecond.coerceAtLeast(12),
@@ -313,6 +315,14 @@ class DrillStudioViewModel(
         keyframes += SkeletonKeyframeTemplate(1f, DrillStudioPoseUtils.normalizeJointNames(phasePoses.last().joints))
         return keyframes
     }
+}
+
+internal fun analysisPlaneForPrimaryView(primaryView: CameraView): AnalysisPlane = when (primaryView) {
+    CameraView.FRONT -> AnalysisPlane.FRONTAL
+    CameraView.SIDE,
+    CameraView.LEFT_PROFILE,
+    CameraView.RIGHT_PROFILE,
+    -> AnalysisPlane.SAGITTAL
 }
 
 private data class EditableDraft(
