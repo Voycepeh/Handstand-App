@@ -54,7 +54,6 @@ import com.inversioncoach.app.movementprofile.AnalysisProgressObserver
 import com.inversioncoach.app.movementprofile.MlKitVideoPoseFrameSource
 import com.inversioncoach.app.movementprofile.MovementComparisonEngine
 import com.inversioncoach.app.movementprofile.MovementProfileExtractor
-import com.inversioncoach.app.movementprofile.ReferenceTemplateBuilder
 import com.inversioncoach.app.movementprofile.UploadedVideoAnalyzer
 import com.inversioncoach.app.movementprofile.VideoPoseFrameSource
 import com.inversioncoach.app.movementprofile.ReferenceTemplateDefinition
@@ -246,6 +245,8 @@ class DefaultUploadVideoAnalysisRunner(
                 bodyProfileId = activeProfileContext?.bodyProfileId,
                 bodyProfileVersion = activeProfileContext?.bodyProfileVersion,
                 usedDefaultBodyModel = activeProfileContext?.usedDefaultBodyModel ?: true,
+                drillId = selectedDrillId,
+                referenceTemplateId = selectedReferenceTemplateId,
                 notesUri = null,
                 bestFrameTimestampMs = null,
                 worstFrameTimestampMs = null,
@@ -602,15 +603,17 @@ class DefaultUploadVideoAnalysisRunner(
             repository.saveMovementProfile(subjectProfile)
 
             if (isReferenceUpload) {
-                val template = ReferenceTemplateBuilder().buildFromSingleReference(
+                val template = repository.createTemplateFromReferenceUpload(
                     drillId = drillId,
-                    displayName = "${drillDefinition?.name ?: drillType.displayName} Reference",
-                    sourceProfileId = subjectProfile.id,
-                    snapshot = extractor.toSnapshot(subjectProfile),
+                    sourceProfile = subjectProfile,
+                    title = "${drillDefinition?.name ?: drillType.displayName} Reference",
+                    sourceSessionId = sessionId,
+                    isBaseline = templatesAreEmptyForDrill(repository, drillId),
                 )
-                repository.saveReferenceTemplate(template)
                 repository.updateMediaPipelineState(sessionId) { session ->
                     session.copy(
+                        drillId = drillId,
+                        referenceTemplateId = template.id,
                         metricsJson = mergeMetricsJson(
                             session.metricsJson,
                             mapOf("referenceTemplateId" to template.id, "referenceTemplateName" to template.displayName),
@@ -644,6 +647,8 @@ class DefaultUploadVideoAnalysisRunner(
                         )
                         repository.updateMediaPipelineState(sessionId) { session ->
                             session.copy(
+                                drillId = drillId,
+                                referenceTemplateId = selectedTemplateRecord.id,
                                 metricsJson = mergeMetricsJson(
                                     session.metricsJson,
                                     mapOf(
@@ -1114,6 +1119,9 @@ class DefaultUploadVideoAnalysisRunner(
             )
         }.getOrNull()
     }
+
+    private suspend fun templatesAreEmptyForDrill(repository: SessionRepository, drillId: String): Boolean =
+        repository.listTemplatesForDrill(drillId).first().isEmpty()
 
     private fun jsonLongMap(obj: JSONObject): Map<String, Long> {
         val out = linkedMapOf<String, Long>()

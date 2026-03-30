@@ -28,7 +28,7 @@ class InversionCoachDatabaseContractTest {
         assertTrue("CalibrationConfigRecord must be registered", entities.contains(CalibrationConfigRecord::class.java))
         assertTrue("UserProfileRecord must be registered", entities.contains(UserProfileRecord::class.java))
         assertTrue("BodyProfileRecord must be registered", entities.contains(BodyProfileRecord::class.java))
-        assertTrue("Database version must include body profile migrations", annotation.version >= 17)
+        assertTrue("Database version must include reference template linkage migrations", annotation.version >= 18)
     }
 
     @Test

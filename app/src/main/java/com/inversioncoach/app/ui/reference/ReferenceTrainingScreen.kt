@@ -30,6 +30,9 @@ fun ReferenceTrainingScreen(
     onBack: () -> Unit,
     onUploadReference: (String) -> Unit,
     onUploadAttempt: (String, String?) -> Unit,
+    onComparePastSessions: (String) -> Unit,
+    onOpenDrillStudio: (String) -> Unit,
+    onCreateNewDrillFromReference: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val repo = remember { ServiceLocator.repository(context) }
@@ -53,6 +56,15 @@ fun ReferenceTrainingScreen(
             }
             Button(onClick = { onUploadAttempt(drillId, selectedTemplateId) }, enabled = isReady, modifier = Modifier.fillMaxWidth()) {
                 Text("Upload Attempt")
+            }
+            Button(onClick = { onComparePastSessions(drillId) }, enabled = isReady, modifier = Modifier.fillMaxWidth()) {
+                Text("Compare Past Sessions")
+            }
+            Button(onClick = { onOpenDrillStudio(drillId) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Open Drill Studio")
+            }
+            Button(onClick = { onCreateNewDrillFromReference(drillId) }, enabled = isReady, modifier = Modifier.fillMaxWidth()) {
+                Text("Create New Drill from Reference")
             }
             Text("Templates", style = MaterialTheme.typography.titleMedium)
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -19,8 +19,14 @@ import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SessionComparisonRecord
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.calibration.UserBodyProfile
+import com.inversioncoach.app.drills.DrillCameraView
+import com.inversioncoach.app.drills.DrillMovementMode
+import com.inversioncoach.app.drills.DrillSourceType
 import com.inversioncoach.app.drills.DrillDefinitionValidator
+import com.inversioncoach.app.drills.DrillDefinitionResolver
 import com.inversioncoach.app.drills.DrillStatus
+import com.inversioncoach.app.movementprofile.MovementProfileExtractor
+import com.inversioncoach.app.movementprofile.ReferenceTemplateBuilder
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.storage.SessionBlobStorage
 import com.inversioncoach.app.storage.db.FrameMetricDao
@@ -31,6 +37,7 @@ import com.inversioncoach.app.storage.db.UserSettingsDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 
 private const val STALE_EXPORT_RECONCILIATION_MS = 2 * 60 * 1000L
 private const val DEFAULT_PROFILE_NAME = "Profile 1"
@@ -65,6 +72,86 @@ class SessionRepository(
     suspend fun getReferenceTemplate(templateId: String): ReferenceTemplateRecord? = referenceTemplateDao.getById(templateId)
 
     suspend fun saveReferenceTemplate(record: ReferenceTemplateRecord) = referenceTemplateDao.upsert(record)
+    fun listTemplatesForDrill(drillId: String): Flow<List<ReferenceTemplateRecord>> = referenceTemplateDao.observeByDrillId(drillId)
+    fun listSessionsForDrill(drillId: String): Flow<List<SessionRecord>> = sessionDao.observeByDrillId(drillId)
+
+    suspend fun createTemplateFromReferenceUpload(
+        drillId: String,
+        sourceProfile: MovementProfileRecord,
+        title: String,
+        sourceSessionId: Long? = null,
+        isBaseline: Boolean = false,
+    ): ReferenceTemplateRecord {
+        val now = System.currentTimeMillis()
+        val extractor = MovementProfileExtractor()
+        val template = ReferenceTemplateBuilder().buildFromSingleReference(
+            drillId = drillId,
+            displayName = title,
+            sourceProfileId = sourceProfile.id,
+            snapshot = extractor.toSnapshot(sourceProfile),
+            createdAtMs = now,
+            sourceType = "REFERENCE_UPLOAD",
+            sourceSessionId = sourceSessionId,
+            isBaseline = isBaseline,
+        )
+        referenceTemplateDao.upsert(template)
+        return template
+    }
+
+    suspend fun createDrillFromReferenceUpload(
+        drillName: String,
+        description: String,
+        sourceProfile: MovementProfileRecord,
+        sourceSessionId: Long? = null,
+    ): Pair<DrillDefinitionRecord, ReferenceTemplateRecord> {
+        val now = System.currentTimeMillis()
+        val drillId = "user_drill_${UUID.randomUUID()}"
+        val drill = DrillDefinitionRecord(
+            id = drillId,
+            name = drillName,
+            description = description,
+            movementMode = DrillMovementMode.HOLD,
+            cameraView = DrillCameraView.FREESTYLE,
+            phaseSchemaJson = "setup|stack|hold",
+            keyJointsJson = "shoulders|hips|ankles",
+            normalizationBasisJson = "hips",
+            cueConfigJson = "legacyDrillType:FREE_HANDSTAND",
+            sourceType = DrillSourceType.USER_CREATED,
+            status = DrillStatus.DRAFT,
+            version = 1,
+            createdAtMs = now,
+            updatedAtMs = now,
+        )
+        drillDefinitionDao.upsert(drill)
+        val template = createTemplateFromReferenceUpload(
+            drillId = drillId,
+            sourceProfile = sourceProfile.copy(drillId = drillId),
+            title = "$drillName Reference",
+            sourceSessionId = sourceSessionId,
+            isBaseline = true,
+        )
+        return drill to template
+    }
+
+    suspend fun promoteSessionToTemplate(
+        sessionId: Long,
+        drillId: String,
+        title: String,
+        profileId: String,
+    ): ReferenceTemplateRecord? {
+        val profile = movementProfileDao.getById(profileId) ?: return null
+        val template = createTemplateFromReferenceUpload(
+            drillId = drillId,
+            sourceProfile = profile,
+            title = title,
+            sourceSessionId = sessionId,
+            isBaseline = false,
+        ).copy(sourceType = "HISTORIC_SESSION")
+        referenceTemplateDao.upsert(template)
+        val session = sessionDao.getById(sessionId)
+        if (session != null) sessionDao.upsert(session.copy(drillId = drillId, referenceTemplateId = template.id))
+        return template
+    }
 
     suspend fun saveSessionComparison(record: SessionComparisonRecord): Long = sessionComparisonDao.insert(record)
 
@@ -83,6 +170,13 @@ class SessionRepository(
     fun getAllDrills(): Flow<List<DrillDefinitionRecord>> = drillDefinitionDao.observeAll()
     fun getActiveDrills(): Flow<List<DrillDefinitionRecord>> = drillDefinitionDao.observeActive()
     suspend fun getDrill(drillId: String): DrillDefinitionRecord? = drillDefinitionDao.getById(drillId)
+    suspend fun resolveDrillIdForLegacyType(drillType: DrillType): String? {
+        val drills = drillDefinitionDao.observeAll().firstOrNull().orEmpty()
+        return drills.firstOrNull { DrillDefinitionResolver.resolveLegacyDrillType(it) == drillType }?.id
+    }
+    suspend fun getActiveTemplateForDrill(drillId: String): ReferenceTemplateRecord? =
+        referenceTemplateDao.observeByDrillId(drillId).firstOrNull().orEmpty().firstOrNull { it.isBaseline }
+            ?: referenceTemplateDao.observeByDrillId(drillId).firstOrNull().orEmpty().firstOrNull()
     suspend fun createDrill(record: DrillDefinitionRecord) = drillDefinitionDao.upsert(record)
     suspend fun updateDrill(record: DrillDefinitionRecord) = drillDefinitionDao.upsert(record)
     suspend fun validateAndMarkDrillReady(drillId: String): List<String> {

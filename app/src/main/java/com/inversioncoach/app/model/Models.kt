@@ -246,6 +246,15 @@ data class ReferenceTemplateRecord(
     val drillId: String,
     val displayName: String,
     val templateType: String,
+    val sourceType: String = "REFERENCE_UPLOAD",
+    val sourceSessionId: Long? = null,
+    val title: String = displayName,
+    val phasePosesJson: String = "",
+    val keyframesJson: String = "",
+    val fpsHint: Int? = null,
+    val durationMs: Long? = null,
+    val updatedAtMs: Long = createdAtMs,
+    val isBaseline: Boolean = false,
     val sourceProfileIdsJson: String,
     val checkpointJson: String,
     val toleranceJson: String,
@@ -328,7 +337,13 @@ data class CalibrationConfigRecord(
     val updatedAtMs: Long,
 )
 
-@Entity(tableName = "session_records")
+@Entity(
+    tableName = "session_records",
+    indices = [
+        androidx.room.Index(value = ["drillId"]),
+        androidx.room.Index(value = ["referenceTemplateId"]),
+    ],
+)
 data class SessionRecord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
@@ -382,6 +397,8 @@ data class SessionRecord(
     val bodyProfileId: String? = null,
     val bodyProfileVersion: Int? = null,
     val usedDefaultBodyModel: Boolean = false,
+    val drillId: String? = null,
+    val referenceTemplateId: String? = null,
     val notesUri: String?,
     val bestFrameTimestampMs: Long?,
     val worstFrameTimestampMs: Long?,

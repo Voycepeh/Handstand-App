@@ -185,6 +185,9 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onBack = { navController.popBackStack() },
                 onUploadReference = { id -> navController.navigate(Route.UploadVideoForDrill.create(id, null, true)) },
                 onUploadAttempt = { id, templateId -> navController.navigate(Route.UploadVideoForDrill.create(id, templateId, false)) },
+                onComparePastSessions = { navController.navigate(Route.History.value) },
+                onOpenDrillStudio = { id -> navController.navigate(Route.DrillStudio.createForDrill(id)) },
+                onCreateNewDrillFromReference = { id -> navController.navigate(Route.UploadVideoForDrill.create(id, null, true)) },
             )
         }
         composable(Route.ManageDrills.value) {

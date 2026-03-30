@@ -19,6 +19,9 @@ interface SessionDao {
     @Query("SELECT * FROM session_records WHERE drillType = :drillType ORDER BY startedAtMs DESC")
     fun observeByDrill(drillType: DrillType): Flow<List<SessionRecord>>
 
+    @Query("SELECT * FROM session_records WHERE drillId = :drillId ORDER BY startedAtMs DESC")
+    fun observeByDrillId(drillId: String): Flow<List<SessionRecord>>
+
     @Query("SELECT * FROM session_records WHERE id = :sessionId LIMIT 1")
     fun observeById(sessionId: Long): Flow<SessionRecord?>
 

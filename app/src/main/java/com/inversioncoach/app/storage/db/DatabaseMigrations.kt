@@ -264,6 +264,27 @@ object DatabaseMigrations {
 
     }
 
+    val MIGRATION_17_18: Migration = object : Migration(17, 18) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE reference_template_records ADD COLUMN sourceType TEXT NOT NULL DEFAULT 'REFERENCE_UPLOAD'")
+            db.execSQL("ALTER TABLE reference_template_records ADD COLUMN sourceSessionId INTEGER")
+            db.execSQL("ALTER TABLE reference_template_records ADD COLUMN title TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE reference_template_records ADD COLUMN phasePosesJson TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE reference_template_records ADD COLUMN keyframesJson TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE reference_template_records ADD COLUMN fpsHint INTEGER")
+            db.execSQL("ALTER TABLE reference_template_records ADD COLUMN durationMs INTEGER")
+            db.execSQL("ALTER TABLE reference_template_records ADD COLUMN updatedAtMs INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE reference_template_records ADD COLUMN isBaseline INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("UPDATE reference_template_records SET title = displayName WHERE title = ''")
+            db.execSQL("UPDATE reference_template_records SET updatedAtMs = createdAtMs WHERE updatedAtMs = 0")
+
+            db.execSQL("ALTER TABLE session_records ADD COLUMN drillId TEXT")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN referenceTemplateId TEXT")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_session_records_drillId ON session_records(drillId)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_session_records_referenceTemplateId ON session_records(referenceTemplateId)")
+        }
+    }
+
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_11_12,
         MIGRATION_12_13,
@@ -271,5 +292,6 @@ object DatabaseMigrations {
         MIGRATION_14_15,
         MIGRATION_15_16,
         MIGRATION_16_17,
+        MIGRATION_17_18,
     )
 }

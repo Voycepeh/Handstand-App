@@ -49,7 +49,7 @@ fun DrillHubScreen(
             )
             DrillHubActionCard(
                 title = "Reference Training",
-                description = "Build baseline templates from reference videos.",
+                description = "Upload reference videos, compare attempts, promote sessions, and refine in Drill Studio.",
                 onClick = onReferenceTraining,
             )
         }

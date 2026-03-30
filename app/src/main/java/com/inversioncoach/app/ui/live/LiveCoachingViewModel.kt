@@ -183,6 +183,8 @@ class LiveCoachingViewModel(
     private var activeBodyProfileId: String? = null
     private var activeBodyProfileVersion: Int? = null
     private var activeUsesDefaultBodyModel: Boolean = true
+    private var activeDrillId: String? = null
+    private var activeReferenceTemplateId: String? = null
     private var legacyBodyProfileFallback: UserBodyProfile? = null
     private var startupCancelled = false
     private val drillConfig = DrillConfigs.byTypeOrNull(drillType)
@@ -854,6 +856,8 @@ class LiveCoachingViewModel(
                         rawPersistFailureReason = rawPersistFailureReason,
                         annotatedExportStatus = finalVideos.annotatedExportStatus,
                         annotatedExportFailureReason = reconciledFailureReason,
+                        drillId = activeDrillId,
+                        referenceTemplateId = activeReferenceTemplateId,
                         notesUri = null,
                         bestFrameTimestampMs = bestFrame,
                         worstFrameTimestampMs = worstFrame,
@@ -917,6 +921,8 @@ class LiveCoachingViewModel(
                         bodyProfileId = activeBodyProfileId,
                         bodyProfileVersion = activeBodyProfileVersion,
                         usedDefaultBodyModel = activeUsesDefaultBodyModel,
+                        drillId = activeDrillId,
+                        referenceTemplateId = activeReferenceTemplateId,
                         notesUri = null,
                         bestFrameTimestampMs = bestFrame,
                         worstFrameTimestampMs = worstFrame,
@@ -998,6 +1004,8 @@ class LiveCoachingViewModel(
             smoother.reset()
             correctionEngine.reset()
             activeMovementProfile = calibrationProfileProvider.resolve(drillType)
+            activeDrillId = repository.resolveDrillIdForLegacyType(drillType)
+            activeReferenceTemplateId = activeDrillId?.let { repository.getActiveTemplateForDrill(it)?.id }
             runtimeBodyProfileResolver?.resolve()?.let { resolved ->
                 activeUserProfileId = resolved.userProfileId
                 activeBodyProfileId = resolved.bodyProfileId
@@ -1049,6 +1057,8 @@ class LiveCoachingViewModel(
                     bodyProfileId = activeBodyProfileId,
                     bodyProfileVersion = activeBodyProfileVersion,
                     usedDefaultBodyModel = activeUsesDefaultBodyModel,
+                    drillId = activeDrillId,
+                    referenceTemplateId = activeReferenceTemplateId,
                     notesUri = null,
                     bestFrameTimestampMs = null,
                     worstFrameTimestampMs = null,

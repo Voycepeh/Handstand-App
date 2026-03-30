@@ -174,6 +174,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             }
 
             session?.let { activeSession ->
+                val contextTemplateId = activeSession.referenceTemplateId ?: parseInlineMetrics(activeSession.metricsJson)["referenceTemplateId"]
                 val isProcessing = activeSession.annotatedExportStatus in setOf(
                     AnnotatedExportStatus.VALIDATING_INPUT,
                     AnnotatedExportStatus.PROCESSING,
@@ -277,6 +278,9 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     Text("Type: ${sessionTypeLabel(session)}")
                     resolveDrillContextLabel(session, drills)?.let { drillContext ->
                         Text("Drill: $drillContext")
+                    }
+                    if (!contextTemplateId.isNullOrBlank()) {
+                        Text("Template context: $contextTemplateId")
                     }
                     Text("Started: ${formatSessionDateTime(session?.startedAtMs ?: 0L)}")
                     Text("Duration: ${formatSessionDuration(displayDurationMs)}")
@@ -457,6 +461,32 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save note") }
+            Button(
+                onClick = {
+                    scope.launch {
+                        val activeSession = session ?: return@launch
+                        val drillContextId = activeSession.drillId ?: parseInlineMetrics(activeSession.metricsJson)["drillId"]
+                        val profileId = "profile-${activeSession.id}"
+                        if (drillContextId.isNullOrBlank()) {
+                            Toast.makeText(context, "No drill context found for this session.", Toast.LENGTH_SHORT).show()
+                            return@launch
+                        }
+                        val template = repository.promoteSessionToTemplate(
+                            sessionId = activeSession.id,
+                            drillId = drillContextId,
+                            title = "${activeSession.title} Reference",
+                            profileId = profileId,
+                        )
+                        if (template == null) {
+                            Toast.makeText(context, "No extracted motion profile found for this session.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Promoted to reference template.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = session != null,
+            ) { Text("Use as reference template") }
             Button(
                 onClick = {
                     shareVideoOnly(
