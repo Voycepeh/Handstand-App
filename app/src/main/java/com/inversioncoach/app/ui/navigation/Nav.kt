@@ -30,12 +30,12 @@ import com.inversioncoach.app.ui.history.HistoryScreen
 import com.inversioncoach.app.ui.home.HomeScreen
 import com.inversioncoach.app.ui.live.LiveCoachingScreen
 import com.inversioncoach.app.ui.progress.ProgressScreen
-import com.inversioncoach.app.ui.reference.DrillPickerScreen
 import com.inversioncoach.app.ui.reference.DrillWorkspaceScreen
 import com.inversioncoach.app.ui.results.ResultsScreen
 import com.inversioncoach.app.ui.results.SessionTooShortScreen
 import com.inversioncoach.app.ui.settings.DeveloperTuningScreen
 import com.inversioncoach.app.ui.settings.SettingsScreen
+import com.inversioncoach.app.ui.startdrill.StartDrillDestination
 import com.inversioncoach.app.ui.startdrill.StartDrillScreen
 import com.inversioncoach.app.ui.upload.UploadVideoScreen
 
@@ -44,7 +44,10 @@ private fun parseDrillTypeOrDefault(rawValue: String?, fallback: DrillType): Dri
 
 sealed class Route(val value: String) {
     data object Home : Route("home")
-    data object Start : Route("start")
+    data object Start : Route("start?destination={destination}") {
+        fun create(destination: StartDrillDestination = StartDrillDestination.LIVE): String =
+            "start?destination=${destination.name.lowercase()}"
+    }
     data object DrillDetail : Route("drillDetail/{drill}") {
         fun create(drillType: DrillType): String = "drillDetail/${drillType.name}"
     }
@@ -76,8 +79,6 @@ sealed class Route(val value: String) {
             "upload-video?drillId=${Uri.encode(drillId ?: "")}&referenceTemplateId=${Uri.encode(templateId ?: "")}&isReference=$isReference&createNewDrillFromReference=$createNewDrillFromReference"
     }
     data object Calibration : Route("calibration")
-    // TODO(product-flow): unify Route.Start and Route.DrillPicker into one canonical drill selector flow.
-    data object DrillPicker : Route("drill-picker")
     data object DrillWorkspace : Route("drill-workspace/{drillId}") { fun create(drillId: String) = "drill-workspace/${Uri.encode(drillId)}" }
     data object ManageDrills : Route("manage-drills")
     data object DrillPackageDetail : Route("drill-package-detail/{drillId}") { fun create(drillId: String) = "drill-package-detail/${Uri.encode(drillId)}" }
@@ -89,7 +90,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
     NavHost(navController = navController, startDestination = Route.Home.value, modifier = modifier) {
         composable(Route.Home.value) {
             HomeScreen(
-                onStart = { navController.navigate(Route.Start.value) },
+                onStart = { navController.navigate(Route.Start.create(StartDrillDestination.LIVE)) },
                 onStartFreestyle = { navController.navigate(Route.Live.create(DrillType.FREESTYLE, LiveSessionOptions.freestyleDefaults())) },
                 onLatestSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
                 onHistory = { navController.navigate(Route.History.create()) },
@@ -100,10 +101,13 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onCalibration = { navController.navigate(Route.Calibration.value) },
             )
         }
-        composable(Route.Start.value) {
+        composable(Route.Start.value, arguments = listOf(navArgument("destination") { type = NavType.StringType; defaultValue = "live" })) {
+            val destination = if (it.arguments?.getString("destination") == "workspace") StartDrillDestination.WORKSPACE else StartDrillDestination.LIVE
             StartDrillScreen(
                 onBack = { navController.popBackStack() },
                 onStart = { drillType, options -> navController.navigate(Route.Live.create(drillType, options)) },
+                destination = destination,
+                onOpenWorkspace = { drillId -> navController.navigate(Route.DrillWorkspace.create(drillId)) },
             )
         }
         composable(Route.DrillDetail.value, arguments = listOf(navArgument("drill") { type = NavType.StringType })) {
@@ -161,9 +165,9 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         composable(Route.DrillHub.value) {
             DrillHubScreen(
                 onBack = { navController.popBackStack() },
-                onChooseDrill = { navController.navigate(Route.Start.value) },
+                onChooseDrill = { navController.navigate(Route.Start.create(StartDrillDestination.LIVE)) },
                 onManageDrills = { navController.navigate(Route.ManageDrills.value) },
-                onOpenDrillWorkspace = { navController.navigate(Route.DrillPicker.value) },
+                onOpenDrillWorkspace = { navController.navigate(Route.Start.create(StartDrillDestination.WORKSPACE)) },
             )
         }
         composable(Route.DrillStudio.value, arguments = listOf(
@@ -223,9 +227,6 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 isReferenceUpload = isReference,
                 createDrillFromReferenceUpload = createNewDrillFromReference,
             )
-        }
-        composable(Route.DrillPicker.value) {
-            DrillPickerScreen(onBack = { navController.popBackStack() }, onSelectDrill = { drillId -> navController.navigate(Route.DrillWorkspace.create(drillId)) })
         }
         composable(Route.DrillWorkspace.value, arguments = listOf(navArgument("drillId") { type = NavType.StringType })) {
             val drillId = it.arguments?.getString("drillId").orEmpty()

@@ -1,12 +1,15 @@
 package com.inversioncoach.app.ui.navigation
 
+import com.inversioncoach.app.ui.startdrill.StartDrillDestination
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class DrillWorkspaceRouteTest {
     @Test
-    fun drillPickerRouteIsStable() {
-        assertEquals("drill-picker", Route.DrillPicker.value)
+    fun startRouteSupportsLiveAndWorkspaceDestinations() {
+        assertEquals("start?destination={destination}", Route.Start.value)
+        assertEquals("start?destination=live", Route.Start.create(StartDrillDestination.LIVE))
+        assertEquals("start?destination=workspace", Route.Start.create(StartDrillDestination.WORKSPACE))
     }
 
     @Test
