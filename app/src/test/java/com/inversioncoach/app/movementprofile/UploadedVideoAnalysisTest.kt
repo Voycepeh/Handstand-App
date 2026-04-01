@@ -9,7 +9,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class UploadedVideoAnalysisTest {
     @Test
@@ -82,6 +81,72 @@ class UploadedVideoAnalysisTest {
     }
 
     @Test
+    fun analyzeRejectsImplausiblePoseJumpAfterTrackerLoss() {
+        val profile = ExistingDrillToProfileAdapter().fromDrill(DrillType.FREESTYLE)
+        val source = object : VideoPoseFrameSource {
+            override fun decode(videoUri: Uri): Sequence<PoseFrame> = sequence {
+                yield(frame(0, 0.9f))
+                yield(frame(33, 0f))
+                yield(frame(66, 0.9f, shoulderX = 0.05f, hipX = 0.08f))
+            }
+        }
+
+        val result = UploadedVideoAnalyzer(source).analyze(Uri.parse("file:///tmp/jump.mp4"), profile)
+
+        assertEquals(1, result.overlayTimeline.size)
+        assertEquals(2, result.droppedFrames)
+    }
+
+    @Test
+    fun analyzeRequiresStableFramesBeforeOverlayReacquisition() {
+        val profile = ExistingDrillToProfileAdapter().fromDrill(DrillType.FREESTYLE)
+        val source = object : VideoPoseFrameSource {
+            override fun decode(videoUri: Uri): Sequence<PoseFrame> = sequence {
+                yield(frame(0, 0.9f))
+                yield(frame(33, 0f))
+                yield(frame(66, 0.9f, shoulderX = 0.54f, hipX = 0.54f))
+                yield(frame(99, 0.9f, shoulderX = 0.55f, hipX = 0.55f))
+            }
+        }
+
+        val result = UploadedVideoAnalyzer(source).analyze(Uri.parse("file:///tmp/reacquire.mp4"), profile)
+
+        assertEquals(2, result.overlayTimeline.size)
+        assertEquals(2, result.droppedFrames)
+        assertEquals(99L, result.overlayTimeline.last().timestampMs)
+    }
+
+    @Test
+    fun analyzeDoesNotSharePoseGateStateAcrossRuns() {
+        val profile = ExistingDrillToProfileAdapter().fromDrill(DrillType.FREESTYLE)
+        var call = 0
+        val source = object : VideoPoseFrameSource {
+            override fun decode(videoUri: Uri): Sequence<PoseFrame> = sequence {
+                if (call == 0) {
+                    // End first analysis in reacquisition wait state.
+                    yield(frame(0, 0.9f))
+                    yield(frame(33, 0f))
+                    yield(frame(66, 0.9f, shoulderX = 0.54f, hipX = 0.54f))
+                } else {
+                    // Second analysis should accept first valid frame immediately.
+                    yield(frame(0, 0.9f))
+                }
+                call += 1
+            }
+        }
+
+        val analyzer = UploadedVideoAnalyzer(source)
+        val first = analyzer.analyze(Uri.parse("file:///tmp/a.mp4"), profile)
+        val second = analyzer.analyze(Uri.parse("file:///tmp/b.mp4"), profile)
+
+        assertEquals(1, first.overlayTimeline.size)
+        assertEquals(2, first.droppedFrames)
+        assertEquals(1, second.overlayTimeline.size)
+        assertEquals(0, second.droppedFrames)
+        assertEquals(0L, second.overlayTimeline.first().timestampMs)
+    }
+
+    @Test
     fun compatibilityAdapterPreservesDrillIdentity() {
         val adapter = ExistingDrillToProfileAdapter()
         val profile = adapter.fromDrill(DrillType.FREESTYLE)
@@ -106,20 +171,25 @@ class UploadedVideoAnalysisTest {
         assertEquals(7L, result.telemetry["calibration_profile_version"])
     }
 
-    private fun frame(ts: Long, confidence: Float): PoseFrame = PoseFrame(
+    private fun frame(
+        ts: Long,
+        confidence: Float,
+        shoulderX: Float = 0.50f,
+        hipX: Float = 0.50f,
+    ): PoseFrame = PoseFrame(
         timestampMs = ts,
         confidence = confidence,
         joints = listOf(
-            JointPoint("left_shoulder", 0.48f, 0.30f, 0f, 0.9f),
-            JointPoint("right_shoulder", 0.52f, 0.30f, 0f, 0.9f),
-            JointPoint("left_hip", 0.49f, 0.60f, 0f, 0.9f),
-            JointPoint("right_hip", 0.51f, 0.60f, 0f, 0.9f),
-            JointPoint("left_elbow", 0.45f, 0.38f, 0f, 0.9f),
-            JointPoint("right_elbow", 0.55f, 0.38f, 0f, 0.9f),
-            JointPoint("left_wrist", 0.42f, 0.48f, 0f, 0.9f),
-            JointPoint("right_wrist", 0.58f, 0.48f, 0f, 0.9f),
-            JointPoint("left_ankle", 0.49f, 0.90f, 0f, 0.9f),
-            JointPoint("right_ankle", 0.51f, 0.90f, 0f, 0.9f),
+            JointPoint("left_shoulder", shoulderX - 0.02f, 0.30f, 0f, 0.9f),
+            JointPoint("right_shoulder", shoulderX + 0.02f, 0.30f, 0f, 0.9f),
+            JointPoint("left_hip", hipX - 0.01f, 0.60f, 0f, 0.9f),
+            JointPoint("right_hip", hipX + 0.01f, 0.60f, 0f, 0.9f),
+            JointPoint("left_elbow", shoulderX - 0.05f, 0.38f, 0f, 0.9f),
+            JointPoint("right_elbow", shoulderX + 0.05f, 0.38f, 0f, 0.9f),
+            JointPoint("left_wrist", shoulderX - 0.08f, 0.48f, 0f, 0.9f),
+            JointPoint("right_wrist", shoulderX + 0.08f, 0.48f, 0f, 0.9f),
+            JointPoint("left_ankle", hipX - 0.01f, 0.90f, 0f, 0.9f),
+            JointPoint("right_ankle", hipX + 0.01f, 0.90f, 0f, 0.9f),
         ),
     )
 }
