@@ -96,6 +96,7 @@ fun DrillStudioScreen(
                 padding = padding,
                 draft = state.draft,
                 sourceSeedId = state.sourceSeedId,
+                editingDrillId = state.editingDrillId,
                 editingTemplateId = state.editingTemplateId,
                 validationErrors = state.validationErrors,
                 statusMessage = state.statusMessage,
@@ -157,6 +158,7 @@ private fun DrillStudioEditor(
     padding: PaddingValues,
     draft: DrillTemplate,
     sourceSeedId: String?,
+    editingDrillId: String?,
     editingTemplateId: String?,
     validationErrors: List<String>,
     statusMessage: String?,
@@ -191,6 +193,7 @@ private fun DrillStudioEditor(
     }
     val orderedPhases = draft.phases.sortedBy { it.order }
     val selectedPhaseTemplate = orderedPhases.firstOrNull { it.id == selectedPhaseId }
+    val hasPersistedDrillId = !editingDrillId.isNullOrBlank()
 
     LaunchedEffect(orderedPhases.map { it.id }, selectedPhaseId) {
         selectedPhaseId = DrillStudioPhaseEditor.recoverSelectionAfterDelete(
@@ -402,13 +405,17 @@ private fun DrillStudioEditor(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 if (editingTemplateId != null) {
-                    Button(onClick = { onSaveTemplate(setAsBaseline) }) { Text("Save Template") }
+                    Button(onClick = { onSaveTemplate(setAsBaseline) }, enabled = hasPersistedDrillId) { Text("Save Template") }
                 }
-                Button(onClick = { onSaveAsNewTemplate(setAsBaseline) }) { Text("Save as New Template") }
+                Button(onClick = { onSaveAsNewTemplate(setAsBaseline) }, enabled = hasPersistedDrillId) { Text("Save as New Template") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Set as baseline")
-                Switch(checked = setAsBaseline, onCheckedChange = { setAsBaseline = it })
+                Switch(
+                    checked = setAsBaseline,
+                    onCheckedChange = { setAsBaseline = it },
+                    enabled = hasPersistedDrillId,
+                )
             }
         }
     }

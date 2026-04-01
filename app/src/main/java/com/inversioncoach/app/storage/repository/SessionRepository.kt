@@ -25,6 +25,8 @@ import com.inversioncoach.app.drills.DrillSourceType
 import com.inversioncoach.app.drills.DrillDefinitionValidator
 import com.inversioncoach.app.drills.DrillDefinitionResolver
 import com.inversioncoach.app.drills.DrillStatus
+import com.inversioncoach.app.drills.SelectableDrill
+import com.inversioncoach.app.drills.toSelectableDrill
 import com.inversioncoach.app.drills.catalog.DrillTemplate
 import com.inversioncoach.app.drills.studio.ReferenceTemplateDraftSerializer
 import com.inversioncoach.app.movementprofile.MovementProfileExtractor
@@ -258,6 +260,25 @@ class SessionRepository(
 
     fun getAllDrills(): Flow<List<DrillDefinitionRecord>> = drillDefinitionDao.observeAll()
     fun getActiveDrills(): Flow<List<DrillDefinitionRecord>> = drillDefinitionDao.observeActive()
+    fun observeDrillLibrary(): Flow<List<SelectableDrill>> =
+        drillDefinitionDao.observeAll().map { drills ->
+            drills
+                .associateBy { it.id }
+                .values
+                .map { it.toSelectableDrill() }
+                .sortedBy { it.name.lowercase() }
+        }
+
+    fun observeManageDrills(): Flow<List<SelectableDrill>> =
+        observeDrillLibrary().map { drills -> drills.filterNot { it.isArchived } }
+
+    fun observeDrillStudioDrills(): Flow<List<SelectableDrill>> =
+        observeDrillLibrary().map { drills -> drills.filter { it.isEditable } }
+
+    fun observeReferenceEligibleDrills(): Flow<List<SelectableDrill>> =
+        observeDrillLibrary().map { drills ->
+            drills.filter { drill -> drill.isReferenceEligible && !drill.isArchived }
+        }
     suspend fun getDrill(drillId: String): DrillDefinitionRecord? = drillDefinitionDao.getById(drillId)
     suspend fun resolveDrillIdForLegacyType(drillType: DrillType): String? {
         val drills = drillDefinitionDao.observeAll().firstOrNull().orEmpty()

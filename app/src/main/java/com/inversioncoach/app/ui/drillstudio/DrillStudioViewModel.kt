@@ -16,6 +16,11 @@ import com.inversioncoach.app.drills.catalog.PhasePoseTemplate
 import com.inversioncoach.app.drills.catalog.PhaseWindow
 import com.inversioncoach.app.drills.catalog.SkeletonKeyframeTemplate
 import com.inversioncoach.app.drills.catalog.SkeletonTemplate
+import com.inversioncoach.app.drills.DrillCameraView
+import com.inversioncoach.app.drills.DrillMovementMode
+import com.inversioncoach.app.drills.DrillSourceType
+import com.inversioncoach.app.drills.DrillStatus
+import com.inversioncoach.app.model.DrillDefinitionRecord
 import com.inversioncoach.app.storage.repository.SessionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -225,19 +230,55 @@ class DrillStudioViewModel(
 
     fun saveDraft() {
         val current = _uiState.value as? DrillStudioUiState.Ready ?: return
-        _uiState.value = current.copy(
-            validationErrors = emptyList(),
-            statusMessage = "Draft saved",
-        )
+        val repository = sessionRepository
+        if (repository == null) {
+            _uiState.value = current.copy(statusMessage = "Draft save unavailable.")
+            return
+        }
+        viewModelScope.launch {
+            val persisted = runCatching {
+                val drillId = current.editingDrillId ?: "user_drill_${System.currentTimeMillis()}"
+                val existing = repository.getDrill(drillId)
+                val record = current.draft.toDrillDefinitionRecord(existingId = drillId, existing = existing, ready = false)
+                repository.updateDrill(record)
+                record
+            }.getOrNull()
+            val refreshed = (_uiState.value as? DrillStudioUiState.Ready) ?: current
+            _uiState.value = refreshed.copy(
+                editingDrillId = persisted?.id ?: refreshed.editingDrillId,
+                validationErrors = emptyList(),
+                statusMessage = if (persisted != null) "Draft saved" else "Draft save failed.",
+            )
+        }
     }
 
     fun saveAndMarkReady() {
         val current = _uiState.value as? DrillStudioUiState.Ready ?: return
+        val repository = sessionRepository
+        if (repository == null) {
+            _uiState.value = current.copy(statusMessage = "Save unavailable.")
+            return
+        }
         val errors = validateReady(current.draft)
-        _uiState.value = current.copy(
-            validationErrors = errors,
-            statusMessage = if (errors.isEmpty()) "Draft validated and saved" else null,
-        )
+        if (errors.isNotEmpty()) {
+            _uiState.value = current.copy(validationErrors = errors, statusMessage = null)
+            return
+        }
+        viewModelScope.launch {
+            val persisted = runCatching {
+                val drillId = current.editingDrillId ?: "user_drill_${System.currentTimeMillis()}"
+                val existing = repository.getDrill(drillId)
+                val record = current.draft.toDrillDefinitionRecord(existingId = drillId, existing = existing, ready = true)
+                repository.updateDrill(record)
+                record
+            }.getOrNull()
+            val refreshed = (_uiState.value as? DrillStudioUiState.Ready) ?: current
+            _uiState.value = refreshed.copy(
+                editingDrillId = persisted?.id ?: refreshed.editingDrillId,
+                validationErrors = emptyList(),
+                statusMessage = if (persisted != null) "Draft validated and saved" else "Save failed.",
+            )
+        }
     }
 
     fun saveTemplate(setAsBaseline: Boolean) {
@@ -436,6 +477,38 @@ class DrillStudioViewModel(
         }
         return errors
     }
+}
+
+private fun DrillTemplate.toDrillDefinitionRecord(
+    existingId: String,
+    existing: DrillDefinitionRecord?,
+    ready: Boolean,
+): DrillDefinitionRecord {
+    val now = System.currentTimeMillis()
+    return DrillDefinitionRecord(
+        id = existingId,
+        name = title.trim(),
+        description = description.trim(),
+        movementMode = if (movementType == CatalogMovementType.REP) DrillMovementMode.REP else DrillMovementMode.HOLD,
+        cameraView = when (cameraView) {
+            CameraView.LEFT_PROFILE -> DrillCameraView.LEFT
+            CameraView.RIGHT_PROFILE -> DrillCameraView.RIGHT
+            CameraView.FRONT -> DrillCameraView.FRONT
+            CameraView.SIDE -> DrillCameraView.LEFT
+        },
+        phaseSchemaJson = phases.sortedBy { it.order }.joinToString("|") { phase -> phase.label.ifBlank { phase.id } },
+        keyJointsJson = keyJoints.joinToString("|"),
+        normalizationBasisJson = normalizationBasis.name,
+        cueConfigJson = buildList {
+            add("legacyDrillType:FREE_HANDSTAND")
+            add("comparisonMode:${comparisonMode.name}")
+        }.joinToString("|"),
+        sourceType = existing?.sourceType ?: DrillSourceType.USER_CREATED,
+        status = if (ready) DrillStatus.READY else existing?.status ?: DrillStatus.DRAFT,
+        version = (existing?.version ?: 0) + 1,
+        createdAtMs = existing?.createdAtMs ?: now,
+        updatedAtMs = now,
+    )
 }
 
 

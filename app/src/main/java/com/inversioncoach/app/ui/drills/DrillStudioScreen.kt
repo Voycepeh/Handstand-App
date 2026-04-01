@@ -26,8 +26,8 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,7 +61,7 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
     var selectedDrillId by remember { mutableStateOf(initialDrillId ?: drills.firstOrNull()?.id.orEmpty()) }
     var baseline by remember(selectedDrillId, drills.size) { mutableStateOf(if (selectedDrillId.isBlank()) null else store.loadForEditor(selectedDrillId)) }
     var working by remember(selectedDrillId, drills.size) { mutableStateOf(baseline) }
-    var selectedPhase by remember { mutableIntStateOf(0) }
+    var selectedPhaseId by remember { mutableStateOf("") }
     var selectedJoint by remember { mutableStateOf(BodyJoint.HEAD) }
     var mirroredPreview by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
@@ -113,11 +113,14 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                 selectedDrillId = newId
                 baseline = store.loadForEditor(newId)
                 working = baseline
-                selectedPhase = 0
+                selectedPhaseId = ""
                 status = null
             }
 
             document?.let { draft ->
+                LaunchedEffect(draft.phases, selectedPhaseId) {
+                    selectedPhaseId = coerceSelectedPhaseId(draft, selectedPhaseId)
+                }
                 OutlinedTextField(draft.displayName, { value -> working = draft.copy(displayName = value) }, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
 
                 DrillDropdown(
@@ -165,11 +168,11 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
 
                 DrillDropdown(
                     label = "Phase",
-                    selected = draft.phases.getOrNull(selectedPhase)?.id.orEmpty(),
-                    options = draft.phases.mapIndexed { index, phase -> index.toString() to "${phase.order}. ${phase.label}" }.toMap(),
-                ) { phaseIndex -> selectedPhase = phaseIndex.toIntOrNull() ?: 0 }
+                    selected = selectedPhaseId,
+                    options = draft.phases.associate { phase -> phase.id to "${phase.order}. ${phase.label}" },
+                ) { phaseId -> selectedPhaseId = phaseId }
 
-                val phase = draft.phases.getOrNull(selectedPhase)
+                val phase = resolveSelectedPhase(draft, selectedPhaseId)
                 if (phase != null) {
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -178,8 +181,13 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                             Slider(
                                 value = phase.progressWindow.start,
                                 onValueChange = { value ->
-                                    val updatedPhases = draft.phases.toMutableList()
-                                    updatedPhases[selectedPhase] = phase.copy(progressWindow = phase.progressWindow.copy(start = min(value, phase.progressWindow.end)))
+                                    val updatedPhases = draft.phases.map { existing ->
+                                        if (existing.id == phase.id) {
+                                            existing.copy(progressWindow = phase.progressWindow.copy(start = min(value, phase.progressWindow.end)))
+                                        } else {
+                                            existing
+                                        }
+                                    }
                                     working = draft.copy(phases = updatedPhases)
                                 },
                                 valueRange = 0f..1f,
@@ -187,8 +195,13 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                             Slider(
                                 value = phase.progressWindow.end,
                                 onValueChange = { value ->
-                                    val updatedPhases = draft.phases.toMutableList()
-                                    updatedPhases[selectedPhase] = phase.copy(progressWindow = phase.progressWindow.copy(end = max(value, phase.progressWindow.start)))
+                                    val updatedPhases = draft.phases.map { existing ->
+                                        if (existing.id == phase.id) {
+                                            existing.copy(progressWindow = phase.progressWindow.copy(end = max(value, phase.progressWindow.start)))
+                                        } else {
+                                            existing
+                                        }
+                                    }
                                     working = draft.copy(phases = updatedPhases)
                                 },
                                 valueRange = 0f..1f,
@@ -200,7 +213,7 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                 ThresholdEditor(draft = draft) { updated -> working = updated }
                 JointEditor(
                     draft = draft,
-                    phaseIndex = selectedPhase,
+                    selectedPhaseId = selectedPhaseId,
                     selectedJoint = selectedJoint,
                     onJointSelected = { selectedJoint = it },
                     onUpdated = { updated -> working = updated },
@@ -321,13 +334,13 @@ private fun ThresholdEditor(draft: DrillStudioDocument, onUpdated: (DrillStudioD
 @Composable
 private fun JointEditor(
     draft: DrillStudioDocument,
-    phaseIndex: Int,
+    selectedPhaseId: String,
     selectedJoint: BodyJoint,
     onJointSelected: (BodyJoint) -> Unit,
     onUpdated: (DrillStudioDocument) -> Unit,
 ) {
-    val phase = draft.phases.getOrNull(phaseIndex) ?: return
-    val resolvedFrameIndex = resolveFrameIndexForPhase(draft, phase)
+    val resolvedFrameIndex = resolveFrameIndexForSelectedPhase(draft, selectedPhaseId)
+    if (resolvedFrameIndex < 0) return
     val frame = draft.animationSpec.keyframes.getOrNull(resolvedFrameIndex)
     val joints = frame?.joints.orEmpty()
     val point = joints[selectedJoint] ?: NormalizedPoint(0.5f, 0.5f)
@@ -341,16 +354,29 @@ private fun JointEditor(
                 onSelect = { name -> onJointSelected(BodyJoint.entries.first { it.name == name }) },
             )
             Text("${selectedJoint.name}: x=${"%.2f".format(point.x)} y=${"%.2f".format(point.y)}")
-            Slider(value = point.x, onValueChange = { x -> onUpdated(updateJoint(draft, resolvedFrameIndex, selectedJoint, x, point.y)) }, valueRange = 0f..1f)
-            Slider(value = point.y, onValueChange = { y -> onUpdated(updateJoint(draft, resolvedFrameIndex, selectedJoint, point.x, y)) }, valueRange = 0f..1f)
+            Slider(value = point.x, onValueChange = { x -> onUpdated(updateJointForSelectedPhase(draft, selectedPhaseId, selectedJoint, x, point.y)) }, valueRange = 0f..1f)
+            Slider(value = point.y, onValueChange = { y -> onUpdated(updateJointForSelectedPhase(draft, selectedPhaseId, selectedJoint, point.x, y)) }, valueRange = 0f..1f)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onUpdated(updateJoint(draft, resolvedFrameIndex, selectedJoint, (point.x - 0.01f).coerceAtLeast(0f), point.y)) }) { Text("X-") }
-                Button(onClick = { onUpdated(updateJoint(draft, resolvedFrameIndex, selectedJoint, (point.x + 0.01f).coerceAtMost(1f), point.y)) }) { Text("X+") }
-                Button(onClick = { onUpdated(updateJoint(draft, resolvedFrameIndex, selectedJoint, point.x, (point.y - 0.01f).coerceAtLeast(0f))) }) { Text("Y-") }
-                Button(onClick = { onUpdated(updateJoint(draft, resolvedFrameIndex, selectedJoint, point.x, (point.y + 0.01f).coerceAtMost(1f))) }) { Text("Y+") }
+                Button(onClick = { onUpdated(updateJointForSelectedPhase(draft, selectedPhaseId, selectedJoint, (point.x - 0.01f).coerceAtLeast(0f), point.y)) }) { Text("X-") }
+                Button(onClick = { onUpdated(updateJointForSelectedPhase(draft, selectedPhaseId, selectedJoint, (point.x + 0.01f).coerceAtMost(1f), point.y)) }) { Text("X+") }
+                Button(onClick = { onUpdated(updateJointForSelectedPhase(draft, selectedPhaseId, selectedJoint, point.x, (point.y - 0.01f).coerceAtLeast(0f))) }) { Text("Y-") }
+                Button(onClick = { onUpdated(updateJointForSelectedPhase(draft, selectedPhaseId, selectedJoint, point.x, (point.y + 0.01f).coerceAtMost(1f))) }) { Text("Y+") }
             }
         }
     }
+}
+
+internal fun coerceSelectedPhaseId(draft: DrillStudioDocument, selectedPhaseId: String): String {
+    if (selectedPhaseId.isNotBlank() && draft.phases.any { it.id == selectedPhaseId }) return selectedPhaseId
+    return draft.phases.firstOrNull()?.id.orEmpty()
+}
+
+internal fun resolveSelectedPhase(draft: DrillStudioDocument, selectedPhaseId: String): DrillStudioPhase? =
+    draft.phases.firstOrNull { it.id == selectedPhaseId }
+
+internal fun resolveFrameIndexForSelectedPhase(draft: DrillStudioDocument, selectedPhaseId: String): Int {
+    val phase = resolveSelectedPhase(draft, selectedPhaseId) ?: return -1
+    return resolveFrameIndexForPhase(draft, phase)
 }
 
 internal fun resolveFrameIndexForPhase(draft: DrillStudioDocument, phase: DrillStudioPhase): Int {
@@ -371,4 +397,16 @@ internal fun updateJoint(draft: DrillStudioDocument, frameIndex: Int, joint: Bod
     val safeJoints = target.joints.orEmpty()
     frames[frameIndex] = target.copy(joints = safeJoints + (joint to NormalizedPoint(x, y)))
     return draft.copy(animationSpec = draft.animationSpec.copy(keyframes = frames))
+}
+
+internal fun updateJointForSelectedPhase(
+    draft: DrillStudioDocument,
+    selectedPhaseId: String,
+    joint: BodyJoint,
+    x: Float,
+    y: Float,
+): DrillStudioDocument {
+    val frameIndex = resolveFrameIndexForSelectedPhase(draft, selectedPhaseId)
+    if (frameIndex < 0) return draft
+    return updateJoint(draft, frameIndex, joint, x, y)
 }
