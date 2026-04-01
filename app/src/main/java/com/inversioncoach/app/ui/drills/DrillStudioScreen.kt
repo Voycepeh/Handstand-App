@@ -9,14 +9,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -64,6 +67,7 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
     var selectedPhaseId by remember { mutableStateOf("") }
     var selectedJoint by remember { mutableStateOf(BodyJoint.HEAD) }
     var mirroredPreview by remember { mutableStateOf(false) }
+    var showAdvancedMetadata by remember(selectedDrillId) { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -121,56 +125,26 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                 LaunchedEffect(draft.phases, selectedPhaseId) {
                     selectedPhaseId = coerceSelectedPhaseId(draft, selectedPhaseId)
                 }
-                OutlinedTextField(draft.displayName, { value -> working = draft.copy(displayName = value) }, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
-
-                DrillDropdown(
-                    label = "Camera view",
-                    selected = draft.cameraView.name,
-                    options = CatalogCameraView.entries.associate { it.name to it.name },
-                ) { value ->
-                    val view = CatalogCameraView.valueOf(value)
-                    val updatedSupported = if (draft.supportedViews.contains(view)) draft.supportedViews else (draft.supportedViews + view)
-                    working = draft.copy(cameraView = view, supportedViews = updatedSupported)
-                }
-
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Supported views")
-                        CatalogCameraView.entries.forEach { view ->
-                            val checked = draft.supportedViews.contains(view)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Checkbox(checked = checked, onCheckedChange = { isChecked ->
-                                    val next = if (isChecked) {
-                                        (draft.supportedViews + view).distinct()
-                                    } else {
-                                        draft.supportedViews.filterNot { it == view }
-                                    }
-                                    if (next.isNotEmpty()) {
-                                        val nextCamera = if (next.contains(draft.cameraView)) draft.cameraView else next.first()
-                                        working = draft.copy(supportedViews = next, cameraView = nextCamera)
-                                    }
-                                })
-                                Text(view.name)
-                            }
+                        Text("Live Preview", style = MaterialTheme.typography.titleMedium)
+                        DrillPreviewAnimation(
+                            animationSpec = draft.animationSpec,
+                            mirrored = mirroredPreview,
+                            modifier = Modifier.fillMaxWidth().height(320.dp),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Text("Mirror preview")
+                            Switch(checked = mirroredPreview, onCheckedChange = { mirroredPreview = it })
                         }
                     }
                 }
-                DrillDropdown(
-                    label = "Analysis plane",
-                    selected = draft.analysisPlane.name,
-                    options = CatalogAnalysisPlane.entries.associate { it.name to it.name },
-                ) { value -> working = draft.copy(analysisPlane = CatalogAnalysisPlane.valueOf(value)) }
-                DrillDropdown(
-                    label = "Comparison mode",
-                    selected = draft.comparisonMode.name,
-                    options = CatalogComparisonMode.entries.associate { it.name to it.name },
-                ) { value -> working = draft.copy(comparisonMode = CatalogComparisonMode.valueOf(value)) }
 
-                DrillDropdown(
-                    label = "Phase",
-                    selected = selectedPhaseId,
-                    options = draft.phases.associate { phase -> phase.id to "${phase.order}. ${phase.label}" },
-                ) { phaseId -> selectedPhaseId = phaseId }
+                PhaseRail(
+                    draft = draft,
+                    selectedPhaseId = selectedPhaseId,
+                    onSelectPhase = { phaseId -> selectedPhaseId = phaseId },
+                )
 
                 val phase = resolveSelectedPhase(draft, selectedPhaseId)
                 if (phase != null) {
@@ -210,24 +184,63 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                     }
                 }
 
-                ThresholdEditor(draft = draft) { updated -> working = updated }
+                Button(
+                    onClick = { showAdvancedMetadata = !showAdvancedMetadata },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (showAdvancedMetadata) "Hide Advanced Metadata" else "Show Advanced Metadata")
+                }
+                if (showAdvancedMetadata) {
+                    OutlinedTextField(draft.displayName, { value -> working = draft.copy(displayName = value) }, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
+                    DrillDropdown(
+                        label = "Camera view",
+                        selected = draft.cameraView.name,
+                        options = CatalogCameraView.entries.associate { it.name to it.name },
+                    ) { value ->
+                        val view = CatalogCameraView.valueOf(value)
+                        val updatedSupported = if (draft.supportedViews.contains(view)) draft.supportedViews else (draft.supportedViews + view)
+                        working = draft.copy(cameraView = view, supportedViews = updatedSupported)
+                    }
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Supported views")
+                            CatalogCameraView.entries.forEach { view ->
+                                val checked = draft.supportedViews.contains(view)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Checkbox(checked = checked, onCheckedChange = { isChecked ->
+                                        val next = if (isChecked) {
+                                            (draft.supportedViews + view).distinct()
+                                        } else {
+                                            draft.supportedViews.filterNot { it == view }
+                                        }
+                                        if (next.isNotEmpty()) {
+                                            val nextCamera = if (next.contains(draft.cameraView)) draft.cameraView else next.first()
+                                            working = draft.copy(supportedViews = next, cameraView = nextCamera)
+                                        }
+                                    })
+                                    Text(view.name)
+                                }
+                            }
+                        }
+                    }
+                    DrillDropdown(
+                        label = "Analysis plane",
+                        selected = draft.analysisPlane.name,
+                        options = CatalogAnalysisPlane.entries.associate { it.name to it.name },
+                    ) { value -> working = draft.copy(analysisPlane = CatalogAnalysisPlane.valueOf(value)) }
+                    DrillDropdown(
+                        label = "Comparison mode",
+                        selected = draft.comparisonMode.name,
+                        options = CatalogComparisonMode.entries.associate { it.name to it.name },
+                    ) { value -> working = draft.copy(comparisonMode = CatalogComparisonMode.valueOf(value)) }
+                    ThresholdEditor(draft = draft) { updated -> working = updated }
+                }
                 JointEditor(
                     draft = draft,
                     selectedPhaseId = selectedPhaseId,
                     selectedJoint = selectedJoint,
                     onJointSelected = { selectedJoint = it },
                     onUpdated = { updated -> working = updated },
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Text("Mirror preview")
-                    Switch(checked = mirroredPreview, onCheckedChange = { mirroredPreview = it })
-                }
-
-                DrillPreviewAnimation(
-                    animationSpec = draft.animationSpec,
-                    mirrored = mirroredPreview,
-                    modifier = Modifier.size(190.dp),
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -274,6 +287,37 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                     status = "Exported ${exported.name}"
                 }, modifier = Modifier.fillMaxWidth()) {
                     Text("Export & Share JSON")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PhaseRail(
+    draft: DrillStudioDocument,
+    selectedPhaseId: String,
+    onSelectPhase: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        draft.phases.forEach { phase ->
+            val isSelected = phase.id == selectedPhaseId
+            val frameIndex = resolveFrameIndexForPhase(draft, phase)
+            Card(
+                modifier = Modifier.size(width = 160.dp, height = 96.dp).clickable { onSelectPhase(phase.id) },
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            ) {
+                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("${phase.order}. ${phase.label}", style = MaterialTheme.typography.titleSmall)
+                    Text("Phase ${phase.order}", style = MaterialTheme.typography.bodySmall)
+                    Text("Frame ${frameIndex + 1}", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
