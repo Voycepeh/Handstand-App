@@ -393,8 +393,10 @@ class LiveCoachingViewModel(
                 frame = smoothed,
                 sessionMode = sessionMode,
                 drillCameraSide = if (sessionMode == SessionMode.FREESTYLE) null else options.drillCameraSide,
+                effectiveView = options.effectiveView,
                 showIdealLine = options.showIdealLine,
                 showSkeleton = options.showSkeletonOverlay,
+                showCenterOfGravity = options.showCenterOfGravity,
                 freestyleViewMode = freestyleViewMode,
                 scaleMode = PoseScaleMode.FILL,
                 unreliableJointNames = corrected.unreliableJointNames,
@@ -1103,7 +1105,7 @@ class LiveCoachingViewModel(
 
     private fun calibrationMetadataJson(): String {
         val profile = activeMovementProfile ?: return ""
-        return "calibrationProfileVersion:${profile.profileVersion};calibrationUpdatedAtMs:${profile.updatedAtMs}"
+        return "calibrationProfileVersion:${profile.profileVersion};calibrationUpdatedAtMs:${profile.updatedAtMs};effectiveView:${options.effectiveView.name}"
     }
 
     private suspend fun maybePersistLearnedRepTemplate(nowMs: Long): DrillMovementProfile? {

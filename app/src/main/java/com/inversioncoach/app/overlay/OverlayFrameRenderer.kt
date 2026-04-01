@@ -2,6 +2,7 @@ package com.inversioncoach.app.overlay
 
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
 import android.util.Log
 import androidx.compose.ui.geometry.Rect
 import com.inversioncoach.app.pose.PoseCoordinateMapper
@@ -12,6 +13,7 @@ import kotlin.math.hypot
 data class OverlayDrawingFrame(
     val drawSkeleton: Boolean,
     val drawIdealLine: Boolean,
+    val drawCenterOfGravity: Boolean = true,
     val sourceWidth: Int = 0,
     val sourceHeight: Int = 0,
     val sourceRotationDegrees: Int = 0,
@@ -49,6 +51,16 @@ object OverlayFrameRenderer {
     private val jointFillPaint = Paint().apply {
         isAntiAlias = true
         style = Paint.Style.FILL
+    }
+    private val cogPaint = Paint().apply {
+        color = 0xFFFFD166.toInt()
+        isAntiAlias = true
+        style = Paint.Style.FILL
+    }
+    private val cogOutlinePaint = Paint().apply {
+        color = 0xCC1F2937.toInt()
+        isAntiAlias = true
+        style = Paint.Style.STROKE
     }
 
     fun drawAndroid(
@@ -121,11 +133,20 @@ object OverlayFrameRenderer {
             }
         }
 
-        if (frame.drawIdealLine) {
+        if (frame.drawIdealLine && model.showBalanceLane) {
             val (lineStart, lineEnd) = model.idealLine
             val mappedStart = mapper.map(lineStart.x, lineStart.y, projection)
             val mappedEnd = mapper.map(lineEnd.x, lineEnd.y, projection)
             canvas.drawLine(mappedStart.x, mappedStart.y, mappedEnd.x, mappedEnd.y, idealLinePaint)
+        }
+
+        if (frame.drawCenterOfGravity) {
+            model.centerOfGravity
+                ?.takeIf { isRenderableJoint(it, frame.unreliableJointNames) }
+                ?.let { center ->
+                    val mapped = mapper.map(center.x, center.y, projection)
+                    drawStar(canvas, mapped.x, mapped.y, style.jointRadius * 2.1f)
+                }
         }
     }
 
@@ -234,6 +255,22 @@ object OverlayFrameRenderer {
         val marginX = canvasWidth * 0.5f
         val marginY = canvasHeight * 0.5f
         return x in (-marginX)..(canvasWidth + marginX) && y in (-marginY)..(canvasHeight + marginY)
+    }
+
+    private fun drawStar(canvas: Canvas, centerX: Float, centerY: Float, radius: Float) {
+        val innerRadius = radius * 0.45f
+        val path = Path()
+        for (i in 0 until 10) {
+            val angle = Math.toRadians((i * 36.0) - 90.0)
+            val pointRadius = if (i % 2 == 0) radius else innerRadius
+            val x = centerX + (Math.cos(angle) * pointRadius).toFloat()
+            val y = centerY + (Math.sin(angle) * pointRadius).toFloat()
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        path.close()
+        cogOutlinePaint.strokeWidth = (radius * 0.22f).coerceAtLeast(1.2f)
+        canvas.drawPath(path, cogPaint)
+        canvas.drawPath(path, cogOutlinePaint)
     }
 }
 

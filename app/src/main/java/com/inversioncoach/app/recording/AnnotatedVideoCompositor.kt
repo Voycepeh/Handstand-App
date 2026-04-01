@@ -360,12 +360,14 @@ class AnnotatedVideoCompositor(
             sessionMode = overlay.sessionMode,
             joints = joints,
             drillCameraSide = overlay.drillCameraSide ?: drillCameraSide,
+            effectiveView = overlay.effectiveView,
             freestyleViewMode = overlay.freestyleViewMode,
         )
         return RenderInstruction(
             model = model,
             drawSkeleton = overlay.showSkeleton,
             drawIdealLine = overlay.showIdealLine,
+            drawCenterOfGravity = overlay.showCenterOfGravity,
             mirrored = overlay.mirrorMode,
             scaleMode = overlay.scaleMode,
             unreliableJointNames = overlay.unreliableJointNames,
@@ -488,6 +490,7 @@ class AnnotatedVideoCompositor(
         val model: OverlayRenderModel? = null,
         val drawSkeleton: Boolean = false,
         val drawIdealLine: Boolean = false,
+        val drawCenterOfGravity: Boolean = true,
         val mirrored: Boolean = false,
         val scaleMode: PoseScaleMode = PoseScaleMode.FIT,
         val unreliableJointNames: Set<String> = emptySet(),
@@ -595,6 +598,7 @@ class AnnotatedVideoCompositor(
             overlayProjectionFrame = OverlayDrawingFrame(
                 drawSkeleton = false,
                 drawIdealLine = false,
+                drawCenterOfGravity = true,
                 sourceWidth = displaySize.first,
                 sourceHeight = displaySize.second,
                 sourceRotationDegrees = 0,
@@ -723,8 +727,9 @@ class AnnotatedVideoCompositor(
                 height = height,
                 model = model,
                 frame = overlayProjectionFrame.copy(
-                    drawSkeleton = instruction.drawSkeleton,
-                    drawIdealLine = instruction.drawIdealLine,
+                drawSkeleton = instruction.drawSkeleton,
+                drawIdealLine = instruction.drawIdealLine,
+                drawCenterOfGravity = instruction.drawCenterOfGravity,
                     // Export video frames are already normalized into upright output space.
                     // Keep overlay projection in this same export-upright coordinate system.
                     sourceRotationDegrees = 0,

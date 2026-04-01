@@ -3,6 +3,7 @@ package com.inversioncoach.app.recording
 import com.inversioncoach.app.model.JointPoint
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.overlay.DrillCameraSide
+import com.inversioncoach.app.overlay.EffectiveView
 import com.inversioncoach.app.overlay.FreestyleViewMode
 import com.inversioncoach.app.pose.PoseScaleMode
 import org.json.JSONArray
@@ -34,9 +35,11 @@ object OverlayTimelineJson {
                     put("drillMetadata", JSONObject().apply {
                         put("sessionMode", frame.drillMetadata.sessionMode.name)
                         put("drillCameraSide", frame.drillMetadata.drillCameraSide?.name)
+                        put("effectiveView", frame.drillMetadata.effectiveView.name)
                         put("freestyleViewMode", frame.drillMetadata.freestyleViewMode.name)
                         put("showSkeleton", frame.drillMetadata.showSkeleton)
                         put("showIdealLine", frame.drillMetadata.showIdealLine)
+                        put("showCenterOfGravity", frame.drillMetadata.showCenterOfGravity)
                         put("bodyVisible", frame.drillMetadata.bodyVisible)
                         put("mirrorMode", frame.drillMetadata.mirrorMode)
                     })
@@ -80,9 +83,11 @@ object OverlayTimelineJson {
                         drillMetadata = OverlayDrillMetadata(
                             sessionMode = SessionMode.valueOf(metadata.optString("sessionMode", SessionMode.DRILL.name)),
                             drillCameraSide = metadata.optString("drillCameraSide").takeIf { it.isNotBlank() }?.let(DrillCameraSide::valueOf),
+                            effectiveView = EffectiveView.valueOf(metadata.optString("effectiveView", EffectiveView.SIDE.name)),
                             freestyleViewMode = FreestyleViewMode.valueOf(metadata.optString("freestyleViewMode", FreestyleViewMode.UNKNOWN.name)),
                             showSkeleton = metadata.optBoolean("showSkeleton", true),
                             showIdealLine = metadata.optBoolean("showIdealLine", true),
+                            showCenterOfGravity = metadata.optBoolean("showCenterOfGravity", true),
                             bodyVisible = metadata.optBoolean("bodyVisible", true),
                             mirrorMode = metadata.optBoolean("mirrorMode", false),
                         ),

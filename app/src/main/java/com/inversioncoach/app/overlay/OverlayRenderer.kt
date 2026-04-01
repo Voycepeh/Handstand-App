@@ -25,6 +25,7 @@ fun OverlayRenderer(
     previewContentRect: Rect? = null,
     scaleMode: PoseScaleMode = PoseScaleMode.FIT,
     showIdealLine: Boolean,
+    showCenterOfGravity: Boolean = true,
     showDebugOverlay: Boolean = false,
     debugMetrics: List<AlignmentMetric> = emptyList(),
     debugAngles: List<AngleDebugMetric> = emptyList(),
@@ -32,12 +33,13 @@ fun OverlayRenderer(
     activeFault: String = "",
     cueText: String = "",
     drillCameraSide: DrillCameraSide = DrillCameraSide.LEFT,
+    effectiveView: EffectiveView = EffectiveView.SIDE,
     freestyleViewMode: FreestyleViewMode = FreestyleViewMode.UNKNOWN,
     unreliableJointNames: Set<String> = emptySet(),
 ) {
     Canvas(modifier = modifier) {
         val joints = frame?.joints.orEmpty()
-        val model = OverlayGeometry.build(drillType, sessionMode, joints, drillCameraSide, freestyleViewMode)
+        val model = OverlayGeometry.build(drillType, sessionMode, joints, drillCameraSide, effectiveView, freestyleViewMode)
         OverlayFrameRenderer.drawAndroid(
             canvas = drawContext.canvas.nativeCanvas,
             width = size.width.toInt().coerceAtLeast(1),
@@ -46,6 +48,7 @@ fun OverlayRenderer(
             frame = OverlayDrawingFrame(
                 drawSkeleton = joints.isNotEmpty(),
                 drawIdealLine = showIdealLine,
+                drawCenterOfGravity = showCenterOfGravity,
                 sourceWidth = frame?.analysisWidth ?: 0,
                 sourceHeight = frame?.analysisHeight ?: 0,
                 // Live analyzer coordinates are already normalized to preview-upright space.

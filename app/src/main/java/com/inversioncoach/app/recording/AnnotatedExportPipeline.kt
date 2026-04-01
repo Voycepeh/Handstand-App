@@ -8,6 +8,7 @@ import com.inversioncoach.app.model.JointPoint
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.overlay.DrillCameraSide
+import com.inversioncoach.app.overlay.EffectiveView
 import com.inversioncoach.app.overlay.FreestyleViewMode
 import com.inversioncoach.app.pose.PoseScaleMode
 import com.inversioncoach.app.storage.repository.SessionRepository
@@ -34,10 +35,12 @@ data class AnnotatedOverlayFrame(
     val confidence: Float,
     val sessionMode: SessionMode,
     val drillCameraSide: DrillCameraSide?,
+    val effectiveView: EffectiveView = EffectiveView.SIDE,
     val freestyleViewMode: FreestyleViewMode = FreestyleViewMode.UNKNOWN,
     val bodyVisible: Boolean,
     val showSkeleton: Boolean,
     val showIdealLine: Boolean,
+    val showCenterOfGravity: Boolean = true,
     val mirrorMode: Boolean,
     val sourceWidth: Int = 0,
     val sourceHeight: Int = 0,
@@ -54,8 +57,10 @@ class OverlayStabilizer {
         frame: SmoothedPoseFrame,
         sessionMode: SessionMode,
         drillCameraSide: DrillCameraSide?,
+        effectiveView: EffectiveView = EffectiveView.SIDE,
         showIdealLine: Boolean,
         showSkeleton: Boolean,
+        showCenterOfGravity: Boolean = true,
         freestyleViewMode: FreestyleViewMode = FreestyleViewMode.UNKNOWN,
         scaleMode: PoseScaleMode = PoseScaleMode.FIT,
         unreliableJointNames: Set<String> = emptySet(),
@@ -79,10 +84,12 @@ class OverlayStabilizer {
             confidence = frame.confidence,
             sessionMode = sessionMode,
             drillCameraSide = drillCameraSide,
+            effectiveView = effectiveView,
             freestyleViewMode = freestyleViewMode,
             bodyVisible = visibilityGood,
             showSkeleton = drawSkeleton && showSkeleton,
             showIdealLine = showIdealLine,
+            showCenterOfGravity = showCenterOfGravity,
             mirrorMode = frame.mirrored,
             sourceWidth = frame.analysisWidth,
             sourceHeight = frame.analysisHeight,

@@ -10,6 +10,8 @@ data class OverlayRenderModel(
     val joints: List<JointPoint>,
     val connections: List<Pair<String, String>>,
     val idealLine: Pair<JointPoint, JointPoint>,
+    val centerOfGravity: JointPoint? = null,
+    val showBalanceLane: Boolean = true,
 )
 
 object OverlayGeometry {
@@ -22,14 +24,19 @@ object OverlayGeometry {
         sessionMode: SessionMode,
         joints: List<JointPoint>,
         drillCameraSide: DrillCameraSide,
+        effectiveView: EffectiveView = EffectiveView.SIDE,
         freestyleViewMode: FreestyleViewMode? = null,
     ): OverlayRenderModel {
         val mode = freestyleViewMode ?: freestyleClassifier.classify(joints)
         return if (sessionMode == SessionMode.FREESTYLE) {
-            freestyleStrategy.build(joints, mode)
+            freestyleStrategy.build(joints, mode, effectiveView)
         } else {
             val base = drillStrategy.build(joints, drillCameraSide)
-            base.copy(idealLine = buildSupportLine(idealLineXForDrill(drillType, joints)))
+            base.copy(
+                idealLine = buildSupportLine(idealLineXForDrill(drillType, joints)),
+                centerOfGravity = computeCenterOfGravity(joints),
+                showBalanceLane = effectiveView == EffectiveView.SIDE,
+            )
         }
     }
 
@@ -75,7 +82,7 @@ object OverlayGeometry {
 }
 
 private class FreestyleOverlayStrategy {
-    fun build(joints: List<JointPoint>, viewMode: FreestyleViewMode): OverlayRenderModel {
+    fun build(joints: List<JointPoint>, viewMode: FreestyleViewMode, effectiveView: EffectiveView): OverlayRenderModel {
         val visible = joints.filter { it.visibility >= MIN_RENDER_VISIBILITY }.associateBy { it.name }
         val keptNames = buildSet {
             add("nose")
@@ -124,7 +131,13 @@ private class FreestyleOverlayStrategy {
             -> 0.5f
         }
 
-        return OverlayRenderModel(filtered, connections, idealLine = buildSupportLine(idealLineX))
+        return OverlayRenderModel(
+            joints = filtered,
+            connections = connections,
+            idealLine = buildSupportLine(idealLineX),
+            centerOfGravity = computeCenterOfGravity(joints),
+            showBalanceLane = effectiveView == EffectiveView.SIDE,
+        )
     }
 
     private fun profileLineX(joints: List<JointPoint>, side: String): Float {
@@ -141,7 +154,13 @@ private class FixedDrillSideOverlayStrategy {
         val names = listOf(OverlaySkeletonSpec.Nose) + OverlaySkeletonSpec.baseJoints.map { "${sidePrefix}_$it" }
         val filtered = names.mapNotNull { visible[it] }
         val connections = OverlaySkeletonSpec.sideConnections(sidePrefix).filter { (from, to) -> visible[from] != null && visible[to] != null }
-        return OverlayRenderModel(filtered, connections, idealLine = buildSupportLine(0.5f))
+        return OverlayRenderModel(
+            joints = filtered,
+            connections = connections,
+            idealLine = buildSupportLine(0.5f),
+            centerOfGravity = computeCenterOfGravity(filtered),
+            showBalanceLane = true,
+        )
     }
 }
 
@@ -150,4 +169,21 @@ private fun buildSupportLine(x: Float): Pair<JointPoint, JointPoint> {
     val clampedX = x.coerceIn(0.1f, 0.9f)
     return JointPoint(name = "support_line_top", x = clampedX, y = 0f, z = 0f, visibility = 1f) to
         JointPoint(name = "support_line_bottom", x = clampedX, y = 1f, z = 0f, visibility = 1f)
+}
+
+private fun computeCenterOfGravity(joints: List<JointPoint>): JointPoint? {
+    val weighted = listOf(
+        "left_shoulder" to 0.17f,
+        "right_shoulder" to 0.17f,
+        "left_hip" to 0.33f,
+        "right_hip" to 0.33f,
+    ).mapNotNull { (name, weight) ->
+        joints.firstOrNull { it.name == name }?.takeIf { it.visibility >= MIN_RENDER_VISIBILITY }?.let { joint -> joint to weight }
+    }
+    if (weighted.isEmpty()) return null
+    val totalWeight = weighted.sumOf { it.second.toDouble() }.toFloat().coerceAtLeast(0.0001f)
+    val x = weighted.sumOf { (joint, weight) -> (joint.x * weight).toDouble() }.toFloat() / totalWeight
+    val y = weighted.sumOf { (joint, weight) -> (joint.y * weight).toDouble() }.toFloat() / totalWeight
+    val visibility = weighted.minOf { it.first.visibility }
+    return JointPoint(name = "center_of_gravity", x = x, y = y, z = 0f, visibility = visibility)
 }
