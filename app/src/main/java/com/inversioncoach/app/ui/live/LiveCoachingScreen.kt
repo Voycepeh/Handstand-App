@@ -296,6 +296,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                     modifier = Modifier.fillMaxSize(),
                     scaleMode = livePreviewScaleType.toPoseScaleMode(),
                     showIdealLine = options.showIdealLine,
+                    showCenterOfGravity = options.showCenterOfGravity,
                     showDebugOverlay = uiState.showDebugOverlay,
                     debugMetrics = uiState.debugMetrics,
                     debugAngles = uiState.debugAngles,
@@ -303,6 +304,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                     activeFault = uiState.activeFault,
                     cueText = if (uiState.sessionMode == SessionMode.FREESTYLE) "" else uiState.currentCue,
                     drillCameraSide = options.drillCameraSide,
+                    effectiveView = options.effectiveView,
                     freestyleViewMode = uiState.freestyleViewMode,
                     unreliableJointNames = uiState.unreliableJointNames,
                 )

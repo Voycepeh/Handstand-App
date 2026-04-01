@@ -64,6 +64,8 @@ import com.inversioncoach.app.movementprofile.CameraViewConstraint
 import com.inversioncoach.app.movementprofile.PhaseDefinition
 import com.inversioncoach.app.movementprofile.ReadinessRule
 import com.inversioncoach.app.overlay.DrillCameraSide
+import com.inversioncoach.app.overlay.EffectiveView
+import com.inversioncoach.app.overlay.EffectiveViewResolver
 import com.inversioncoach.app.overlay.FreestyleOrientationClassifier
 import com.inversioncoach.app.recording.AnnotatedExportPipeline
 import com.inversioncoach.app.recording.AnnotatedOverlayFrame
@@ -225,6 +227,11 @@ class DefaultUploadVideoAnalysisRunner(
         validateSelectedDrillForUpload(selectedDrillId, drillDefinition)?.let { error(it) }
         val drillType = DrillType.FREESTYLE
         val resolvedCalibrationProfile: com.inversioncoach.app.calibration.DrillMovementProfile? = null
+        val resolvedEffectiveView = EffectiveViewResolver.resolve(
+            explicit = null,
+            drillDefaultCameraView = drillDefinition?.cameraView,
+            freestyleFallback = EffectiveView.FREESTYLE,
+        )
         val sessionId = repository.saveSession(
             SessionRecord(
                 title = drillDefinition?.name?.let { "$it Upload Analysis" } ?: "Uploaded Video Analysis",
@@ -244,6 +251,7 @@ class DefaultUploadVideoAnalysisRunner(
                         "drillId" to (selectedDrillId ?: ""),
                         "referenceTemplateId" to (selectedReferenceTemplateId ?: ""),
                         "isReferenceUpload" to isReferenceUpload.toString(),
+                        "effectiveView" to resolvedEffectiveView.name,
                     ),
                 ),
                 annotatedVideoUri = null,
@@ -734,10 +742,12 @@ class DefaultUploadVideoAnalysisRunner(
                     confidence = point.confidence,
                     sessionMode = SessionMode.FREESTYLE,
                     drillCameraSide = DrillCameraSide.LEFT,
+                    effectiveView = resolvedEffectiveView,
                     freestyleViewMode = viewMode,
                     bodyVisible = point.confidence > 0f,
                     showSkeleton = true,
                     showIdealLine = true,
+                    showCenterOfGravity = true,
                     mirrorMode = false,
                     sourceWidth = metadata.width,
                     sourceHeight = metadata.height,

@@ -3,6 +3,7 @@ package com.inversioncoach.app.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.inversioncoach.app.overlay.DrillCameraSide
+import com.inversioncoach.app.overlay.EffectiveView
 import com.inversioncoach.app.overlay.FreestyleViewMode
 
 enum class DrillType(val displayName: String) {
@@ -530,8 +531,10 @@ data class LiveSessionOptions(
     val recordingEnabled: Boolean = true,
     val showSkeletonOverlay: Boolean = true,
     val showIdealLine: Boolean = true,
+    val showCenterOfGravity: Boolean = true,
     val zoomOutCamera: Boolean = true,
     val drillCameraSide: DrillCameraSide = DrillCameraSide.LEFT,
+    val effectiveView: EffectiveView = EffectiveView.FREESTYLE,
 ) {
     companion object {
         fun freestyleDefaults(): LiveSessionOptions = LiveSessionOptions(
@@ -539,7 +542,9 @@ data class LiveSessionOptions(
             recordingEnabled = true,
             showSkeletonOverlay = true,
             showIdealLine = true,
+            showCenterOfGravity = true,
             zoomOutCamera = true,
+            effectiveView = EffectiveView.FREESTYLE,
         )
     }
 }

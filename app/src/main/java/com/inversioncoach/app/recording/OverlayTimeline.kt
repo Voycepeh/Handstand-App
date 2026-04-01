@@ -3,6 +3,7 @@ package com.inversioncoach.app.recording
 import com.inversioncoach.app.model.JointPoint
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.overlay.DrillCameraSide
+import com.inversioncoach.app.overlay.EffectiveView
 import com.inversioncoach.app.overlay.FreestyleViewMode
 import com.inversioncoach.app.pose.PoseScaleMode
 
@@ -35,9 +36,11 @@ data class OverlayTimelineFrame(
 data class OverlayDrillMetadata(
     val sessionMode: SessionMode,
     val drillCameraSide: DrillCameraSide?,
+    val effectiveView: EffectiveView = EffectiveView.SIDE,
     val freestyleViewMode: FreestyleViewMode = FreestyleViewMode.UNKNOWN,
     val showSkeleton: Boolean,
     val showIdealLine: Boolean,
+    val showCenterOfGravity: Boolean = true,
     val bodyVisible: Boolean,
     val mirrorMode: Boolean,
 )
@@ -69,9 +72,11 @@ fun AnnotatedOverlayFrame.toTimelineFrame(sessionId: Long, sessionStartedAtMs: L
         drillMetadata = OverlayDrillMetadata(
             sessionMode = sessionMode,
             drillCameraSide = drillCameraSide,
+            effectiveView = effectiveView,
             freestyleViewMode = freestyleViewMode,
             showSkeleton = showSkeleton,
             showIdealLine = showIdealLine,
+            showCenterOfGravity = showCenterOfGravity,
             bodyVisible = bodyVisible,
             mirrorMode = mirrorMode,
         ),
@@ -90,10 +95,12 @@ fun OverlayTimelineFrame.toAnnotatedOverlayFrame(): AnnotatedOverlayFrame = Anno
     confidence = confidence,
     sessionMode = drillMetadata.sessionMode,
     drillCameraSide = drillMetadata.drillCameraSide,
+    effectiveView = drillMetadata.effectiveView,
     freestyleViewMode = drillMetadata.freestyleViewMode,
     bodyVisible = drillMetadata.bodyVisible,
     showSkeleton = drillMetadata.showSkeleton,
     showIdealLine = drillMetadata.showIdealLine,
+    showCenterOfGravity = drillMetadata.showCenterOfGravity,
     mirrorMode = drillMetadata.mirrorMode,
     sourceWidth = captureWidth ?: 0,
     sourceHeight = captureHeight ?: 0,

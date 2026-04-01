@@ -15,7 +15,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,6 +39,7 @@ import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.LiveSessionOptions
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import com.inversioncoach.app.overlay.EffectiveView
 
 private val defaultSessionOptions = LiveSessionOptions(
     voiceEnabled = true,
@@ -44,6 +47,7 @@ private val defaultSessionOptions = LiveSessionOptions(
     showSkeletonOverlay = true,
     showIdealLine = true,
     zoomOutCamera = true,
+    effectiveView = EffectiveView.SIDE,
 )
 
 private data class DrillGridItem(
@@ -72,10 +76,13 @@ fun StartDrillScreen(
 
     var selectedDrill by remember { mutableStateOf<DrillType?>(null) }
     var preferredSide by remember { mutableStateOf(defaultSessionOptions.drillCameraSide) }
+    var selectedView by remember { mutableStateOf(EffectiveView.SIDE) }
+    var showCenterOfGravity by remember { mutableStateOf(true) }
 
     LaunchedEffect(selectedDrill) {
         val drill = selectedDrill ?: return@LaunchedEffect
         preferredSide = repository.getDrillCameraSide(drill) ?: defaultSessionOptions.drillCameraSide
+        selectedView = if (drill == DrillType.FREESTYLE) EffectiveView.FREESTYLE else EffectiveView.SIDE
     }
 
     ScaffoldedScreen(title = "Choose Drill", onBack = onBack) { padding ->
@@ -111,12 +118,33 @@ fun StartDrillScreen(
             }
 
             if (selectedDrill != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    EffectiveView.entries.forEach { view ->
+                        FilterChip(
+                            selected = selectedView == view,
+                            onClick = { selectedView = view },
+                            label = { Text(view.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    Text("Show CoG star")
+                    Switch(checked = showCenterOfGravity, onCheckedChange = { showCenterOfGravity = it })
+                }
                 Card(
                     onClick = {
                         val drill = selectedDrill ?: return@Card
                         onStart(
                             drill,
-                            defaultSessionOptions.copy(drillCameraSide = preferredSide),
+                            defaultSessionOptions.copy(
+                                drillCameraSide = preferredSide,
+                                showCenterOfGravity = showCenterOfGravity,
+                                effectiveView = selectedView,
+                            ),
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
