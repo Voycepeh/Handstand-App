@@ -46,18 +46,17 @@ import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.ReferenceAssetRecord
 import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.SessionMode
-import com.inversioncoach.app.model.SessionComparisonRecord
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SessionSource
 import com.inversioncoach.app.calibration.RuntimeBodyProfileResolver
+import com.inversioncoach.app.drills.catalog.CatalogMovementType
+import com.inversioncoach.app.drills.studio.UploadAnalysisDrillAuthoringMapper
 import com.inversioncoach.app.movementprofile.ExistingDrillToProfileAdapter
 import com.inversioncoach.app.movementprofile.AnalysisProgressObserver
 import com.inversioncoach.app.movementprofile.MlKitVideoPoseFrameSource
-import com.inversioncoach.app.movementprofile.MovementComparisonEngine
 import com.inversioncoach.app.movementprofile.MovementProfileExtractor
 import com.inversioncoach.app.movementprofile.UploadedVideoAnalyzer
 import com.inversioncoach.app.movementprofile.VideoPoseFrameSource
-import com.inversioncoach.app.movementprofile.ReferenceTemplateDefinition
 import com.inversioncoach.app.movementprofile.MovementProfile
 import com.inversioncoach.app.movementprofile.MovementType
 import com.inversioncoach.app.movementprofile.CameraViewConstraint
@@ -76,7 +75,11 @@ import com.inversioncoach.app.recording.OverlayTimelineJson
 import com.inversioncoach.app.recording.toTimelineFrame
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.storage.repository.SessionRepository
+import com.inversioncoach.app.storage.repository.SessionRepositoryUploadAuthoringStore
+import com.inversioncoach.app.storage.repository.ensureDrillForUploadWriteback
+import com.inversioncoach.app.storage.repository.persistUploadAuthoredDrillTemplate
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import com.inversioncoach.app.ui.drillstudio.toDrillTemplate
 import com.inversioncoach.app.ui.live.SessionDiagnostics
 import com.inversioncoach.app.pose.PoseScaleMode
 import kotlinx.coroutines.Dispatchers
@@ -92,7 +95,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
-import org.json.JSONObject
 
 private const val TAG = "UploadVideoFlow"
 private const val ANALYSIS_PROGRESS_UPDATE_FRAME_INTERVAL = 1
@@ -166,6 +168,7 @@ data class UploadFlowResult(
     val finalStage: UploadStage,
     val drillId: String? = null,
     val referenceTemplateId: String? = null,
+    val authoredDrillWritebackSucceeded: Boolean = false,
 )
 
 interface UploadVideoAnalysisRunner {
@@ -590,8 +593,10 @@ class DefaultUploadVideoAnalysisRunner(
                 ),
             )
             val extractor = MovementProfileExtractor()
+            val writebackStore = SessionRepositoryUploadAuthoringStore(repository)
             var drillId = selectedDrillId ?: "legacy_${drillType.name}"
             var templateId = selectedReferenceTemplateId
+            var writebackSeedDrill: com.inversioncoach.app.model.DrillDefinitionRecord? = drillDefinition
             val assetId = "asset-$sessionId"
             val profileId = "profile-$sessionId"
             repository.saveReferenceAsset(
@@ -640,6 +645,7 @@ class DefaultUploadVideoAnalysisRunner(
                         sourceSessionId = sessionId,
                     )
                     drillId = createdDrill.id
+                    writebackSeedDrill = createdDrill
                     createdTemplate
                 } else {
                     repository.createTemplateFromReferenceUpload(
@@ -665,68 +671,49 @@ class DefaultUploadVideoAnalysisRunner(
                         ),
                     )
                 }
-            } else {
-                val selectedTemplateRecord = selectedReferenceTemplateId?.let { repository.getReferenceTemplate(it) }
-                if (selectedTemplateRecord != null) {
-                    val referenceProfileId = selectedTemplateRecord.sourceProfileIdsJson.split('|').firstOrNull().orEmpty()
-                    val referenceProfile = repository.getMovementProfile(referenceProfileId)
-                    if (referenceProfile != null) {
-                        val comparison = MovementComparisonEngine().compareStoredProfiles(
-                            subject = extractor.toSnapshot(subjectProfile),
-                            reference = extractor.toSnapshot(referenceProfile),
-                        )
-                        repository.saveSessionComparison(
-                            SessionComparisonRecord(
-                                sessionId = sessionId,
-                                subjectAssetId = assetId,
-                                subjectProfileId = subjectProfile.id,
-                                drillId = drillId,
-                                templateId = selectedTemplateRecord.id,
-                                overallSimilarityScore = comparison.overallSimilarityScore,
-                                phaseScoresJson = comparison.phaseScores.entries.joinToString("|") { "${it.key}:${it.value}" },
-                                differencesJson = comparison.topDifferences.joinToString("|"),
-                                summary = "Compared against ${selectedTemplateRecord.displayName}",
-                                scoringVersion = 1,
-                                createdAtMs = System.currentTimeMillis(),
+            }
+            val writebackTarget = ensureDrillForUploadWriteback(
+                store = writebackStore,
+                preferredDrill = writebackSeedDrill,
+                preferredDrillId = drillId.takeIf { !it.startsWith("legacy_") },
+                createDrillFromReferenceUpload = createDrillFromReferenceUpload,
+                pendingDrillName = pendingDrillName,
+            )
+            val drillRecord = writebackTarget?.drill
+            var authoredWritebackSucceeded = false
+            if (drillRecord != null) {
+                drillId = drillRecord.id
+                val extractedPayload = UploadAnalysisDrillAuthoringMapper.fromAnalysis(
+                    analysis = analysis,
+                    movementType = if (trackingMode == UploadTrackingMode.REP_BASED) CatalogMovementType.REP else CatalogMovementType.HOLD,
+                )
+                val updatedTemplate = UploadAnalysisDrillAuthoringMapper.applyToTemplate(
+                    seed = drillRecord.toDrillTemplate(seed = null),
+                    payload = extractedPayload,
+                )
+                persistUploadAuthoredDrillTemplate(
+                    store = writebackStore,
+                    record = drillRecord,
+                    template = updatedTemplate,
+                    ready = drillRecord.status == DrillStatus.READY,
+                )
+                repository.updateMediaPipelineState(sessionId) { session ->
+                    session.copy(
+                        drillId = drillRecord.id,
+                        referenceTemplateId = templateId,
+                        metricsJson = mergeMetricsJson(
+                            session.metricsJson,
+                            extractedPayload.inferredMetadata + mapOf(
+                                "drillId" to drillRecord.id,
+                                "comparisonDeferred" to "true",
                             ),
-                        )
-                        repository.updateMediaPipelineState(sessionId) { session ->
-                            session.copy(
-                                drillId = drillId,
-                                referenceTemplateId = selectedTemplateRecord.id,
-                                metricsJson = mergeMetricsJson(
-                                    session.metricsJson,
-                                    mapOf(
-                                        "drillId" to drillId,
-                                        "referenceTemplateId" to selectedTemplateRecord.id,
-                                        "referenceTemplateName" to selectedTemplateRecord.displayName,
-                                        "comparisonOverall" to comparison.overallSimilarityScore.toString(),
-                                    ),
-                                ),
-                            )
-                        }
-                    } else {
-                        val templateDefinition = templateDefinitionFromRecord(selectedTemplateRecord)
-                        if (templateDefinition != null) {
-                            val comparison = MovementComparisonEngine().compare(templateDefinition, analysis)
-                            repository.saveSessionComparison(
-                                SessionComparisonRecord(
-                                    sessionId = sessionId,
-                                    subjectAssetId = assetId,
-                                    subjectProfileId = subjectProfile.id,
-                                    drillId = drillId,
-                                    templateId = selectedTemplateRecord.id,
-                                    overallSimilarityScore = comparison.overallSimilarityScore,
-                                    phaseScoresJson = comparison.phaseScores.entries.joinToString("|") { "${it.key}:${it.value}" },
-                                    differencesJson = comparison.topDifferences.joinToString("|"),
-                                    summary = "Compared against ${selectedTemplateRecord.displayName}",
-                                    scoringVersion = 1,
-                                    createdAtMs = System.currentTimeMillis(),
-                                ),
-                            )
-                        }
-                    }
+                        ),
+                    )
                 }
+                authoredWritebackSucceeded = true
+                log("repo_write authored_drill_updated drillId=${drillRecord.id} phaseCount=${extractedPayload.phases.size} keyframeCount=${extractedPayload.keyframes.size}")
+            } else {
+                log("repo_write authored_drill_skipped reason=missing_drill drillId=$drillId")
             }
 
             val orientationClassifier = FreestyleOrientationClassifier()
@@ -965,6 +952,7 @@ class DefaultUploadVideoAnalysisRunner(
                     finalStage = UploadStage.COMPLETED_ANNOTATED,
                     drillId = drillId,
                     referenceTemplateId = templateId,
+                    authoredDrillWritebackSucceeded = authoredWritebackSucceeded,
                 )
             }
 
@@ -1001,6 +989,7 @@ class DefaultUploadVideoAnalysisRunner(
                 finalStage = UploadStage.COMPLETED_RAW_ONLY,
                 drillId = drillId,
                 referenceTemplateId = templateId,
+                authoredDrillWritebackSucceeded = authoredWritebackSucceeded,
             )
         } catch (error: Throwable) {
             SessionDiagnostics.record(
@@ -1147,53 +1136,8 @@ class DefaultUploadVideoAnalysisRunner(
         else -> DrillCameraSide.LEFT
     }
 
-    private fun templateDefinitionFromRecord(record: com.inversioncoach.app.model.ReferenceTemplateRecord): ReferenceTemplateDefinition? {
-        return runCatching {
-            val checkpoint = JSONObject(record.checkpointJson)
-            val tolerance = JSONObject(record.toleranceJson)
-            val phase = checkpoint.optJSONObject("phaseTimingsMs") ?: JSONObject()
-            val alignment = tolerance.optJSONObject("alignmentTargets")
-                ?: tolerance.optJSONObject("featureMeans")
-                ?: JSONObject()
-            val stability = tolerance.optJSONObject("stabilityTargets")
-                ?: tolerance.optJSONObject("stabilityJitter")
-                ?: JSONObject()
-
-            ReferenceTemplateDefinition(
-                id = record.id,
-                templateName = record.displayName,
-                drillId = record.drillId,
-                description = record.displayName,
-                phaseTimingMs = jsonLongMap(phase),
-                alignmentTargets = jsonFloatMap(alignment),
-                stabilityTargets = jsonFloatMap(stability),
-                assetPath = "",
-            )
-        }.getOrNull()
-    }
-
     private suspend fun templatesAreEmptyForDrill(repository: SessionRepository, drillId: String): Boolean =
         repository.listTemplatesForDrill(drillId).first().isEmpty()
-
-    private fun jsonLongMap(obj: JSONObject): Map<String, Long> {
-        val out = linkedMapOf<String, Long>()
-        val keys = obj.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            out[key] = obj.optLong(key)
-        }
-        return out
-    }
-
-    private fun jsonFloatMap(obj: JSONObject): Map<String, Float> {
-        val out = linkedMapOf<String, Float>()
-        val keys = obj.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            out[key] = obj.optDouble(key, 0.0).toFloat()
-        }
-        return out
-    }
 }
 
 internal fun validateSelectedDrillForUpload(
@@ -1401,7 +1345,11 @@ class UploadVideoViewModel(
                     },
                 )
             }.onSuccess { result ->
-                val completionMessage = if (result.annotatedReady) {
+                val completionMessage = if (result.authoredDrillWritebackSucceeded && result.annotatedReady) {
+                    "Annotated replay ready; extracted drill phases saved (comparison deferred)"
+                } else if (result.authoredDrillWritebackSucceeded) {
+                    "Raw replay ready, annotated replay unavailable; extracted drill phases saved (comparison deferred)"
+                } else if (result.annotatedReady) {
                     "Annotated replay ready"
                 } else {
                     "Raw replay ready, annotated replay unavailable"
@@ -1694,9 +1642,9 @@ fun UploadVideoScreen(
                 Button(onClick = { onOpenResults(resultSessionId) }, modifier = Modifier.fillMaxWidth()) {
                     Text("View session")
                 }
-                if (state.isReferenceUpload && onOpenDrillStudio != null && !state.selectedDrillId.isNullOrBlank()) {
+                if (onOpenDrillStudio != null && !state.selectedDrillId.isNullOrBlank()) {
                     OutlinedButton(onClick = { onOpenDrillStudio(state.selectedDrillId!!, state.selectedReferenceTemplateId) }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Open Drill Studio")
+                        Text("Open populated Drill Studio")
                     }
                 }
             } else if (resultSessionId != null) {
