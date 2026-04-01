@@ -53,6 +53,14 @@ data class UserProfileStatus(
     val isCalibrated: Boolean,
 )
 
+
+internal fun projectSelectableDrills(drills: List<DrillDefinitionRecord>): List<SelectableDrill> =
+    drills
+        .associateBy { it.id }
+        .values
+        .map { it.toSelectableDrill() }
+        .sortedWith(compareBy<SelectableDrill> { it.name.lowercase() }.thenBy { it.id })
+
 class SessionRepository(
     private val sessionDao: SessionDao,
     private val userSettingsDao: UserSettingsDao,
@@ -261,16 +269,12 @@ class SessionRepository(
     fun getAllDrills(): Flow<List<DrillDefinitionRecord>> = drillDefinitionDao.observeAll()
     fun getActiveDrills(): Flow<List<DrillDefinitionRecord>> = drillDefinitionDao.observeActive()
     fun observeDrillLibrary(): Flow<List<SelectableDrill>> =
-        drillDefinitionDao.observeAll().map { drills ->
-            drills
-                .associateBy { it.id }
-                .values
-                .map { it.toSelectableDrill() }
-                .sortedBy { it.name.lowercase() }
-        }
+        drillDefinitionDao.observeAll().map(::projectSelectableDrills)
 
-    fun observeManageDrills(): Flow<List<SelectableDrill>> =
+    fun observeSelectableTrainingDrills(): Flow<List<SelectableDrill>> =
         observeDrillLibrary().map { drills -> drills.filterNot { it.isArchived } }
+
+    fun observeManageDrills(): Flow<List<SelectableDrill>> = observeSelectableTrainingDrills()
 
     fun observeDrillStudioDrills(): Flow<List<SelectableDrill>> =
         observeDrillLibrary().map { drills -> drills.filter { it.isEditable } }

@@ -1006,7 +1006,7 @@ class LiveCoachingViewModel(
             smoother.reset()
             correctionEngine.reset()
             activeMovementProfile = calibrationProfileProvider.resolve(drillType)
-            activeDrillId = repository.resolveDrillIdForLegacyType(drillType)
+            activeDrillId = options.selectedDrillId ?: repository.resolveDrillIdForLegacyType(drillType)
             activeReferenceTemplateId = activeDrillId?.let { repository.getActiveTemplateForDrill(it)?.id }
             runtimeBodyProfileResolver?.resolve()?.let { resolved ->
                 activeUserProfileId = resolved.userProfileId

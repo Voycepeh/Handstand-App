@@ -10,6 +10,7 @@ class SessionRepositoryPortableDrillContractTest {
         listOf(
             "getAllDrills",
             "getActiveDrills",
+            "observeSelectableTrainingDrills",
             "createDrill",
             "updateDrill",
             "validateAndMarkDrillReady",

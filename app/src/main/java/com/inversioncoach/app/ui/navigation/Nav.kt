@@ -51,9 +51,9 @@ sealed class Route(val value: String) {
     data object DrillDetail : Route("drillDetail/{drill}") {
         fun create(drillType: DrillType): String = "drillDetail/${drillType.name}"
     }
-    data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}/{showCenterOfGravity}/{zoomOutCamera}/{drillCameraSide}/{effectiveView}") {
+    data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}/{showCenterOfGravity}/{zoomOutCamera}/{drillCameraSide}/{effectiveView}?selectedDrillId={selectedDrillId}") {
         fun create(drillType: DrillType, options: LiveSessionOptions): String =
-            "live/${drillType.name}/${options.voiceEnabled}/${options.recordingEnabled}/${options.showSkeletonOverlay}/${options.showIdealLine}/${options.showCenterOfGravity}/${options.zoomOutCamera}/${options.drillCameraSide.name}/${options.effectiveView.name}"
+            "live/${drillType.name}/${options.voiceEnabled}/${options.recordingEnabled}/${options.showSkeletonOverlay}/${options.showIdealLine}/${options.showCenterOfGravity}/${options.zoomOutCamera}/${options.drillCameraSide.name}/${options.effectiveView.name}?selectedDrillId=${Uri.encode(options.selectedDrillId ?: "")}"
     }
     data object Results : Route("results/{sessionId}") { fun create(sessionId: Long) = "results/$sessionId" }
     data object SessionTooShort : Route("session-too-short/{elapsedMs}/{thresholdSeconds}") {
@@ -124,6 +124,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             navArgument("zoomOutCamera") { type = NavType.BoolType },
             navArgument("drillCameraSide") { type = NavType.StringType },
             navArgument("effectiveView") { type = NavType.StringType },
+            navArgument("selectedDrillId") { type = NavType.StringType; defaultValue = "" },
         )) { backStack ->
             val args = backStack.arguments
             val drill = parseDrillTypeOrDefault(args?.getString("drill"), DrillType.WALL_HANDSTAND)
@@ -136,6 +137,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 zoomOutCamera = args?.getBoolean("zoomOutCamera") ?: true,
                 drillCameraSide = DrillCameraSide.entries.firstOrNull { it.name == args?.getString("drillCameraSide") } ?: DrillCameraSide.LEFT,
                 effectiveView = EffectiveView.entries.firstOrNull { it.name == args?.getString("effectiveView") } ?: EffectiveView.FREESTYLE,
+                selectedDrillId = args?.getString("selectedDrillId").orEmpty().ifBlank { null },
             )
             LiveCoachingScreen(drillType = drill, options = options, onStop = { result ->
                 if (result.wasDiscardedForShortDuration) navController.navigate(Route.SessionTooShort.create(result.elapsedSessionMs, result.validationThresholdSeconds))

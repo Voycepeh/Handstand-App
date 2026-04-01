@@ -10,6 +10,7 @@ import com.inversioncoach.app.storage.ServiceLocator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class InversionCoachApp : Application(), Configuration.Provider {
@@ -21,10 +22,10 @@ class InversionCoachApp : Application(), Configuration.Provider {
         appScope.launch {
             val repo = ServiceLocator.repository(this@InversionCoachApp)
             val now = System.currentTimeMillis()
-            DrillSeeder.seedDrills(now).forEach { drill ->
-                if (repo.getDrill(drill.id) == null) {
-                    repo.createDrill(drill)
-                }
+            val existingDrills = repo.getAllDrills().first()
+            val reconciledSeeds = DrillSeeder.reconcileSeededDrills(existing = existingDrills, nowMs = now)
+            if (reconciledSeeds.isNotEmpty()) {
+                repo.seedDrills(reconciledSeeds)
             }
             DrillSeeder.seedCalibration(now).forEach { calibration ->
                 repo.saveCalibrationConfig(calibration)

@@ -1,6 +1,8 @@
 package com.inversioncoach.app.drills
 
+import com.inversioncoach.app.drills.catalog.SkeletonTemplate
 import com.inversioncoach.app.model.DrillDefinitionRecord
+import com.inversioncoach.app.model.DrillType
 
 data class SelectableDrill(
     val id: String,
@@ -14,6 +16,8 @@ data class SelectableDrill(
     val isArchived: Boolean,
     val isEditable: Boolean,
     val isReferenceEligible: Boolean,
+    val legacyDrillType: DrillType,
+    val previewSkeleton: SkeletonTemplate?,
 )
 
 fun DrillDefinitionRecord.toSelectableDrill(): SelectableDrill {
@@ -30,6 +34,8 @@ fun DrillDefinitionRecord.toSelectableDrill(): SelectableDrill {
         isArchived = isArchived,
         isEditable = !isArchived,
         isReferenceEligible = status == DrillStatus.DRAFT || status == DrillStatus.READY,
+        legacyDrillType = DrillDefinitionResolver.resolveLegacyDrillType(this),
+        previewSkeleton = DrillStudioPayloadCodec.decodePreviewSkeleton(drillId = id, cueConfigJson = cueConfigJson),
     )
 }
 

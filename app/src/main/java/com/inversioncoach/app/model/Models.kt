@@ -535,6 +535,7 @@ data class LiveSessionOptions(
     val zoomOutCamera: Boolean = true,
     val drillCameraSide: DrillCameraSide = DrillCameraSide.LEFT,
     val effectiveView: EffectiveView = EffectiveView.FREESTYLE,
+    val selectedDrillId: String? = null,
 ) {
     companion object {
         fun freestyleDefaults(): LiveSessionOptions = LiveSessionOptions(
