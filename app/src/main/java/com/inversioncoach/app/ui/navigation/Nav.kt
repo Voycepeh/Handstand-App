@@ -55,7 +55,9 @@ sealed class Route(val value: String) {
     data object SessionTooShort : Route("session-too-short/{elapsedMs}/{thresholdSeconds}") {
         fun create(elapsedMs: Long, thresholdSeconds: Int) = "session-too-short/$elapsedMs/$thresholdSeconds"
     }
-    data object History : Route("history")
+    data object History : Route("history?drillId={drillId}") {
+        fun create(drillId: String? = null): String = "history?drillId=${Uri.encode(drillId ?: "")}"
+    }
     data object Progress : Route("progress")
     data object DrillHub : Route("drill-hub")
     data object DrillStudio : Route("drill-studio?mode={mode}&drillId={drillId}&templateId={templateId}") {
@@ -87,7 +89,7 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onStart = { navController.navigate(Route.Start.value) },
                 onStartFreestyle = { navController.navigate(Route.Live.create(DrillType.FREESTYLE, LiveSessionOptions.freestyleDefaults())) },
                 onLatestSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
-                onHistory = { navController.navigate(Route.History.value) },
+                onHistory = { navController.navigate(Route.History.create()) },
                 onProgress = { navController.navigate(Route.Progress.value) },
                 onDrillHub = { navController.navigate(Route.DrillHub.value) },
                 onSettings = { navController.navigate(Route.Settings.value) },
@@ -132,7 +134,17 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         composable(Route.Results.value, arguments = listOf(navArgument("sessionId") { type = NavType.LongType })) {
             ResultsScreen(sessionId = it.arguments?.getLong("sessionId") ?: 0L, onDone = { navController.popBackStack(Route.Home.value, false) })
         }
-        composable(Route.History.value) { HistoryScreen(onBack = { navController.popBackStack() }, onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) }) }
+        composable(
+            Route.History.value,
+            arguments = listOf(navArgument("drillId") { type = NavType.StringType; defaultValue = "" }),
+        ) {
+            val drillId = it.arguments?.getString("drillId").orEmpty().ifBlank { null }
+            HistoryScreen(
+                onBack = { navController.popBackStack() },
+                onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
+                drillIdFilter = drillId,
+            )
+        }
         composable(Route.Progress.value) { ProgressScreen(onBack = { navController.popBackStack() }, onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) }) }
         composable(Route.DrillHub.value) {
             DrillHubScreen(
@@ -205,14 +217,16 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onBack = { navController.popBackStack() },
                 onUploadReference = { id -> navController.navigate(Route.UploadVideoForDrill.create(id, null, true)) },
                 onUploadAttempt = { id, templateId -> navController.navigate(Route.UploadVideoForDrill.create(id, templateId, false)) },
-                onComparePastSessions = { navController.navigate(Route.History.value) },
-                onOpenDrillStudio = { drillId, templateId ->
+                onCompareAttempts = { selectedDrillId -> navController.navigate(Route.History.create(selectedDrillId)) },
+                onEditDrill = { drillId, templateId ->
                     navController.navigate(
                         if (templateId.isNullOrBlank()) Route.DrillStudio.createForDrill(drillId)
                         else Route.DrillStudio.createForTemplate(drillId, templateId),
                     )
                 },
-                onCreateNewDrillFromReference = { id -> navController.navigate(Route.UploadVideoForDrill.create(id, null, true, createNewDrillFromReference = true)) },
+                onStartLiveSession = { drillType ->
+                    navController.navigate(Route.Live.create(drillType, LiveSessionOptions.freestyleDefaults()))
+                },
             )
         }
         composable(Route.ManageDrills.value) {

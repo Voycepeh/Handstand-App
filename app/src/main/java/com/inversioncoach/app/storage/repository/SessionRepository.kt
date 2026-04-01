@@ -184,25 +184,51 @@ class SessionRepository(
         return drill to template
     }
 
+    suspend fun promoteSessionToReference(
+        sessionId: Long,
+        targetDrillId: String,
+        referenceName: String? = null,
+        setAsBaseline: Boolean = false,
+    ): ReferenceTemplateRecord? {
+        val profile = movementProfileDao.getByAssetId("asset-$sessionId") ?: movementProfileDao.getById("profile-$sessionId") ?: return null
+        val session = sessionDao.getById(sessionId) ?: return null
+        val drill = drillDefinitionDao.getById(targetDrillId) ?: return null
+        val resolvedReferenceName = referenceName?.takeIf { it.isNotBlank() }
+            ?: session.title.takeIf { it.isNotBlank() }?.let { "$it Reference" }
+            ?: "Reference ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date())}"
+        val template = createTemplateFromReferenceUpload(
+            drillId = drill.id,
+            sourceProfile = profile,
+            title = resolvedReferenceName,
+            sourceSessionId = sessionId,
+            isBaseline = false,
+        ).copy(sourceType = "SESSION_PROMOTION", sourceSessionId = sessionId)
+        referenceTemplateDao.upsert(template)
+        val updatedSession = when {
+            session.drillId.isNullOrBlank() -> session.copy(drillId = targetDrillId, referenceTemplateId = template.id)
+            session.drillId == targetDrillId -> session.copy(referenceTemplateId = template.id)
+            else -> session.copy(referenceTemplateId = template.id)
+        }
+        sessionDao.upsert(updatedSession)
+        return if (setAsBaseline) {
+            setBaselineTemplateForDrill(targetDrillId, template = template)
+        } else {
+            template
+        }
+    }
+
+    @Deprecated("Use promoteSessionToReference with explicit targetDrillId.")
     suspend fun promoteSessionToTemplate(
         sessionId: Long,
         drillId: String,
         title: String,
         setAsBaseline: Boolean = false,
-    ): ReferenceTemplateRecord? {
-        val profile = movementProfileDao.getByAssetId("asset-$sessionId") ?: movementProfileDao.getById("profile-$sessionId") ?: return null
-        val template = createTemplateFromReferenceUpload(
-            drillId = drillId,
-            sourceProfile = profile,
-            title = title,
-            sourceSessionId = sessionId,
-            isBaseline = setAsBaseline,
-        ).copy(sourceType = "SESSION_PROMOTION", sourceSessionId = sessionId)
-        referenceTemplateDao.upsert(template)
-        val session = sessionDao.getById(sessionId)
-        if (session != null) sessionDao.upsert(session.copy(drillId = drillId, referenceTemplateId = template.id))
-        return template
-    }
+    ): ReferenceTemplateRecord? = promoteSessionToReference(
+        sessionId = sessionId,
+        targetDrillId = drillId,
+        referenceName = title,
+        setAsBaseline = setAsBaseline,
+    )
 
     suspend fun setBaselineTemplateForDrill(
         drillId: String,
@@ -268,6 +294,14 @@ class SessionRepository(
     fun getComparisonsForSession(sessionId: Long): Flow<List<SessionComparisonRecord>> = sessionComparisonDao.observeAllForSession(sessionId)
     fun getComparisonsForDrill(drillId: String): Flow<List<SessionComparisonRecord>> = sessionComparisonDao.observeByDrill(drillId)
     fun getTemplatesForDrill(drillId: String): Flow<List<ReferenceTemplateRecord>> = referenceTemplateDao.observeByDrillId(drillId)
+    fun getCurrentReferenceForDrill(drillId: String): Flow<ReferenceTemplateRecord?> =
+        referenceTemplateDao.observeByDrillId(drillId).map { templates ->
+            templates
+                .sortedWith(compareByDescending<ReferenceTemplateRecord> { it.isBaseline }.thenByDescending { it.updatedAtMs })
+                .firstOrNull()
+        }
+    fun getReferenceTemplatesForDrill(drillId: String): Flow<List<ReferenceTemplateRecord>> = referenceTemplateDao.observeByDrillId(drillId)
+    fun getRecentSessionsForDrill(drillId: String): Flow<List<SessionRecord>> = sessionDao.observeByDrillId(drillId)
 
     suspend fun saveSession(record: SessionRecord): Long = sessionDao.upsert(record)
 

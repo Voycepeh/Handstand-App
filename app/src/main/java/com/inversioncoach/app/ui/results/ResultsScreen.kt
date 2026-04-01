@@ -19,11 +19,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -45,6 +47,7 @@ import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.model.SessionSource
 import com.inversioncoach.app.model.sessionMode
 import com.inversioncoach.app.model.SessionMode
+import com.inversioncoach.app.drills.DrillStatus
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.formatPrimaryPerformance
 import com.inversioncoach.app.ui.common.formatSessionDateTime
@@ -52,6 +55,8 @@ import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.common.parseSessionMetrics
 import com.inversioncoach.app.ui.common.buildSessionSummaryDisplay
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import com.inversioncoach.app.ui.components.DropdownOption
+import com.inversioncoach.app.ui.components.ReliableDropdownField
 import com.inversioncoach.app.ui.live.mediaAssetExists
 import com.inversioncoach.app.ui.live.selectReplayAsset
 import com.inversioncoach.app.ui.live.SessionDiagnostics
@@ -81,9 +86,46 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     var notes by remember { mutableStateOf("") }
     var diagnosticsExpanded by remember { mutableStateOf(false) }
     var persistedDiagnostics by remember { mutableStateOf<String?>(null) }
-    var setPromotedAsBaseline by remember { mutableStateOf(false) }
+    var showPromotionDialog by remember { mutableStateOf(false) }
+    var promotionError by remember { mutableStateOf<String?>(null) }
     var lastRefreshSignature by remember(sessionId) { mutableStateOf<String?>(null) }
     val clipboardManager = LocalClipboardManager.current
+
+    if (showPromotionDialog && session != null) {
+        SaveSessionAsReferenceDialog(
+            session = session!!,
+            drills = drills,
+            initialDrillId = session?.drillId ?: parseInlineMetrics(session?.metricsJson.orEmpty())["drillId"],
+            onDismiss = {
+                showPromotionDialog = false
+                promotionError = null
+            },
+            onSave = { targetDrillId, referenceName, setBaseline ->
+                scope.launch {
+                    val saved = repository.promoteSessionToReference(
+                        sessionId = sessionId,
+                        targetDrillId = targetDrillId,
+                        referenceName = referenceName,
+                        setAsBaseline = setBaseline,
+                    )
+                    if (saved == null) {
+                        promotionError = "Could not save reference."
+                    } else {
+                        promotionError = null
+                        showPromotionDialog = false
+                        val drillName = drills.firstOrNull { it.id == targetDrillId }?.name ?: "selected drill"
+                        val message = if (setBaseline) {
+                            "Saved as baseline reference for $drillName"
+                        } else {
+                            "Saved as reference for $drillName"
+                        }
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            errorMessage = promotionError,
+        )
+    }
 
     val collapsedIssueTimeline = remember(issueTimeline, session?.startedAtMs) {
         collapseIssueTimeline(issueTimeline, session?.startedAtMs)
@@ -477,38 +519,11 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save note") }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Checkbox(checked = setPromotedAsBaseline, onCheckedChange = { setPromotedAsBaseline = it })
-                Text("Set as baseline template", style = MaterialTheme.typography.bodyMedium)
-            }
             Button(
-                onClick = {
-                    scope.launch {
-                        val activeSession = session ?: return@launch
-                        val drillContextId = activeSession.drillId ?: parseInlineMetrics(activeSession.metricsJson)["drillId"]
-                        if (drillContextId.isNullOrBlank()) {
-                            Toast.makeText(context, "No drill context found for this session.", Toast.LENGTH_SHORT).show()
-                            return@launch
-                        }
-                        val template = repository.promoteSessionToTemplate(
-                            sessionId = activeSession.id,
-                            drillId = drillContextId,
-                            title = "${activeSession.title} Reference",
-                            setAsBaseline = setPromotedAsBaseline,
-                        )
-                        if (template == null) {
-                            Toast.makeText(context, "No extracted motion profile found for this session.", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(context, "Promoted to reference template.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                },
+                onClick = { showPromotionDialog = true },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = session != null,
-            ) { Text("Use as Reference Template") }
+            ) { Text("Use for Drill Reference") }
             Button(
                 onClick = {
                     shareVideoOnly(
@@ -546,6 +561,68 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text("Done") }
         }
     }
+}
+
+@Composable
+private fun SaveSessionAsReferenceDialog(
+    session: com.inversioncoach.app.model.SessionRecord,
+    drills: List<com.inversioncoach.app.model.DrillDefinitionRecord>,
+    initialDrillId: String?,
+    onDismiss: () -> Unit,
+    onSave: (targetDrillId: String, referenceName: String?, setBaseline: Boolean) -> Unit,
+    errorMessage: String?,
+) {
+    val drillOptions = remember(drills) {
+        drills
+            .filter { it.status == DrillStatus.READY }
+            .map { DropdownOption(it.id, it.name) }
+    }
+    var selectedDrillId by remember(initialDrillId, drillOptions) {
+        mutableStateOf(initialDrillId?.takeIf { id -> drillOptions.any { it.value == id } } ?: drillOptions.firstOrNull()?.value)
+    }
+    var referenceName by remember(session.id) { mutableStateOf(session.title.takeIf { it.isNotBlank() }?.let { "$it Reference" }.orEmpty()) }
+    var setAsBaseline by remember(session.id) { mutableStateOf(false) }
+    val selectedOption = drillOptions.firstOrNull { it.value == selectedDrillId }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Save Session as Drill Reference") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (drillOptions.isEmpty()) {
+                    Text("No drills available. Create or import a drill first.")
+                } else {
+                    ReliableDropdownField(
+                        label = "Drill",
+                        selected = selectedOption ?: drillOptions.first(),
+                        options = drillOptions,
+                        onOptionSelected = { selectedDrillId = it.value },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                OutlinedTextField(
+                    value = referenceName,
+                    onValueChange = { referenceName = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Reference name") },
+                    placeholder = { Text("Reference <date/time>") },
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Checkbox(checked = setAsBaseline, onCheckedChange = { setAsBaseline = it })
+                    Text("Set as baseline for this drill")
+                }
+                errorMessage?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { selectedDrillId?.let { onSave(it, referenceName.takeIf(String::isNotBlank), setAsBaseline) } },
+                enabled = selectedDrillId != null && drillOptions.isNotEmpty(),
+            ) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 

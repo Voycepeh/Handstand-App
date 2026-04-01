@@ -42,7 +42,11 @@ import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.SessionDiagnostics
 
 @Composable
-fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
+fun HistoryScreen(
+    onBack: () -> Unit,
+    onOpenSession: (Long) -> Unit,
+    drillIdFilter: String? = null,
+) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
@@ -88,11 +92,22 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     }
 
     val maxStorageBytes = settings.maxStorageMb.toLong() * 1024L * 1024L
-    val sortedSessions = remember(sessions, selectedSort, sortAscending, sessionSizes.toMap()) {
+    val filteredSessions = remember(sessions, drillIdFilter) {
+        if (drillIdFilter.isNullOrBlank()) {
+            sessions
+        } else {
+            sessions.filter { session ->
+                val drillId = session.drillId ?: parseHistoryMetric(session.metricsJson, "drillId")
+                drillId == drillIdFilter
+            }
+        }
+    }
+
+    val sortedSessions = remember(filteredSessions, selectedSort, sortAscending, sessionSizes.toMap()) {
         val sorted = when (selectedSort) {
-            HistorySort.RECENCY -> sessions.sortedBy { it.startedAtMs }
-            HistorySort.STORAGE_SIZE -> sessions.sortedBy { sessionSizes[it.id] ?: 0L }
-            HistorySort.SESSION_DURATION -> sessions.sortedBy {
+            HistorySort.RECENCY -> filteredSessions.sortedBy { it.startedAtMs }
+            HistorySort.STORAGE_SIZE -> filteredSessions.sortedBy { sessionSizes[it.id] ?: 0L }
+            HistorySort.SESSION_DURATION -> filteredSessions.sortedBy {
                 computeSessionDurationMs(it.startedAtMs, it.completedAtMs)
             }
         }
@@ -117,8 +132,12 @@ fun HistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Session insights", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            if (!drillIdFilter.isNullOrBlank()) {
+                val drillName = drills.firstOrNull { it.id == drillIdFilter }?.name ?: drillIdFilter
+                Text("Filtered to drill: $drillName", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                MetricCard("Total sessions", "${sessions.size}", Modifier.weight(1f))
+                MetricCard("Total sessions", "${sortedSessions.size}", Modifier.weight(1f))
                 MetricCard(
                     "Storage",
                     "${formatMb(totalStorageBytes)} MB used • ${formatMb((maxStorageBytes - totalStorageBytes).coerceAtLeast(0L))} MB left",
