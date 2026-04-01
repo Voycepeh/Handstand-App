@@ -8,7 +8,6 @@ import java.io.File
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.io.Serializable
-import kotlin.math.hypot
 import kotlin.math.max
 
 private const val UPLOAD_ANALYSIS_TAG = "UploadAnalysis"
@@ -90,7 +89,6 @@ class UploadedVideoAnalyzer(
         progressObserver: AnalysisProgressObserver? = null,
     ): UploadedVideoAnalysisResult {
         try {
-            val poseQualityGate = UploadedPoseQualityGate()
             val decodeStart = System.currentTimeMillis()
             Log.i(UPLOAD_ANALYSIS_TAG, "analysis_loop_start uri=$videoUri")
             progressObserver?.onProgress(AnalysisProgressEvent(stage = "decode_start", detail = "Sampling uploaded video frames"))
@@ -124,14 +122,7 @@ class UploadedVideoAnalyzer(
                         "analysis_sample frameIndex=$index total=${sourceFrames.size} timestampMs=${frame.timestampMs} dropped=$dropped",
                     )
                 }
-                val gateDecision = poseQualityGate.evaluate(frame)
-                if (frame.confidence <= 0f || frame.joints.isEmpty() || !gateDecision.acceptForOverlay) {
-                    if (!gateDecision.acceptForOverlay) {
-                        Log.w(
-                            UPLOAD_ANALYSIS_TAG,
-                            "analysis_frame_rejected frameIndex=$index timestampMs=${frame.timestampMs} reason=${gateDecision.reason}",
-                        )
-                    }
+                if (frame.confidence <= 0f || frame.joints.isEmpty()) {
                     dropped += 1
                     progressObserver?.onProgress(
                         AnalysisProgressEvent(
@@ -218,108 +209,6 @@ class UploadedVideoAnalyzer(
         profile.allowedViews.contains(CameraViewConstraint.SIDE_RIGHT) -> CameraViewConstraint.SIDE_RIGHT
         else -> CameraViewConstraint.ANY
     }
-}
-
-private data class PoseGateDecision(
-    val acceptForOverlay: Boolean,
-    val reason: String,
-)
-
-private data class PoseStats(
-    val bodyCenterX: Float,
-    val bodyCenterY: Float,
-    val torsoSize: Float,
-)
-
-private class UploadedPoseQualityGate(
-    private val minLandmarkVisibility: Float = 0.55f,
-    private val minReliableLandmarks: Int = 6,
-    private val maxCenterJumpTorsoUnits: Float = 1.4f,
-    private val maxReacquireCenterJumpTorsoUnits: Float = 2.0f,
-    private val minTorsoScaleRatio: Float = 0.6f,
-    private val maxTorsoScaleRatio: Float = 1.7f,
-    private val reacquireStableFrames: Int = 2,
-) {
-    private var previousAccepted: PoseStats? = null
-    private var waitingForReacquisition = false
-    private var stableReacquireCount = 0
-
-    fun evaluate(frame: PoseFrame): PoseGateDecision {
-        val stats = statsFor(frame) ?: run {
-            if (previousAccepted != null) {
-                waitingForReacquisition = true
-                stableReacquireCount = 0
-            }
-            return PoseGateDecision(acceptForOverlay = false, reason = "invalid_geometry_or_low_visibility")
-        }
-        val previous = previousAccepted
-        if (previous == null) {
-            previousAccepted = stats
-            return PoseGateDecision(acceptForOverlay = true, reason = "ok_initial")
-        }
-        val jumpThreshold = if (waitingForReacquisition) maxReacquireCenterJumpTorsoUnits else maxCenterJumpTorsoUnits
-        val centerJump = normalizedCenterJump(previous, stats)
-        val scaleRatio = stats.torsoSize / previous.torsoSize
-        if (centerJump > jumpThreshold || scaleRatio < minTorsoScaleRatio || scaleRatio > maxTorsoScaleRatio) {
-            waitingForReacquisition = true
-            stableReacquireCount = 0
-            return PoseGateDecision(acceptForOverlay = false, reason = "implausible_jump")
-        }
-        if (!waitingForReacquisition) {
-            previousAccepted = stats
-            return PoseGateDecision(acceptForOverlay = true, reason = "ok")
-        }
-
-        stableReacquireCount += 1
-        return if (stableReacquireCount >= reacquireStableFrames) {
-            waitingForReacquisition = false
-            stableReacquireCount = 0
-            previousAccepted = stats
-            PoseGateDecision(acceptForOverlay = true, reason = "reacquired_stable")
-        } else {
-            PoseGateDecision(acceptForOverlay = false, reason = "waiting_stable_reacquisition")
-        }
-    }
-
-    private fun statsFor(frame: PoseFrame): PoseStats? {
-        val jointsByName = frame.joints.associateBy { it.name }
-        val leftShoulder = jointsByName["left_shoulder"] ?: return null
-        val rightShoulder = jointsByName["right_shoulder"] ?: return null
-        val leftHip = jointsByName["left_hip"] ?: return null
-        val rightHip = jointsByName["right_hip"] ?: return null
-        if (leftShoulder.visibility < minLandmarkVisibility ||
-            rightShoulder.visibility < minLandmarkVisibility ||
-            leftHip.visibility < minLandmarkVisibility ||
-            rightHip.visibility < minLandmarkVisibility
-        ) {
-            return null
-        }
-        val reliableLandmarks = frame.joints.count { it.visibility >= minLandmarkVisibility }
-        if (reliableLandmarks < minReliableLandmarks) return null
-
-        val shoulderCenterX = (leftShoulder.x + rightShoulder.x) / 2f
-        val shoulderCenterY = (leftShoulder.y + rightShoulder.y) / 2f
-        val hipCenterX = (leftHip.x + rightHip.x) / 2f
-        val hipCenterY = (leftHip.y + rightHip.y) / 2f
-        val torsoWidth = distance(leftShoulder.x, leftShoulder.y, rightShoulder.x, rightShoulder.y)
-        val torsoHeight = distance(shoulderCenterX, shoulderCenterY, hipCenterX, hipCenterY)
-        if (torsoWidth < 0.02f || torsoHeight < 0.05f) return null
-        val torsoAspect = torsoHeight / torsoWidth
-        if (torsoAspect < 0.5f || torsoAspect > 8.0f) return null
-
-        return PoseStats(
-            bodyCenterX = (shoulderCenterX + hipCenterX) / 2f,
-            bodyCenterY = (shoulderCenterY + hipCenterY) / 2f,
-            torsoSize = max(torsoHeight, torsoWidth),
-        )
-    }
-
-    private fun normalizedCenterJump(previous: PoseStats, current: PoseStats): Float {
-        val centerDistance = distance(previous.bodyCenterX, previous.bodyCenterY, current.bodyCenterX, current.bodyCenterY)
-        return centerDistance / previous.torsoSize.coerceAtLeast(0.001f)
-    }
-
-    private fun distance(ax: Float, ay: Float, bx: Float, by: Float): Float = hypot(ax - bx, ay - by)
 }
 
 data class UploadedVideoAnalysisResult(
