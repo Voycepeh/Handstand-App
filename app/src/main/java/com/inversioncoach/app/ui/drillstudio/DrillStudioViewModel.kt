@@ -2,6 +2,10 @@ package com.inversioncoach.app.ui.drillstudio
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.inversioncoach.app.drills.DrillCameraView
+import com.inversioncoach.app.drills.DrillMovementMode
+import com.inversioncoach.app.drills.DrillSourceType
+import com.inversioncoach.app.drills.DrillStatus
 import com.inversioncoach.app.drills.catalog.AnalysisPlane
 import com.inversioncoach.app.drills.catalog.CalibrationTemplate
 import com.inversioncoach.app.drills.catalog.CameraView
@@ -16,16 +20,15 @@ import com.inversioncoach.app.drills.catalog.PhasePoseTemplate
 import com.inversioncoach.app.drills.catalog.PhaseWindow
 import com.inversioncoach.app.drills.catalog.SkeletonKeyframeTemplate
 import com.inversioncoach.app.drills.catalog.SkeletonTemplate
-import com.inversioncoach.app.drills.DrillCameraView
-import com.inversioncoach.app.drills.DrillMovementMode
-import com.inversioncoach.app.drills.DrillSourceType
-import com.inversioncoach.app.drills.DrillStatus
 import com.inversioncoach.app.model.DrillDefinitionRecord
 import com.inversioncoach.app.storage.repository.SessionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.Base64
 
 data class DrillStudioInitRequest(
     val mode: String = "drill",
@@ -60,22 +63,45 @@ class DrillStudioViewModel(
             val result = runCatching {
                 val catalog = catalogLoader?.invoke() ?: repository.loadCatalog()
                 val templateRecord = request.templateId?.let { templateId -> sessionRepository?.getReferenceTemplate(templateId) }
-                val seedDrillId = templateRecord?.drillId ?: request.drillId
+                val persistedDrill = request.drillId?.let { drillId -> sessionRepository?.getDrill(drillId) }
+                val seedDrillId = templateRecord?.drillId ?: persistedDrill?.id ?: request.drillId
                 val seed = when {
                     request.mode == "create" -> null
                     seedDrillId != null -> resolveSeedById(catalog.drills, seedDrillId)
                     else -> catalog.drills.firstOrNull()
                 }
-                val draftResult = resolveInitialDraft(
-                    mode = request.mode,
-                    templateRecord = templateRecord,
-                    seed = seed,
-                )
+                val persistedSeed = persistedDrill?.toDrillTemplate(seed)
+                val draftResult = when {
+                    request.mode == "create" -> resolveInitialDraft(
+                        mode = request.mode,
+                        templateRecord = templateRecord,
+                        seed = seed,
+                    )
+                    templateRecord != null -> resolveInitialDraft(
+                        mode = request.mode,
+                        templateRecord = templateRecord,
+                        seed = seed,
+                    )
+                    persistedSeed != null -> {
+                        EditorDraftResult(
+                            draft = DrillStudioDraftRepository.createDraftFromTemplate(
+                                template = persistedSeed,
+                                sourceSeedId = persistedDrill.id,
+                            ),
+                            statusMessage = "Loaded persisted drill for editing.",
+                        )
+                    }
+                    else -> resolveInitialDraft(
+                        mode = request.mode,
+                        templateRecord = templateRecord,
+                        seed = seed,
+                    )
+                }
                 val normalized = normalizeDraft(draftResult.draft.template)
                 DrillStudioUiState.Ready(
                     draft = normalized,
                     sourceSeedId = draftResult.draft.sourceSeedId,
-                    editingDrillId = templateRecord?.drillId ?: request.drillId ?: seed?.id,
+                    editingDrillId = templateRecord?.drillId ?: persistedDrill?.id,
                     editingTemplateId = templateRecord?.id,
                     statusMessage = draftResult.statusMessage,
                 )
@@ -247,7 +273,7 @@ class DrillStudioViewModel(
                 val drillId = current.editingDrillId ?: "user_drill_${System.currentTimeMillis()}"
                 val existing = repository.getDrill(drillId)
                 val record = current.draft.toDrillDefinitionRecord(existingId = drillId, existing = existing, ready = true)
-                repository.updateDrill(record)
+                if (existing == null) repository.createDrill(record) else repository.updateDrill(record)
                 record
             }.getOrNull()
             val refreshed = (_uiState.value as? DrillStudioUiState.Ready) ?: current
@@ -462,12 +488,13 @@ class DrillStudioViewModel(
     }
 }
 
-private fun DrillTemplate.toDrillDefinitionRecord(
+internal fun DrillTemplate.toDrillDefinitionRecord(
     existingId: String,
     existing: DrillDefinitionRecord?,
     ready: Boolean,
 ): DrillDefinitionRecord {
     val now = System.currentTimeMillis()
+    val studioPayload = encodeStudioPayload()
     return DrillDefinitionRecord(
         id = existingId,
         name = title.trim(),
@@ -482,16 +509,232 @@ private fun DrillTemplate.toDrillDefinitionRecord(
         phaseSchemaJson = phases.sortedBy { it.order }.joinToString("|") { phase -> phase.label.ifBlank { phase.id } },
         keyJointsJson = keyJoints.joinToString("|"),
         normalizationBasisJson = normalizationBasis.name,
-        cueConfigJson = buildList {
-            add("legacyDrillType:FREE_HANDSTAND")
-            add("comparisonMode:${comparisonMode.name}")
-        }.joinToString("|"),
+        cueConfigJson = mergeCueConfig(
+            existingCueConfig = existing?.cueConfigJson,
+            comparisonMode = comparisonMode,
+            studioPayload = studioPayload,
+        ),
         sourceType = existing?.sourceType ?: DrillSourceType.USER_CREATED,
         status = if (ready) DrillStatus.READY else existing?.status ?: DrillStatus.DRAFT,
         version = (existing?.version ?: 0) + 1,
         createdAtMs = existing?.createdAtMs ?: now,
         updatedAtMs = now,
     )
+}
+
+private fun mergeCueConfig(
+    existingCueConfig: String?,
+    comparisonMode: ComparisonMode,
+    studioPayload: String,
+): String {
+    val existingTokens = existingCueConfig
+        .orEmpty()
+        .split('|')
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+    val filtered = existingTokens.filterNot { token ->
+        token.startsWith("comparisonMode:") || token.startsWith("studioPayload:")
+    }
+    val withLegacy = if (filtered.none { it.startsWith("legacyDrillType:") }) {
+        filtered + "legacyDrillType:FREE_HANDSTAND"
+    } else {
+        filtered
+    }
+    return (withLegacy + listOf("comparisonMode:${comparisonMode.name}", "studioPayload:$studioPayload"))
+        .joinToString("|")
+}
+
+internal fun DrillDefinitionRecord.toDrillTemplate(seed: DrillTemplate?): DrillTemplate {
+    val payload = decodeStudioPayload(cueConfigJson)
+    val fallback = seed ?: DrillStudioDraftRepository.createBlankDraft().template
+    val phaseNames = phaseSchemaJson.split('|').mapNotNull { token -> token.trim().takeIf { it.isNotEmpty() } }
+    val phases = if (payload != null) payload.phases else phaseNames.mapIndexed { index, name ->
+        DrillPhaseTemplate(
+            id = "phase_${index + 1}",
+            label = name,
+            order = index + 1,
+            progressWindow = PhaseWindow(
+                start = index.toFloat() / phaseNames.size.coerceAtLeast(1),
+                end = ((index + 1).toFloat() / phaseNames.size.coerceAtLeast(1)).coerceAtMost(1f),
+            ),
+        )
+    }
+    val phasePoses = if (payload != null && payload.phasePoses.isNotEmpty()) {
+        payload.phasePoses
+    } else {
+        phases.map { phase ->
+            PhasePoseTemplate(
+                phaseId = phase.id,
+                name = phase.label,
+                joints = fallback.skeletonTemplate.phasePoses.firstOrNull()?.joints ?: DrillStudioPosePresets.neutralUpright.joints,
+                holdDurationMs = null,
+                transitionDurationMs = 700,
+            )
+        }
+    }
+    return fallback.copy(
+        id = id,
+        title = name,
+        description = description,
+        movementType = if (movementMode == DrillMovementMode.REP) CatalogMovementType.REP else CatalogMovementType.HOLD,
+        cameraView = payload?.cameraView ?: cameraView.toCatalogCameraView(),
+        supportedViews = payload?.supportedViews ?: listOf(cameraView.toCatalogCameraView()),
+        comparisonMode = payload?.comparisonMode ?: cueConfigJson.comparisonModeFromCueConfig(),
+        keyJoints = payload?.keyJoints ?: keyJointsJson.split('|').filter { it.isNotBlank() },
+        normalizationBasis = payload?.normalizationBasis ?: normalizationBasisJson.toCatalogNormalizationBasis(),
+        phases = phases,
+        skeletonTemplate = fallback.skeletonTemplate.copy(
+            phasePoses = phasePoses,
+            keyframes = if (payload != null) payload.keyframes else fallback.skeletonTemplate.keyframes,
+        ),
+        calibration = fallback.calibration.copy(
+            metricThresholds = payload?.metricThresholds ?: fallback.calibration.metricThresholds,
+        ),
+    )
+}
+
+internal data class PersistedStudioPayload(
+    val cameraView: CameraView,
+    val supportedViews: List<CameraView>,
+    val comparisonMode: ComparisonMode,
+    val keyJoints: List<String>,
+    val normalizationBasis: CatalogNormalizationBasis,
+    val phases: List<DrillPhaseTemplate>,
+    val phasePoses: List<PhasePoseTemplate>,
+    val keyframes: List<SkeletonKeyframeTemplate>,
+    val metricThresholds: Map<String, Float>,
+)
+
+internal fun DrillTemplate.encodeStudioPayload(): String {
+    val json = JSONObject().apply {
+        put("cameraView", cameraView.name)
+        put("supportedViews", JSONArray().apply { supportedViews.forEach { put(it.name) } })
+        put("comparisonMode", comparisonMode.name)
+        put("keyJoints", JSONArray().apply { keyJoints.forEach(::put) })
+        put("normalizationBasis", normalizationBasis.name)
+        put("phases", JSONArray().apply {
+            phases.sortedBy { it.order }.forEach { phase ->
+                put(JSONObject().apply {
+                    put("id", phase.id)
+                    put("label", phase.label)
+                    put("order", phase.order)
+                    phase.progressWindow?.let { window ->
+                        put("windowStart", window.start)
+                        put("windowEnd", window.end)
+                    }
+                })
+            }
+        })
+        put("phasePoses", JSONArray().apply {
+            skeletonTemplate.phasePoses.forEach { pose ->
+                put(JSONObject().apply {
+                    put("phaseId", pose.phaseId)
+                    put("name", pose.name)
+                    put("holdDurationMs", pose.holdDurationMs)
+                    put("transitionDurationMs", pose.transitionDurationMs)
+                    put("joints", JSONObject(pose.joints.mapValues { (_, p) -> JSONArray().put(p.x).put(p.y) }))
+                })
+            }
+        })
+        put("keyframes", JSONArray().apply {
+            skeletonTemplate.keyframes.forEach { keyframe ->
+                put(JSONObject().apply {
+                    put("progress", keyframe.progress)
+                    put("joints", JSONObject(keyframe.joints.mapValues { (_, p) -> JSONArray().put(p.x).put(p.y) }))
+                })
+            }
+        })
+        put("metricThresholds", JSONObject(calibration.metricThresholds))
+    }
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(json.toString().toByteArray())
+}
+
+internal fun decodeStudioPayload(cueConfigJson: String): PersistedStudioPayload? = runCatching {
+    val payloadToken = cueConfigJson.split('|').firstOrNull { it.startsWith("studioPayload:") } ?: return null
+    val encoded = payloadToken.substringAfter("studioPayload:")
+    if (encoded.isBlank()) return null
+    val decoded = String(Base64.getUrlDecoder().decode(encoded))
+    val json = JSONObject(decoded)
+    val cameraView = CameraView.valueOf(json.getString("cameraView"))
+    val supportedViews = json.optJSONArray("supportedViews")?.let { array ->
+        List(array.length()) { index -> CameraView.valueOf(array.getString(index)) }
+    } ?: listOf(cameraView)
+    val comparisonMode = ComparisonMode.valueOf(json.getString("comparisonMode"))
+    val keyJoints = json.optJSONArray("keyJoints")?.let { array ->
+        List(array.length()) { index -> array.getString(index) }
+    } ?: emptyList()
+    val normalizationBasis = CatalogNormalizationBasis.valueOf(json.getString("normalizationBasis"))
+    val phases = json.optJSONArray("phases")?.let { array ->
+        List(array.length()) { index ->
+            val item = array.getJSONObject(index)
+            DrillPhaseTemplate(
+                id = item.getString("id"),
+                label = item.getString("label"),
+                order = item.getInt("order"),
+                progressWindow = if (item.has("windowStart") && item.has("windowEnd")) {
+                    PhaseWindow(item.getDouble("windowStart").toFloat(), item.getDouble("windowEnd").toFloat())
+                } else null,
+            )
+        }
+    } ?: emptyList()
+    val phasePoses = json.optJSONArray("phasePoses")?.let { array ->
+        List(array.length()) { index ->
+            val item = array.getJSONObject(index)
+            val joints = item.getJSONObject("joints").keys().asSequence().associateWith { key ->
+                val point = item.getJSONObject("joints").getJSONArray(key)
+                JointPoint(point.getDouble(0).toFloat(), point.getDouble(1).toFloat())
+            }
+            PhasePoseTemplate(
+                phaseId = item.getString("phaseId"),
+                name = item.optString("name", item.getString("phaseId")),
+                joints = joints,
+                holdDurationMs = item.optInt("holdDurationMs").takeIf { it > 0 },
+                transitionDurationMs = item.optInt("transitionDurationMs", 700),
+            )
+        }
+    } ?: emptyList()
+    val keyframes = json.optJSONArray("keyframes")?.let { array ->
+        List(array.length()) { index ->
+            val item = array.getJSONObject(index)
+            val joints = item.getJSONObject("joints").keys().asSequence().associateWith { key ->
+                val point = item.getJSONObject("joints").getJSONArray(key)
+                JointPoint(point.getDouble(0).toFloat(), point.getDouble(1).toFloat())
+            }
+            SkeletonKeyframeTemplate(progress = item.getDouble("progress").toFloat(), joints = joints)
+        }
+    } ?: emptyList()
+    val metricThresholds = json.optJSONObject("metricThresholds")?.let { thresholds ->
+        thresholds.keys().asSequence().associateWith { key -> thresholds.getDouble(key).toFloat() }
+    } ?: emptyMap()
+
+    PersistedStudioPayload(
+        cameraView = cameraView,
+        supportedViews = supportedViews,
+        comparisonMode = comparisonMode,
+        keyJoints = keyJoints,
+        normalizationBasis = normalizationBasis,
+        phases = phases,
+        phasePoses = phasePoses,
+        keyframes = keyframes,
+        metricThresholds = metricThresholds,
+    )
+}.getOrNull()
+
+private fun String.comparisonModeFromCueConfig(): ComparisonMode =
+    split('|')
+        .firstOrNull { it.startsWith("comparisonMode:") }
+        ?.substringAfter(':')
+        ?.let { value -> ComparisonMode.entries.firstOrNull { it.name == value } }
+        ?: ComparisonMode.POSE_TIMELINE
+
+private fun String.toCatalogNormalizationBasis(): CatalogNormalizationBasis =
+    CatalogNormalizationBasis.entries.firstOrNull { it.name == this } ?: CatalogNormalizationBasis.HIPS
+
+private fun String.toCatalogCameraView(): CameraView = when (this) {
+    DrillCameraView.LEFT -> CameraView.LEFT_PROFILE
+    DrillCameraView.RIGHT -> CameraView.RIGHT_PROFILE
+    DrillCameraView.FRONT -> CameraView.FRONT
+    else -> CameraView.LEFT_PROFILE
 }
 
 
