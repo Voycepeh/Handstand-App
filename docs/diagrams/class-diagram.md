@@ -2,80 +2,55 @@
 
 ```mermaid
 classDiagram
-  class LiveCoachingViewModel {
-    <<Coordinator>>
-    +onRecordingFinalized(uri)
-    +stopSession(callback)
-  }
+    class LiveCoachingViewModel {
+      +startSession()
+      +stopSession()
+      +onRecordingFinalized(uri)
+    }
+    class DrillStudioViewModel {
+      +loadDrill(id)
+      +validateAndSave()
+    }
+    class SessionRepository {
+      +saveSession(record)
+      +updateAnnotatedExportStatus(sessionId, status)
+    }
+    class SessionBlobStorage {
+      +saveRawVideoBlob()
+      +saveAnnotatedVideoBlob()
+    }
+    class AnnotatedExportPipeline {
+      +export(...)
+    }
+    class SessionMediaResolver {
+      +resolveReplay(...)
+    }
+    class DrillRegistry {
+      +getDrill(...)
+    }
+    class ReferenceTemplateBuilder {
+      +buildFromProfile(...)
+    }
+    class MlKitVideoPoseFrameSource {
+      +open(...)
+    }
+    class MotionAnalysisPipeline {
+      +analyze(...)
+    }
+    class CalibrationEngine {
+      +buildProfile(...)
+    }
 
-  class SessionRepository {
-    <<PersistenceBoundary>>
-    +saveSession(record)
-    +updateAnnotatedExportStatus(sessionId, status)
-  }
-
-  class UserProfileManager {
-    <<ProfileCoordinator>>
-    +getOrCreateActiveProfile()
-    +setActiveProfile(profileId)
-    +resolveActiveProfileContext()
-  }
-
-  class UserSettingsDao {
-    <<Persistence>>
-  }
-
-  class UserProfileDao {
-    <<Persistence>>
-  }
-
-  class BodyProfileDao {
-    <<Persistence>>
-  }
-
-  class SessionBlobStorage {
-    <<MediaStorage>>
-    +saveRawVideoBlob()
-    +saveAnnotatedVideoBlob()
-  }
-
-  class AnnotatedExportPipeline {
-    <<Coordinator>>
-    +export(...)
-  }
-
-  class AnnotatedExportNormalization {
-    <<Processor>>
-  }
-
-  class MediaVerificationHelper {
-    <<Validator>>
-  }
-
-  class MlKitVideoPoseFrameSource {
-    <<FrameSource>>
-  }
-
-  class MotionAnalysisPipeline {
-    <<Processor>>
-  }
-
-  class CalibrationEngine {
-    <<Processor>>
-  }
-
-  LiveCoachingViewModel --> SessionRepository
-  LiveCoachingViewModel --> UserProfileManager
-  LiveCoachingViewModel --> AnnotatedExportPipeline
-  LiveCoachingViewModel --> MotionAnalysisPipeline
-  LiveCoachingViewModel --> MediaVerificationHelper
-  SessionRepository --> SessionBlobStorage
-  SessionRepository --> UserSettingsDao
-  UserProfileManager --> UserSettingsDao
-  UserProfileManager --> UserProfileDao
-  UserProfileManager --> BodyProfileDao
-  AnnotatedExportPipeline --> AnnotatedExportNormalization
-  AnnotatedExportPipeline --> MediaVerificationHelper
-  MlKitVideoPoseFrameSource --> MotionAnalysisPipeline
-  CalibrationEngine --> MotionAnalysisPipeline
+    LiveCoachingViewModel --> DrillRegistry
+    LiveCoachingViewModel --> SessionRepository
+    LiveCoachingViewModel --> AnnotatedExportPipeline
+    LiveCoachingViewModel --> MotionAnalysisPipeline
+    LiveCoachingViewModel --> SessionMediaResolver
+    DrillStudioViewModel --> DrillRegistry
+    DrillStudioViewModel --> SessionRepository
+    SessionRepository --> SessionBlobStorage
+    AnnotatedExportPipeline --> SessionMediaResolver
+    MlKitVideoPoseFrameSource --> MotionAnalysisPipeline
+    ReferenceTemplateBuilder --> MotionAnalysisPipeline
+    CalibrationEngine --> MotionAnalysisPipeline
 ```

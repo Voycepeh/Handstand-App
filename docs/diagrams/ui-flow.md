@@ -2,43 +2,39 @@
 
 ```mermaid
 flowchart TD
-  H[Home]
-  PM[Profile Manager]
-  D[Drill Select]
-  L[Live Coaching]
-  C[Countdown]
-  R[Recording]
-  P[Processing]
-  RS[Replay / Results]
-  HI[History]
-  U[Imported Analysis]
-  CAL[Calibration]
+    H[Home]
+    DH[Drill Hub]
+    MD[Manage Drills]
+    DS[Drill Studio]
+    SD[Start Drill]
+    L[Live Session]
+    C[Countdown]
+    R[Recording]
+    P[Processing / Export]
+    RS[Results / Replay]
+    HI[History]
+    U[Upload / Reference Training]
+    CMP[Compare / Reference Review]
+    CAL[Calibration / Profiles]
 
-  US[User Settings / Active Profile]
-  BP[Body Profile Resolution]
-
-  H --> PM
-  H --> D
-  H --> L
-  H --> U
-  H --> HI
-  H --> CAL
-
-  PM --> US
-  US --> BP
-  BP --> D
-  BP --> L
-  BP --> U
-
-  D --> C
-  L --> C
-  C --> R
-  R --> P
-  P --> RS
-
-  HI --> RS
-  U --> P
-  CAL --> BP
-  RS --> H
-  PM --> H
+    H --> DH
+    H --> HI
+    H --> CAL
+    DH --> SD
+    DH --> MD
+    DH --> U
+    SD --> C
+    C --> L
+    L --> R
+    R --> P
+    P --> RS
+    RS --> HI
+    RS --> DH
+    MD --> DS
+    DS --> MD
+    U --> P
+    U --> CMP
+    CMP --> RS
+    CAL --> DH
+    HI --> RS
 ```
