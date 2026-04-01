@@ -90,6 +90,34 @@ class SideViewOverlayTest {
     }
 
     @Test
+    fun `drill center of gravity uses full detected body not rendered side chain`() {
+        val joints = bilateral(faceVisible = true)
+
+        val left = OverlayGeometry.build(
+            drillType = DrillType.STANDARD_PUSH_UP,
+            sessionMode = SessionMode.DRILL,
+            joints = joints,
+            drillCameraSide = DrillCameraSide.LEFT,
+            effectiveView = EffectiveView.SIDE,
+        )
+        val right = OverlayGeometry.build(
+            drillType = DrillType.STANDARD_PUSH_UP,
+            sessionMode = SessionMode.DRILL,
+            joints = joints,
+            drillCameraSide = DrillCameraSide.RIGHT,
+            effectiveView = EffectiveView.SIDE,
+        )
+
+        val leftCenter = requireNotNull(left.centerOfGravity)
+        val rightCenter = requireNotNull(right.centerOfGravity)
+
+        assertEquals(0.5f, leftCenter.x, 0.001f)
+        assertEquals(0.398f, leftCenter.y, 0.001f)
+        assertEquals(leftCenter.x, rightCenter.x, 0.0001f)
+        assertEquals(leftCenter.y, rightCenter.y, 0.0001f)
+    }
+
+    @Test
     fun `freestyle profile vs bilateral overlay selection`() {
         val joints = bilateral(faceVisible = true)
         val front = OverlayGeometry.build(
