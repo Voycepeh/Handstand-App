@@ -3,9 +3,7 @@ package com.inversioncoach.app.ui.results
 import android.content.Intent
 import android.content.ActivityNotFoundException
 import android.content.ClipData
-import android.net.Uri
 import android.widget.Toast
-import androidx.core.content.FileProvider
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -43,6 +41,13 @@ import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.model.SessionSource
+import com.inversioncoach.app.media.SaveVideoError
+import com.inversioncoach.app.media.SaveVideoResult
+import com.inversioncoach.app.media.SessionArtifact
+import com.inversioncoach.app.media.SessionMediaResolver
+import com.inversioncoach.app.media.SessionMediaSourceOpener
+import com.inversioncoach.app.media.SessionMediaType
+import com.inversioncoach.app.media.SessionVideoSaver
 import com.inversioncoach.app.model.sessionMode
 import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.storage.ServiceLocator
@@ -52,12 +57,10 @@ import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.common.parseSessionMetrics
 import com.inversioncoach.app.ui.common.buildSessionSummaryDisplay
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
+import com.inversioncoach.app.ui.components.SessionMediaActionsCard
 import com.inversioncoach.app.ui.live.mediaAssetExists
-import com.inversioncoach.app.ui.live.selectReplayAsset
 import com.inversioncoach.app.ui.live.SessionDiagnostics
-import com.inversioncoach.app.ui.live.ReplayAssetSelection
 import kotlinx.coroutines.launch
-import java.io.File
 import java.util.Locale
 
 @Composable
@@ -69,14 +72,20 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val drills by repository.getAllDrills().collectAsState(initial = emptyList())
     val templates by repository.observeReferenceTemplates().collectAsState(initial = emptyList())
     val issueTimeline by repository.observeIssueTimeline(sessionId).collectAsState(initial = emptyList())
-    var replaySelection by remember(sessionId) { mutableStateOf(ReplayAssetSelection(uri = null, label = "Replay unavailable")) }
-    var replaySelectionKey by remember(sessionId) { mutableStateOf<String?>(null) }
-    val rawUri = session?.takeIf(::isRawReplayPlayable)?.rawVideoUri?.takeIf(::mediaAssetExists)
-    val hasReplay = replaySelection.uri != null
-    val showRawVideoButton = shouldShowRawVideoButton(
-        replayUri = replaySelection.uri,
-        rawUri = rawUri,
-    )
+    val sourceOpener = remember(context) { SessionMediaSourceOpener(context) }
+    val mediaResolver = remember(sourceOpener) { SessionMediaResolver(assetExists = sourceOpener::isReadable) }
+    val videoSaver = remember(context, sourceOpener) { SessionVideoSaver(context, sourceOpener) }
+    val resolvedMedia = remember(session) { session?.let(mediaResolver::resolve) }
+    val preferredReplay = resolvedMedia?.preferredReplay
+    val replayUri = preferredReplay?.uri
+    val replayLabel = when (preferredReplay?.type) {
+        SessionMediaType.ANNOTATED -> "Annotated replay"
+        SessionMediaType.RAW -> "Raw replay"
+        null -> "Replay unavailable"
+    }
+    val rawUri = (resolvedMedia?.raw as? SessionArtifact.Available)?.uri
+    val hasReplay = !replayUri.isNullOrBlank()
+    val showRawVideoButton = shouldShowRawVideoButton(replayUri = replayUri, rawUri = rawUri)
     val scope = rememberCoroutineScope()
     var notes by remember { mutableStateOf("") }
     var diagnosticsExpanded by remember { mutableStateOf(false) }
@@ -110,35 +119,11 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     }
 
 
-    LaunchedEffect(session) {
-        val activeSession = session ?: return@LaunchedEffect
-        val candidate = selectReplayAsset(activeSession)
-        val stable = isReplayStateStable(activeSession)
-        val candidateKey = "${candidate.label}|${candidate.uri.orEmpty()}"
-        if (replaySelectionKey == null || candidate.uri != replaySelection.uri || stable) {
-            replaySelection = candidate
-            replaySelectionKey = candidateKey
-        }
-    }
-
-    LaunchedEffect(sessionId, replaySelection.uri, replaySelection.label, replaySelectionKey) {
-        if (replaySelectionKey == null) return@LaunchedEffect
-        SessionDiagnostics.logStructured(
-            event = "results_source_selection",
-            sessionId = sessionId,
-            drillType = session?.drillType ?: com.inversioncoach.app.model.DrillType.FREESTYLE,
-            rawUri = session?.rawVideoUri,
-            annotatedUri = session?.annotatedVideoUri,
-            overlayFrameCount = session?.overlayFrameCount ?: 0,
-            failureReason = "selection=${replaySelection.label}",
-        )
-    }
-
     LaunchedEffect(
         session?.rawPersistStatus,
         session?.annotatedExportStatus,
         session?.annotatedVideoUri,
-        replaySelection.uri,
+        replayUri,
     ) {
         val activeSession = session ?: return@LaunchedEffect
         val signature = listOf(
@@ -147,7 +132,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             activeSession.annotatedExportFailureReason.orEmpty(),
             activeSession.annotatedVideoUri.orEmpty(),
             activeSession.bestPlayableUri.orEmpty(),
-            replaySelection.uri.orEmpty(),
+            replayUri.orEmpty(),
         ).joinToString("|")
         if (lastRefreshSignature == signature) return@LaunchedEffect
         lastRefreshSignature = signature
@@ -158,7 +143,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             rawUri = activeSession.rawVideoUri,
             annotatedUri = activeSession.annotatedVideoUri,
             overlayFrameCount = activeSession.overlayFrameCount,
-            failureReason = "rawPersistStatus=${activeSession.rawPersistStatus};annotatedExportStatus=${activeSession.annotatedExportStatus};selectedReplaySource=${replaySelection.label};selectedReplayUri=${replaySelection.uri.orEmpty()};terminalStateReached=${activeSession.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY || activeSession.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED}",
+            failureReason = "rawPersistStatus=${activeSession.rawPersistStatus};annotatedExportStatus=${activeSession.annotatedExportStatus};selectedReplaySource=${replayLabel};selectedReplayUri=${replayUri.orEmpty()};terminalStateReached=${activeSession.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY || activeSession.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED}",
         )
     }
 
@@ -188,7 +173,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 if (isProcessing || activeSession.annotatedExportStatus in setOf(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportStatus.SKIPPED)) {
                     val isFailed = activeSession.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED
                     val isSkipped = activeSession.annotatedExportStatus == AnnotatedExportStatus.SKIPPED
-                    val rawFallbackAvailable = isRawReplayPlayable(activeSession)
+                    val rawFallbackAvailable = mediaResolver.resolve(activeSession).raw is SessionArtifact.Available
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
@@ -244,7 +229,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                                     Text("Annotated export failed. Raw replay is available.")
                                 }
                             }
-                            StatusRow("Replay source", if (rawFallbackAvailable && !isProcessing) "Raw" else replaySelection.label.removeSuffix(" replay"))
+                            StatusRow("Replay source", if (rawFallbackAvailable && !isProcessing) "Raw" else replayLabel.removeSuffix(" replay"))
                             StatusRow("Raw", humanReadableStatus(activeSession.rawPersistStatus.name))
                             if (activeSession.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE")) {
                                 Text(
@@ -394,34 +379,41 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 label = { Text("Session notes") },
             )
 
-            Button(
-                onClick = { openVideo(context, replaySelection.uri, sessionId) },
-                enabled = hasReplay,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(replaySelection.label)
+            resolvedMedia?.let { media ->
+                SessionMediaActionsCard(
+                    media = media,
+                    onPlayRaw = { uri -> openVideo(context, sourceOpener, uri, sessionId) },
+                    onSaveRaw = { uri ->
+                        val saveResult = videoSaver.saveRawVideo(
+                            sourceUri = uri,
+                            sessionName = session?.title.orEmpty(),
+                            sessionTimestampMs = session?.completedAtMs ?: session?.startedAtMs ?: 0L,
+                        )
+                        handleSaveResult(context, saveResult, isAnnotated = false)
+                    },
+                    onPlayAnnotated = { uri -> openVideo(context, sourceOpener, uri, sessionId) },
+                    onSaveAnnotated = { uri ->
+                        val saveResult = videoSaver.saveAnnotatedVideo(
+                            sourceUri = uri,
+                            sessionName = session?.title.orEmpty(),
+                            sessionTimestampMs = session?.completedAtMs ?: session?.startedAtMs ?: 0L,
+                        )
+                        handleSaveResult(context, saveResult, isAnnotated = true)
+                    },
+                )
             }
             if (!hasReplay) {
                 val rawFailure = session?.rawPersistFailureReason
                 val message = if (rawFailure in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE")) {
-                    "Replay unavailable: raw file exists but cannot be decoded ($rawFailure)."
+                    "Replay unavailable: raw file exists but cannot be decoded."
                 } else {
                     "No replay asset is available for this session."
                 }
                 Text(message)
             }
-            Text(
-                replayAvailabilityBadge(replaySelection.label),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text(replayAvailabilityBadge(replayLabel), color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (showRawVideoButton) {
-                Button(
-                    onClick = { openVideo(context, rawUri) },
-                    enabled = !rawUri.isNullOrBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Raw replay")
-                }
+                Button(onClick = { openVideo(context, sourceOpener, rawUri) }, enabled = !rawUri.isNullOrBlank(), modifier = Modifier.fillMaxWidth()) { Text("Raw replay") }
             }
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -435,7 +427,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     val canCopyDiagnostics = report.isNotBlank()
                     Text("Developer diagnostics", style = MaterialTheme.typography.titleMedium)
                     Text(SessionDiagnostics.rootCauseSummary(session, events))
-                    StatusRow("Replay source", if (replaySelection.label == "Annotated replay") "Annotated" else if (replaySelection.label == "Raw replay") "Raw" else "None")
+                    StatusRow("Replay source", if (replayLabel == "Annotated replay") "Annotated" else if (replayLabel == "Raw replay") "Raw" else "None")
                     StatusRow("Raw", humanReadableStatus(session?.rawPersistStatus?.name))
                     StatusRow("Annotated", humanReadableStatus(session?.annotatedExportStatus?.name))
                     session?.annotatedExportFailureReason?.takeIf { it.isNotBlank() }?.let { reason ->
@@ -455,7 +447,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     }
                     if (diagnosticsExpanded) {
                         Text(
-                            buildDeveloperStateDump(session, replaySelection.label),
+                            buildDeveloperStateDump(session, replayLabel),
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                             maxLines = 16,
                             overflow = TextOverflow.Ellipsis,
@@ -513,12 +505,12 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                 onClick = {
                     shareVideoOnly(
                         context = context,
-                        rawVideoUri = rawUri,
-                        annotatedVideoUri = session?.annotatedVideoUri?.takeIf(::mediaAssetExists),
+                        sourceOpener = sourceOpener,
+                        media = resolvedMedia,
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !replaySelection.uri.isNullOrBlank() || !rawUri.isNullOrBlank(),
+                enabled = hasReplay || !rawUri.isNullOrBlank(),
             ) { Text("Share video (.mp4)") }
             Button(
                 onClick = {
@@ -528,7 +520,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !replaySelection.uri.isNullOrBlank() || !rawUri.isNullOrBlank(),
+                enabled = hasReplay || !rawUri.isNullOrBlank(),
             ) {
                 Text("Delete videos only (keep session)")
             }
@@ -749,11 +741,11 @@ private fun formatElapsed(startedAtMs: Long?, timestampMs: Long?): String {
     return "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60)
 }
 
-private fun openVideo(context: android.content.Context, videoUri: String?) {
-    openVideo(context, videoUri, null)
+private fun openVideo(context: android.content.Context, sourceOpener: SessionMediaSourceOpener, videoUri: String?) {
+    openVideo(context, sourceOpener, videoUri, null)
 }
 
-private fun openVideo(context: android.content.Context, videoUri: String?, sessionId: Long?) {
+private fun openVideo(context: android.content.Context, sourceOpener: SessionMediaSourceOpener, videoUri: String?, sessionId: Long?) {
     if (videoUri.isNullOrBlank()) return
     SessionDiagnostics.record(
         sessionId = sessionId,
@@ -762,7 +754,7 @@ private fun openVideo(context: android.content.Context, videoUri: String?, sessi
         message = "player preparing",
         metrics = mapOf("uri" to videoUri),
     )
-    val resolvedUri = toSharableVideoUri(context, Uri.parse(videoUri)) ?: run {
+    val resolvedUri = sourceOpener.toSharableUri(videoUri) ?: run {
         Toast.makeText(context, "Unable to open video file.", Toast.LENGTH_SHORT).show()
         SessionDiagnostics.record(
             sessionId = sessionId,
@@ -808,47 +800,41 @@ private fun openVideo(context: android.content.Context, videoUri: String?, sessi
     }
 }
 
-private fun isReplayStateStable(session: com.inversioncoach.app.model.SessionRecord): Boolean {
-    val annotatedTerminal = session.annotatedExportStatus in setOf(
-        AnnotatedExportStatus.ANNOTATED_READY,
-        AnnotatedExportStatus.ANNOTATED_FAILED,
-        AnnotatedExportStatus.SKIPPED,
-        AnnotatedExportStatus.NOT_STARTED,
-    )
-    val rawTerminal = session.rawPersistStatus != com.inversioncoach.app.model.RawPersistStatus.PROCESSING
-    return annotatedTerminal && rawTerminal
-}
+private fun handleSaveResult(
+    context: android.content.Context,
+    result: SaveVideoResult,
+    isAnnotated: Boolean,
+) {
+    when (result) {
+        is SaveVideoResult.Success -> {
+            val message = if (isAnnotated) "Saved annotated video to device" else "Saved raw video to device"
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
 
-private fun isRawReplayPlayable(session: com.inversioncoach.app.model.SessionRecord): Boolean {
-    val invalidReason = session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE")
-    if (invalidReason) return false
-    val rawUri = session.rawFinalUri ?: session.rawVideoUri ?: session.rawMasterUri
-    if (rawUri.isNullOrBlank() || !mediaAssetExists(rawUri)) return false
-    val bestPlayableUri = session.bestPlayableUri
-    val bestPlayableReadable = mediaAssetExists(bestPlayableUri)
-    return bestPlayableUri.isNullOrBlank() || bestPlayableUri == rawUri || !bestPlayableReadable
-}
-
-private fun toSharableVideoUri(context: android.content.Context, sourceUri: Uri): Uri? {
-    if (sourceUri.scheme != "file") return sourceUri
-    val sourcePath = sourceUri.path ?: return null
-    val sourceFile = File(sourcePath)
-    if (!sourceFile.exists()) return null
-    return FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.fileprovider",
-        sourceFile,
-    )
+        is SaveVideoResult.Failure -> {
+            val message = when (result.error) {
+                SaveVideoError.MISSING_FILE -> "Source video file is missing"
+                SaveVideoError.SAVE_FAILED -> "Save failed"
+                SaveVideoError.NO_ANNOTATED_OUTPUT -> "No annotated output yet"
+            }
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
 }
 
 private fun shareVideoOnly(
     context: android.content.Context,
-    rawVideoUri: String?,
-    annotatedVideoUri: String?,
+    sourceOpener: SessionMediaSourceOpener,
+    media: com.inversioncoach.app.media.ResolvedSessionMedia?,
 ) {
-    val preferredShareUri = listOfNotNull(annotatedVideoUri, rawVideoUri)
-        .firstNotNullOfOrNull { uri -> toSharableVideoUri(context, Uri.parse(uri)) }
-
+    val source = media?.preferredReplay?.uri
+        ?: (media?.raw as? SessionArtifact.Available)?.uri
+        ?: (media?.annotated as? SessionArtifact.Available)?.uri
+    if (source.isNullOrBlank() || !sourceOpener.isReadable(source)) {
+        Toast.makeText(context, "No video file available to share.", Toast.LENGTH_SHORT).show()
+        return
+    }
+    val preferredShareUri = sourceOpener.toSharableUri(source)
     if (preferredShareUri == null) {
         Toast.makeText(context, "No video file available to share.", Toast.LENGTH_SHORT).show()
         return
