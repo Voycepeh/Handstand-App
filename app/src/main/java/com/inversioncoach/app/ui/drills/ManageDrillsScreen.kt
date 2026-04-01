@@ -35,7 +35,7 @@ fun ManageDrillsScreen(
 ) {
     val context = LocalContext.current
     val repo = remember { ServiceLocator.repository(context) }
-    val drills by repo.getAllDrills().collectAsState(initial = emptyList())
+    val drills by repo.observeManageDrills().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
 
     ScaffoldedScreen(title = "Manage Drills", onBack = onBack) { padding ->

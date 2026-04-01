@@ -30,7 +30,7 @@ fun ReferenceTemplatePickerScreen(
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
-    val drills by repository.getActiveDrills().collectAsState(initial = emptyList())
+    val drills by repository.observeReferenceEligibleDrills().collectAsState(initial = emptyList())
 
     ScaffoldedScreen(title = "Reference Templates", onBack = onBack) { padding ->
         Column(
