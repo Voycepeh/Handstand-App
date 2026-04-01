@@ -3,159 +3,8156 @@
   "catalogId": "drill_catalog_v1",
   "drills": [
     {
-      "id": "kickup_to_wall_handstand",
-      "title": "Kick-up to Wall Handstand",
-      "family": "handstand",
-      "movementType": "hold",
-      "tags": ["inversion", "entry", "wall"],
+      "id": "push_up",
+      "title": "Push-up",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "push",
+      "movementType": "rep",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:high"
+      ],
       "cameraView": "left_profile",
-      "supportedViews": ["left_profile", "right_profile"],
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
       "analysisPlane": "sagittal",
-      "comparisonMode": "pose_timeline",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
       "phases": [
-        { "id": "setup", "label": "Set-up", "order": 0, "progressWindow": [0.00, 0.15] },
-        { "id": "kickup", "label": "Kick-up", "order": 1, "progressWindow": [0.15, 0.55] },
-        { "id": "stack", "label": "Stack and Hold", "order": 2, "progressWindow": [0.55, 0.95] },
-        { "id": "exit", "label": "Controlled Exit", "order": 3, "progressWindow": [0.95, 1.00] }
+        {
+          "id": "setup_high_plank",
+          "label": "Setup High Plank",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.2
+          ]
+        },
+        {
+          "id": "lowering",
+          "label": "Lowering",
+          "order": 1,
+          "progressWindow": [
+            0.2,
+            0.4
+          ]
+        },
+        {
+          "id": "bottom",
+          "label": "Bottom",
+          "order": 2,
+          "progressWindow": [
+            0.4,
+            0.6
+          ]
+        },
+        {
+          "id": "press",
+          "label": "Press",
+          "order": 3,
+          "progressWindow": [
+            0.6,
+            0.8
+          ]
+        },
+        {
+          "id": "lockout",
+          "label": "Lockout",
+          "order": 4,
+          "progressWindow": [
+            0.8,
+            1.0
+          ]
+        }
       ],
       "skeletonTemplate": {
-        "id": "kickup_to_wall_handstand_v1",
+        "id": "push_up_v1",
         "loop": true,
         "mirroredSupported": true,
-        "framesPerSecond": 15,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "setup_high_plank",
+            "name": "Setup High Plank",
+            "joints": {
+              "head": [
+                0.24,
+                0.63
+              ],
+              "shoulder_left": [
+                0.3,
+                0.62
+              ],
+              "shoulder_right": [
+                0.3,
+                0.68
+              ],
+              "hip_left": [
+                0.54,
+                0.64
+              ],
+              "hip_right": [
+                0.54,
+                0.7
+              ],
+              "wrist_left": [
+                0.36,
+                0.63
+              ],
+              "wrist_right": [
+                0.36,
+                0.69
+              ],
+              "ankle_left": [
+                0.79,
+                0.66
+              ],
+              "ankle_right": [
+                0.79,
+                0.72
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "lowering",
+            "name": "Lowering",
+            "joints": {
+              "head": [
+                0.28,
+                0.62
+              ],
+              "shoulder_left": [
+                0.33,
+                0.61
+              ],
+              "shoulder_right": [
+                0.33,
+                0.67
+              ],
+              "hip_left": [
+                0.56,
+                0.64
+              ],
+              "hip_right": [
+                0.56,
+                0.7
+              ],
+              "wrist_left": [
+                0.39,
+                0.63
+              ],
+              "wrist_right": [
+                0.39,
+                0.69
+              ],
+              "ankle_left": [
+                0.8,
+                0.66
+              ],
+              "ankle_right": [
+                0.8,
+                0.72
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "bottom",
+            "name": "Bottom",
+            "joints": {
+              "head": [
+                0.34,
+                0.63
+              ],
+              "shoulder_left": [
+                0.39,
+                0.62
+              ],
+              "shoulder_right": [
+                0.39,
+                0.68
+              ],
+              "hip_left": [
+                0.58,
+                0.65
+              ],
+              "hip_right": [
+                0.58,
+                0.71
+              ],
+              "wrist_left": [
+                0.45,
+                0.67
+              ],
+              "wrist_right": [
+                0.45,
+                0.73
+              ],
+              "ankle_left": [
+                0.81,
+                0.67
+              ],
+              "ankle_right": [
+                0.81,
+                0.73
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "press",
+            "name": "Press",
+            "joints": {
+              "head": [
+                0.29,
+                0.62
+              ],
+              "shoulder_left": [
+                0.35,
+                0.61
+              ],
+              "shoulder_right": [
+                0.35,
+                0.67
+              ],
+              "hip_left": [
+                0.56,
+                0.64
+              ],
+              "hip_right": [
+                0.56,
+                0.7
+              ],
+              "wrist_left": [
+                0.4,
+                0.64
+              ],
+              "wrist_right": [
+                0.4,
+                0.7
+              ],
+              "ankle_left": [
+                0.8,
+                0.66
+              ],
+              "ankle_right": [
+                0.8,
+                0.72
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "lockout",
+            "name": "Lockout",
+            "joints": {
+              "head": [
+                0.24,
+                0.63
+              ],
+              "shoulder_left": [
+                0.3,
+                0.62
+              ],
+              "shoulder_right": [
+                0.3,
+                0.68
+              ],
+              "hip_left": [
+                0.54,
+                0.64
+              ],
+              "hip_right": [
+                0.54,
+                0.7
+              ],
+              "wrist_left": [
+                0.36,
+                0.63
+              ],
+              "wrist_right": [
+                0.36,
+                0.69
+              ],
+              "ankle_left": [
+                0.79,
+                0.66
+              ],
+              "ankle_right": [
+                0.79,
+                0.72
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
         "keyframes": [
           {
             "progress": 0.0,
             "joints": {
-              "head": [0.52, 0.16],
-              "shoulder_left": [0.46, 0.27],
-              "shoulder_right": [0.56, 0.27],
-              "hip_left": [0.48, 0.49],
-              "hip_right": [0.55, 0.49],
-              "wrist_left": [0.43, 0.79],
-              "wrist_right": [0.59, 0.79],
-              "ankle_left": [0.47, 0.92],
-              "ankle_right": [0.55, 0.88]
+              "head": [
+                0.24,
+                0.63
+              ],
+              "shoulder_left": [
+                0.3,
+                0.62
+              ],
+              "shoulder_right": [
+                0.3,
+                0.68
+              ],
+              "hip_left": [
+                0.54,
+                0.64
+              ],
+              "hip_right": [
+                0.54,
+                0.7
+              ],
+              "wrist_left": [
+                0.36,
+                0.63
+              ],
+              "wrist_right": [
+                0.36,
+                0.69
+              ],
+              "ankle_left": [
+                0.79,
+                0.66
+              ],
+              "ankle_right": [
+                0.79,
+                0.72
+              ]
             }
           },
           {
-            "progress": 0.5,
+            "progress": 0.2,
             "joints": {
-              "head": [0.50, 0.22],
-              "shoulder_left": [0.46, 0.32],
-              "shoulder_right": [0.54, 0.32],
-              "hip_left": [0.48, 0.47],
-              "hip_right": [0.52, 0.47],
-              "wrist_left": [0.45, 0.80],
-              "wrist_right": [0.55, 0.80],
-              "ankle_left": [0.43, 0.23],
-              "ankle_right": [0.57, 0.17]
+              "head": [
+                0.28,
+                0.62
+              ],
+              "shoulder_left": [
+                0.33,
+                0.61
+              ],
+              "shoulder_right": [
+                0.33,
+                0.67
+              ],
+              "hip_left": [
+                0.56,
+                0.64
+              ],
+              "hip_right": [
+                0.56,
+                0.7
+              ],
+              "wrist_left": [
+                0.39,
+                0.63
+              ],
+              "wrist_right": [
+                0.39,
+                0.69
+              ],
+              "ankle_left": [
+                0.8,
+                0.66
+              ],
+              "ankle_right": [
+                0.8,
+                0.72
+              ]
+            }
+          },
+          {
+            "progress": 0.4,
+            "joints": {
+              "head": [
+                0.34,
+                0.63
+              ],
+              "shoulder_left": [
+                0.39,
+                0.62
+              ],
+              "shoulder_right": [
+                0.39,
+                0.68
+              ],
+              "hip_left": [
+                0.58,
+                0.65
+              ],
+              "hip_right": [
+                0.58,
+                0.71
+              ],
+              "wrist_left": [
+                0.45,
+                0.67
+              ],
+              "wrist_right": [
+                0.45,
+                0.73
+              ],
+              "ankle_left": [
+                0.81,
+                0.67
+              ],
+              "ankle_right": [
+                0.81,
+                0.73
+              ]
+            }
+          },
+          {
+            "progress": 0.6,
+            "joints": {
+              "head": [
+                0.29,
+                0.62
+              ],
+              "shoulder_left": [
+                0.35,
+                0.61
+              ],
+              "shoulder_right": [
+                0.35,
+                0.67
+              ],
+              "hip_left": [
+                0.56,
+                0.64
+              ],
+              "hip_right": [
+                0.56,
+                0.7
+              ],
+              "wrist_left": [
+                0.4,
+                0.64
+              ],
+              "wrist_right": [
+                0.4,
+                0.7
+              ],
+              "ankle_left": [
+                0.8,
+                0.66
+              ],
+              "ankle_right": [
+                0.8,
+                0.72
+              ]
+            }
+          },
+          {
+            "progress": 0.8,
+            "joints": {
+              "head": [
+                0.24,
+                0.63
+              ],
+              "shoulder_left": [
+                0.3,
+                0.62
+              ],
+              "shoulder_right": [
+                0.3,
+                0.68
+              ],
+              "hip_left": [
+                0.54,
+                0.64
+              ],
+              "hip_right": [
+                0.54,
+                0.7
+              ],
+              "wrist_left": [
+                0.36,
+                0.63
+              ],
+              "wrist_right": [
+                0.36,
+                0.69
+              ],
+              "ankle_left": [
+                0.79,
+                0.66
+              ],
+              "ankle_right": [
+                0.79,
+                0.72
+              ]
             }
           },
           {
             "progress": 1.0,
             "joints": {
-              "head": [0.50, 0.14],
-              "shoulder_left": [0.46, 0.24],
-              "shoulder_right": [0.54, 0.24],
-              "hip_left": [0.48, 0.40],
-              "hip_right": [0.52, 0.40],
-              "wrist_left": [0.46, 0.77],
-              "wrist_right": [0.54, 0.77],
-              "ankle_left": [0.47, 0.10],
-              "ankle_right": [0.53, 0.10]
+              "head": [
+                0.24,
+                0.63
+              ],
+              "shoulder_left": [
+                0.3,
+                0.62
+              ],
+              "shoulder_right": [
+                0.3,
+                0.68
+              ],
+              "hip_left": [
+                0.54,
+                0.64
+              ],
+              "hip_right": [
+                0.54,
+                0.7
+              ],
+              "wrist_left": [
+                0.36,
+                0.63
+              ],
+              "wrist_right": [
+                0.36,
+                0.69
+              ],
+              "ankle_left": [
+                0.79,
+                0.66
+              ],
+              "ankle_right": [
+                0.79,
+                0.72
+              ]
             }
           }
         ]
       },
       "calibration": {
         "metricThresholds": {
-          "stack_line_error_deg": 10.0,
-          "wrist_shift_ratio": 0.12,
-          "hold_min_seconds": 6.0
+          "tempo_consistency": 0.5
         },
         "phaseWindows": {
-          "kickup": [0.15, 0.55],
-          "stack": [0.55, 0.95]
+          "setup_high_plank": [
+            0.0,
+            0.2
+          ],
+          "lowering": [
+            0.2,
+            0.4
+          ],
+          "bottom": [
+            0.4,
+            0.6
+          ],
+          "press": [
+            0.6,
+            0.8
+          ],
+          "lockout": [
+            0.8,
+            1.0
+          ]
         }
       }
     },
     {
-      "id": "pike_pushup",
-      "title": "Pike Push-up",
+      "id": "bar_dip",
+      "title": "Bar dip",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
       "family": "push",
       "movementType": "rep",
-      "tags": ["overhead", "strength"],
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:medium",
+        "thresholds:editable"
+      ],
       "cameraView": "left_profile",
-      "supportedViews": ["left_profile", "right_profile"],
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
       "analysisPlane": "sagittal",
       "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
       "phases": [
-        { "id": "top", "label": "Top", "order": 0, "progressWindow": [0.00, 0.10] },
-        { "id": "eccentric", "label": "Eccentric", "order": 1, "progressWindow": [0.10, 0.55] },
-        { "id": "bottom", "label": "Bottom", "order": 2, "progressWindow": [0.55, 0.65] },
-        { "id": "concentric", "label": "Concentric", "order": 3, "progressWindow": [0.65, 1.00] }
+        {
+          "id": "top_support",
+          "label": "Top Support",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.2
+          ]
+        },
+        {
+          "id": "descent",
+          "label": "Descent",
+          "order": 1,
+          "progressWindow": [
+            0.2,
+            0.4
+          ]
+        },
+        {
+          "id": "bottom",
+          "label": "Bottom",
+          "order": 2,
+          "progressWindow": [
+            0.4,
+            0.6
+          ]
+        },
+        {
+          "id": "press",
+          "label": "Press",
+          "order": 3,
+          "progressWindow": [
+            0.6,
+            0.8
+          ]
+        },
+        {
+          "id": "support_lockout",
+          "label": "Support Lockout",
+          "order": 4,
+          "progressWindow": [
+            0.8,
+            1.0
+          ]
+        }
       ],
       "skeletonTemplate": {
-        "id": "pike_pushup_v1",
+        "id": "bar_dip_v1",
         "loop": true,
         "mirroredSupported": true,
-        "framesPerSecond": 18,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "top_support",
+            "name": "Top Support",
+            "joints": {
+              "head": [
+                0.43,
+                0.43
+              ],
+              "shoulder_left": [
+                0.48,
+                0.44
+              ],
+              "shoulder_right": [
+                0.48,
+                0.5
+              ],
+              "hip_left": [
+                0.62,
+                0.46
+              ],
+              "hip_right": [
+                0.62,
+                0.52
+              ],
+              "wrist_left": [
+                0.5,
+                0.58
+              ],
+              "wrist_right": [
+                0.5,
+                0.64
+              ],
+              "ankle_left": [
+                0.8,
+                0.48
+              ],
+              "ankle_right": [
+                0.8,
+                0.54
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "descent",
+            "name": "Descent",
+            "joints": {
+              "head": [
+                0.46,
+                0.44
+              ],
+              "shoulder_left": [
+                0.51,
+                0.45
+              ],
+              "shoulder_right": [
+                0.51,
+                0.51
+              ],
+              "hip_left": [
+                0.64,
+                0.48
+              ],
+              "hip_right": [
+                0.64,
+                0.54
+              ],
+              "wrist_left": [
+                0.53,
+                0.6
+              ],
+              "wrist_right": [
+                0.53,
+                0.66
+              ],
+              "ankle_left": [
+                0.81,
+                0.49
+              ],
+              "ankle_right": [
+                0.81,
+                0.55
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "bottom",
+            "name": "Bottom",
+            "joints": {
+              "head": [
+                0.5,
+                0.46
+              ],
+              "shoulder_left": [
+                0.55,
+                0.47
+              ],
+              "shoulder_right": [
+                0.55,
+                0.53
+              ],
+              "hip_left": [
+                0.67,
+                0.5
+              ],
+              "hip_right": [
+                0.67,
+                0.56
+              ],
+              "wrist_left": [
+                0.58,
+                0.67
+              ],
+              "wrist_right": [
+                0.58,
+                0.73
+              ],
+              "ankle_left": [
+                0.82,
+                0.51
+              ],
+              "ankle_right": [
+                0.82,
+                0.57
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "press",
+            "name": "Press",
+            "joints": {
+              "head": [
+                0.47,
+                0.45
+              ],
+              "shoulder_left": [
+                0.52,
+                0.46
+              ],
+              "shoulder_right": [
+                0.52,
+                0.52
+              ],
+              "hip_left": [
+                0.65,
+                0.49
+              ],
+              "hip_right": [
+                0.65,
+                0.55
+              ],
+              "wrist_left": [
+                0.54,
+                0.61
+              ],
+              "wrist_right": [
+                0.54,
+                0.67
+              ],
+              "ankle_left": [
+                0.81,
+                0.5
+              ],
+              "ankle_right": [
+                0.81,
+                0.56
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "support_lockout",
+            "name": "Support Lockout",
+            "joints": {
+              "head": [
+                0.43,
+                0.43
+              ],
+              "shoulder_left": [
+                0.48,
+                0.44
+              ],
+              "shoulder_right": [
+                0.48,
+                0.5
+              ],
+              "hip_left": [
+                0.62,
+                0.46
+              ],
+              "hip_right": [
+                0.62,
+                0.52
+              ],
+              "wrist_left": [
+                0.5,
+                0.58
+              ],
+              "wrist_right": [
+                0.5,
+                0.64
+              ],
+              "ankle_left": [
+                0.8,
+                0.48
+              ],
+              "ankle_right": [
+                0.8,
+                0.54
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
         "keyframes": [
           {
             "progress": 0.0,
             "joints": {
-              "head": [0.50, 0.26],
-              "shoulder_left": [0.44, 0.30],
-              "shoulder_right": [0.56, 0.30],
-              "hip_left": [0.47, 0.45],
-              "hip_right": [0.53, 0.45],
-              "wrist_left": [0.39, 0.78],
-              "wrist_right": [0.61, 0.78],
-              "ankle_left": [0.44, 0.83],
-              "ankle_right": [0.56, 0.83]
+              "head": [
+                0.43,
+                0.43
+              ],
+              "shoulder_left": [
+                0.48,
+                0.44
+              ],
+              "shoulder_right": [
+                0.48,
+                0.5
+              ],
+              "hip_left": [
+                0.62,
+                0.46
+              ],
+              "hip_right": [
+                0.62,
+                0.52
+              ],
+              "wrist_left": [
+                0.5,
+                0.58
+              ],
+              "wrist_right": [
+                0.5,
+                0.64
+              ],
+              "ankle_left": [
+                0.8,
+                0.48
+              ],
+              "ankle_right": [
+                0.8,
+                0.54
+              ]
             }
           },
           {
-            "progress": 0.5,
+            "progress": 0.2,
             "joints": {
-              "head": [0.50, 0.36],
-              "shoulder_left": [0.45, 0.35],
-              "shoulder_right": [0.55, 0.35],
-              "hip_left": [0.48, 0.48],
-              "hip_right": [0.52, 0.48],
-              "wrist_left": [0.40, 0.78],
-              "wrist_right": [0.60, 0.78],
-              "ankle_left": [0.45, 0.84],
-              "ankle_right": [0.55, 0.84]
+              "head": [
+                0.46,
+                0.44
+              ],
+              "shoulder_left": [
+                0.51,
+                0.45
+              ],
+              "shoulder_right": [
+                0.51,
+                0.51
+              ],
+              "hip_left": [
+                0.64,
+                0.48
+              ],
+              "hip_right": [
+                0.64,
+                0.54
+              ],
+              "wrist_left": [
+                0.53,
+                0.6
+              ],
+              "wrist_right": [
+                0.53,
+                0.66
+              ],
+              "ankle_left": [
+                0.81,
+                0.49
+              ],
+              "ankle_right": [
+                0.81,
+                0.55
+              ]
+            }
+          },
+          {
+            "progress": 0.4,
+            "joints": {
+              "head": [
+                0.5,
+                0.46
+              ],
+              "shoulder_left": [
+                0.55,
+                0.47
+              ],
+              "shoulder_right": [
+                0.55,
+                0.53
+              ],
+              "hip_left": [
+                0.67,
+                0.5
+              ],
+              "hip_right": [
+                0.67,
+                0.56
+              ],
+              "wrist_left": [
+                0.58,
+                0.67
+              ],
+              "wrist_right": [
+                0.58,
+                0.73
+              ],
+              "ankle_left": [
+                0.82,
+                0.51
+              ],
+              "ankle_right": [
+                0.82,
+                0.57
+              ]
+            }
+          },
+          {
+            "progress": 0.6,
+            "joints": {
+              "head": [
+                0.47,
+                0.45
+              ],
+              "shoulder_left": [
+                0.52,
+                0.46
+              ],
+              "shoulder_right": [
+                0.52,
+                0.52
+              ],
+              "hip_left": [
+                0.65,
+                0.49
+              ],
+              "hip_right": [
+                0.65,
+                0.55
+              ],
+              "wrist_left": [
+                0.54,
+                0.61
+              ],
+              "wrist_right": [
+                0.54,
+                0.67
+              ],
+              "ankle_left": [
+                0.81,
+                0.5
+              ],
+              "ankle_right": [
+                0.81,
+                0.56
+              ]
+            }
+          },
+          {
+            "progress": 0.8,
+            "joints": {
+              "head": [
+                0.43,
+                0.43
+              ],
+              "shoulder_left": [
+                0.48,
+                0.44
+              ],
+              "shoulder_right": [
+                0.48,
+                0.5
+              ],
+              "hip_left": [
+                0.62,
+                0.46
+              ],
+              "hip_right": [
+                0.62,
+                0.52
+              ],
+              "wrist_left": [
+                0.5,
+                0.58
+              ],
+              "wrist_right": [
+                0.5,
+                0.64
+              ],
+              "ankle_left": [
+                0.8,
+                0.48
+              ],
+              "ankle_right": [
+                0.8,
+                0.54
+              ]
             }
           },
           {
             "progress": 1.0,
             "joints": {
-              "head": [0.50, 0.26],
-              "shoulder_left": [0.44, 0.30],
-              "shoulder_right": [0.56, 0.30],
-              "hip_left": [0.47, 0.45],
-              "hip_right": [0.53, 0.45],
-              "wrist_left": [0.39, 0.78],
-              "wrist_right": [0.61, 0.78],
-              "ankle_left": [0.44, 0.83],
-              "ankle_right": [0.56, 0.83]
+              "head": [
+                0.43,
+                0.43
+              ],
+              "shoulder_left": [
+                0.48,
+                0.44
+              ],
+              "shoulder_right": [
+                0.48,
+                0.5
+              ],
+              "hip_left": [
+                0.62,
+                0.46
+              ],
+              "hip_right": [
+                0.62,
+                0.52
+              ],
+              "wrist_left": [
+                0.5,
+                0.58
+              ],
+              "wrist_right": [
+                0.5,
+                0.64
+              ],
+              "ankle_left": [
+                0.8,
+                0.48
+              ],
+              "ankle_right": [
+                0.8,
+                0.54
+              ]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {},
+        "phaseWindows": {
+          "top_support": [
+            0.0,
+            0.2
+          ],
+          "descent": [
+            0.2,
+            0.4
+          ],
+          "bottom": [
+            0.4,
+            0.6
+          ],
+          "press": [
+            0.6,
+            0.8
+          ],
+          "support_lockout": [
+            0.8,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "pike_push_up",
+      "title": "Pike push-up",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "push",
+      "movementType": "rep",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:medium",
+        "thresholds:editable"
+      ],
+      "cameraView": "left_profile",
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
+      "phases": [
+        {
+          "id": "pike_setup",
+          "label": "Pike Setup",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.2
+          ]
+        },
+        {
+          "id": "descent",
+          "label": "Descent",
+          "order": 1,
+          "progressWindow": [
+            0.2,
+            0.4
+          ]
+        },
+        {
+          "id": "bottom_head_to_floor",
+          "label": "Bottom Head To Floor",
+          "order": 2,
+          "progressWindow": [
+            0.4,
+            0.6
+          ]
+        },
+        {
+          "id": "press",
+          "label": "Press",
+          "order": 3,
+          "progressWindow": [
+            0.6,
+            0.8
+          ]
+        },
+        {
+          "id": "pike_lockout",
+          "label": "Pike Lockout",
+          "order": 4,
+          "progressWindow": [
+            0.8,
+            1.0
+          ]
+        }
+      ],
+      "skeletonTemplate": {
+        "id": "pike_push_up_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "pike_setup",
+            "name": "Pike Setup",
+            "joints": {
+              "head": [
+                0.46,
+                0.35
+              ],
+              "shoulder_left": [
+                0.5,
+                0.39
+              ],
+              "shoulder_right": [
+                0.5,
+                0.45
+              ],
+              "hip_left": [
+                0.6,
+                0.5
+              ],
+              "hip_right": [
+                0.6,
+                0.56
+              ],
+              "wrist_left": [
+                0.52,
+                0.66
+              ],
+              "wrist_right": [
+                0.52,
+                0.72
+              ],
+              "ankle_left": [
+                0.74,
+                0.6
+              ],
+              "ankle_right": [
+                0.74,
+                0.66
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "descent",
+            "name": "Descent",
+            "joints": {
+              "head": [
+                0.48,
+                0.39
+              ],
+              "shoulder_left": [
+                0.52,
+                0.43
+              ],
+              "shoulder_right": [
+                0.52,
+                0.49
+              ],
+              "hip_left": [
+                0.61,
+                0.51
+              ],
+              "hip_right": [
+                0.61,
+                0.57
+              ],
+              "wrist_left": [
+                0.54,
+                0.68
+              ],
+              "wrist_right": [
+                0.54,
+                0.74
+              ],
+              "ankle_left": [
+                0.74,
+                0.6
+              ],
+              "ankle_right": [
+                0.74,
+                0.66
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "bottom_head_to_floor",
+            "name": "Bottom Head To Floor",
+            "joints": {
+              "head": [
+                0.5,
+                0.44
+              ],
+              "shoulder_left": [
+                0.54,
+                0.48
+              ],
+              "shoulder_right": [
+                0.54,
+                0.54
+              ],
+              "hip_left": [
+                0.62,
+                0.52
+              ],
+              "hip_right": [
+                0.62,
+                0.58
+              ],
+              "wrist_left": [
+                0.56,
+                0.71
+              ],
+              "wrist_right": [
+                0.56,
+                0.77
+              ],
+              "ankle_left": [
+                0.74,
+                0.6
+              ],
+              "ankle_right": [
+                0.74,
+                0.66
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "press",
+            "name": "Press",
+            "joints": {
+              "head": [
+                0.48,
+                0.39
+              ],
+              "shoulder_left": [
+                0.52,
+                0.43
+              ],
+              "shoulder_right": [
+                0.52,
+                0.49
+              ],
+              "hip_left": [
+                0.61,
+                0.51
+              ],
+              "hip_right": [
+                0.61,
+                0.57
+              ],
+              "wrist_left": [
+                0.54,
+                0.68
+              ],
+              "wrist_right": [
+                0.54,
+                0.74
+              ],
+              "ankle_left": [
+                0.74,
+                0.6
+              ],
+              "ankle_right": [
+                0.74,
+                0.66
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "pike_lockout",
+            "name": "Pike Lockout",
+            "joints": {
+              "head": [
+                0.46,
+                0.35
+              ],
+              "shoulder_left": [
+                0.5,
+                0.39
+              ],
+              "shoulder_right": [
+                0.5,
+                0.45
+              ],
+              "hip_left": [
+                0.6,
+                0.5
+              ],
+              "hip_right": [
+                0.6,
+                0.56
+              ],
+              "wrist_left": [
+                0.52,
+                0.66
+              ],
+              "wrist_right": [
+                0.52,
+                0.72
+              ],
+              "ankle_left": [
+                0.74,
+                0.6
+              ],
+              "ankle_right": [
+                0.74,
+                0.66
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [
+                0.46,
+                0.35
+              ],
+              "shoulder_left": [
+                0.5,
+                0.39
+              ],
+              "shoulder_right": [
+                0.5,
+                0.45
+              ],
+              "hip_left": [
+                0.6,
+                0.5
+              ],
+              "hip_right": [
+                0.6,
+                0.56
+              ],
+              "wrist_left": [
+                0.52,
+                0.66
+              ],
+              "wrist_right": [
+                0.52,
+                0.72
+              ],
+              "ankle_left": [
+                0.74,
+                0.6
+              ],
+              "ankle_right": [
+                0.74,
+                0.66
+              ]
+            }
+          },
+          {
+            "progress": 0.2,
+            "joints": {
+              "head": [
+                0.48,
+                0.39
+              ],
+              "shoulder_left": [
+                0.52,
+                0.43
+              ],
+              "shoulder_right": [
+                0.52,
+                0.49
+              ],
+              "hip_left": [
+                0.61,
+                0.51
+              ],
+              "hip_right": [
+                0.61,
+                0.57
+              ],
+              "wrist_left": [
+                0.54,
+                0.68
+              ],
+              "wrist_right": [
+                0.54,
+                0.74
+              ],
+              "ankle_left": [
+                0.74,
+                0.6
+              ],
+              "ankle_right": [
+                0.74,
+                0.66
+              ]
+            }
+          },
+          {
+            "progress": 0.4,
+            "joints": {
+              "head": [
+                0.5,
+                0.44
+              ],
+              "shoulder_left": [
+                0.54,
+                0.48
+              ],
+              "shoulder_right": [
+                0.54,
+                0.54
+              ],
+              "hip_left": [
+                0.62,
+                0.52
+              ],
+              "hip_right": [
+                0.62,
+                0.58
+              ],
+              "wrist_left": [
+                0.56,
+                0.71
+              ],
+              "wrist_right": [
+                0.56,
+                0.77
+              ],
+              "ankle_left": [
+                0.74,
+                0.6
+              ],
+              "ankle_right": [
+                0.74,
+                0.66
+              ]
+            }
+          },
+          {
+            "progress": 0.6,
+            "joints": {
+              "head": [
+                0.48,
+                0.39
+              ],
+              "shoulder_left": [
+                0.52,
+                0.43
+              ],
+              "shoulder_right": [
+                0.52,
+                0.49
+              ],
+              "hip_left": [
+                0.61,
+                0.51
+              ],
+              "hip_right": [
+                0.61,
+                0.57
+              ],
+              "wrist_left": [
+                0.54,
+                0.68
+              ],
+              "wrist_right": [
+                0.54,
+                0.74
+              ],
+              "ankle_left": [
+                0.74,
+                0.6
+              ],
+              "ankle_right": [
+                0.74,
+                0.66
+              ]
+            }
+          },
+          {
+            "progress": 0.8,
+            "joints": {
+              "head": [
+                0.46,
+                0.35
+              ],
+              "shoulder_left": [
+                0.5,
+                0.39
+              ],
+              "shoulder_right": [
+                0.5,
+                0.45
+              ],
+              "hip_left": [
+                0.6,
+                0.5
+              ],
+              "hip_right": [
+                0.6,
+                0.56
+              ],
+              "wrist_left": [
+                0.52,
+                0.66
+              ],
+              "wrist_right": [
+                0.52,
+                0.72
+              ],
+              "ankle_left": [
+                0.74,
+                0.6
+              ],
+              "ankle_right": [
+                0.74,
+                0.66
+              ]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [
+                0.46,
+                0.35
+              ],
+              "shoulder_left": [
+                0.5,
+                0.39
+              ],
+              "shoulder_right": [
+                0.5,
+                0.45
+              ],
+              "hip_left": [
+                0.6,
+                0.5
+              ],
+              "hip_right": [
+                0.6,
+                0.56
+              ],
+              "wrist_left": [
+                0.52,
+                0.66
+              ],
+              "wrist_right": [
+                0.52,
+                0.72
+              ],
+              "ankle_left": [
+                0.74,
+                0.6
+              ],
+              "ankle_right": [
+                0.74,
+                0.66
+              ]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {},
+        "phaseWindows": {
+          "pike_setup": [
+            0.0,
+            0.2
+          ],
+          "descent": [
+            0.2,
+            0.4
+          ],
+          "bottom_head_to_floor": [
+            0.4,
+            0.6
+          ],
+          "press": [
+            0.6,
+            0.8
+          ],
+          "pike_lockout": [
+            0.8,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "elevated_pike_push_up",
+      "title": "Elevated pike push-up",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "push",
+      "movementType": "rep",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:medium",
+        "thresholds:editable"
+      ],
+      "cameraView": "left_profile",
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
+      "phases": [
+        {
+          "id": "elevated_pike_setup",
+          "label": "Elevated Pike Setup",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.2
+          ]
+        },
+        {
+          "id": "descent",
+          "label": "Descent",
+          "order": 1,
+          "progressWindow": [
+            0.2,
+            0.4
+          ]
+        },
+        {
+          "id": "bottom_head_to_floor",
+          "label": "Bottom Head To Floor",
+          "order": 2,
+          "progressWindow": [
+            0.4,
+            0.6
+          ]
+        },
+        {
+          "id": "press",
+          "label": "Press",
+          "order": 3,
+          "progressWindow": [
+            0.6,
+            0.8
+          ]
+        },
+        {
+          "id": "elevated_pike_lockout",
+          "label": "Elevated Pike Lockout",
+          "order": 4,
+          "progressWindow": [
+            0.8,
+            1.0
+          ]
+        }
+      ],
+      "skeletonTemplate": {
+        "id": "elevated_pike_push_up_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "elevated_pike_setup",
+            "name": "Elevated Pike Setup",
+            "joints": {
+              "head": [
+                0.45,
+                0.31
+              ],
+              "shoulder_left": [
+                0.49,
+                0.36
+              ],
+              "shoulder_right": [
+                0.49,
+                0.42
+              ],
+              "hip_left": [
+                0.6,
+                0.5
+              ],
+              "hip_right": [
+                0.6,
+                0.56
+              ],
+              "wrist_left": [
+                0.51,
+                0.66
+              ],
+              "wrist_right": [
+                0.51,
+                0.72
+              ],
+              "ankle_left": [
+                0.78,
+                0.45
+              ],
+              "ankle_right": [
+                0.78,
+                0.51
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "descent",
+            "name": "Descent",
+            "joints": {
+              "head": [
+                0.47,
+                0.36
+              ],
+              "shoulder_left": [
+                0.51,
+                0.41
+              ],
+              "shoulder_right": [
+                0.51,
+                0.47
+              ],
+              "hip_left": [
+                0.61,
+                0.51
+              ],
+              "hip_right": [
+                0.61,
+                0.57
+              ],
+              "wrist_left": [
+                0.53,
+                0.68
+              ],
+              "wrist_right": [
+                0.53,
+                0.74
+              ],
+              "ankle_left": [
+                0.78,
+                0.45
+              ],
+              "ankle_right": [
+                0.78,
+                0.51
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "bottom_head_to_floor",
+            "name": "Bottom Head To Floor",
+            "joints": {
+              "head": [
+                0.49,
+                0.41
+              ],
+              "shoulder_left": [
+                0.53,
+                0.46
+              ],
+              "shoulder_right": [
+                0.53,
+                0.52
+              ],
+              "hip_left": [
+                0.62,
+                0.52
+              ],
+              "hip_right": [
+                0.62,
+                0.58
+              ],
+              "wrist_left": [
+                0.56,
+                0.71
+              ],
+              "wrist_right": [
+                0.56,
+                0.77
+              ],
+              "ankle_left": [
+                0.78,
+                0.45
+              ],
+              "ankle_right": [
+                0.78,
+                0.51
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "press",
+            "name": "Press",
+            "joints": {
+              "head": [
+                0.47,
+                0.36
+              ],
+              "shoulder_left": [
+                0.51,
+                0.41
+              ],
+              "shoulder_right": [
+                0.51,
+                0.47
+              ],
+              "hip_left": [
+                0.61,
+                0.51
+              ],
+              "hip_right": [
+                0.61,
+                0.57
+              ],
+              "wrist_left": [
+                0.53,
+                0.68
+              ],
+              "wrist_right": [
+                0.53,
+                0.74
+              ],
+              "ankle_left": [
+                0.78,
+                0.45
+              ],
+              "ankle_right": [
+                0.78,
+                0.51
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "elevated_pike_lockout",
+            "name": "Elevated Pike Lockout",
+            "joints": {
+              "head": [
+                0.45,
+                0.31
+              ],
+              "shoulder_left": [
+                0.49,
+                0.36
+              ],
+              "shoulder_right": [
+                0.49,
+                0.42
+              ],
+              "hip_left": [
+                0.6,
+                0.5
+              ],
+              "hip_right": [
+                0.6,
+                0.56
+              ],
+              "wrist_left": [
+                0.51,
+                0.66
+              ],
+              "wrist_right": [
+                0.51,
+                0.72
+              ],
+              "ankle_left": [
+                0.78,
+                0.45
+              ],
+              "ankle_right": [
+                0.78,
+                0.51
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [
+                0.45,
+                0.31
+              ],
+              "shoulder_left": [
+                0.49,
+                0.36
+              ],
+              "shoulder_right": [
+                0.49,
+                0.42
+              ],
+              "hip_left": [
+                0.6,
+                0.5
+              ],
+              "hip_right": [
+                0.6,
+                0.56
+              ],
+              "wrist_left": [
+                0.51,
+                0.66
+              ],
+              "wrist_right": [
+                0.51,
+                0.72
+              ],
+              "ankle_left": [
+                0.78,
+                0.45
+              ],
+              "ankle_right": [
+                0.78,
+                0.51
+              ]
+            }
+          },
+          {
+            "progress": 0.2,
+            "joints": {
+              "head": [
+                0.47,
+                0.36
+              ],
+              "shoulder_left": [
+                0.51,
+                0.41
+              ],
+              "shoulder_right": [
+                0.51,
+                0.47
+              ],
+              "hip_left": [
+                0.61,
+                0.51
+              ],
+              "hip_right": [
+                0.61,
+                0.57
+              ],
+              "wrist_left": [
+                0.53,
+                0.68
+              ],
+              "wrist_right": [
+                0.53,
+                0.74
+              ],
+              "ankle_left": [
+                0.78,
+                0.45
+              ],
+              "ankle_right": [
+                0.78,
+                0.51
+              ]
+            }
+          },
+          {
+            "progress": 0.4,
+            "joints": {
+              "head": [
+                0.49,
+                0.41
+              ],
+              "shoulder_left": [
+                0.53,
+                0.46
+              ],
+              "shoulder_right": [
+                0.53,
+                0.52
+              ],
+              "hip_left": [
+                0.62,
+                0.52
+              ],
+              "hip_right": [
+                0.62,
+                0.58
+              ],
+              "wrist_left": [
+                0.56,
+                0.71
+              ],
+              "wrist_right": [
+                0.56,
+                0.77
+              ],
+              "ankle_left": [
+                0.78,
+                0.45
+              ],
+              "ankle_right": [
+                0.78,
+                0.51
+              ]
+            }
+          },
+          {
+            "progress": 0.6,
+            "joints": {
+              "head": [
+                0.47,
+                0.36
+              ],
+              "shoulder_left": [
+                0.51,
+                0.41
+              ],
+              "shoulder_right": [
+                0.51,
+                0.47
+              ],
+              "hip_left": [
+                0.61,
+                0.51
+              ],
+              "hip_right": [
+                0.61,
+                0.57
+              ],
+              "wrist_left": [
+                0.53,
+                0.68
+              ],
+              "wrist_right": [
+                0.53,
+                0.74
+              ],
+              "ankle_left": [
+                0.78,
+                0.45
+              ],
+              "ankle_right": [
+                0.78,
+                0.51
+              ]
+            }
+          },
+          {
+            "progress": 0.8,
+            "joints": {
+              "head": [
+                0.45,
+                0.31
+              ],
+              "shoulder_left": [
+                0.49,
+                0.36
+              ],
+              "shoulder_right": [
+                0.49,
+                0.42
+              ],
+              "hip_left": [
+                0.6,
+                0.5
+              ],
+              "hip_right": [
+                0.6,
+                0.56
+              ],
+              "wrist_left": [
+                0.51,
+                0.66
+              ],
+              "wrist_right": [
+                0.51,
+                0.72
+              ],
+              "ankle_left": [
+                0.78,
+                0.45
+              ],
+              "ankle_right": [
+                0.78,
+                0.51
+              ]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [
+                0.45,
+                0.31
+              ],
+              "shoulder_left": [
+                0.49,
+                0.36
+              ],
+              "shoulder_right": [
+                0.49,
+                0.42
+              ],
+              "hip_left": [
+                0.6,
+                0.5
+              ],
+              "hip_right": [
+                0.6,
+                0.56
+              ],
+              "wrist_left": [
+                0.51,
+                0.66
+              ],
+              "wrist_right": [
+                0.51,
+                0.72
+              ],
+              "ankle_left": [
+                0.78,
+                0.45
+              ],
+              "ankle_right": [
+                0.78,
+                0.51
+              ]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {},
+        "phaseWindows": {
+          "elevated_pike_setup": [
+            0.0,
+            0.2
+          ],
+          "descent": [
+            0.2,
+            0.4
+          ],
+          "bottom_head_to_floor": [
+            0.4,
+            0.6
+          ],
+          "press": [
+            0.6,
+            0.8
+          ],
+          "elevated_pike_lockout": [
+            0.8,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "pull_up",
+      "title": "Pull-up",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "pull",
+      "movementType": "rep",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:high"
+      ],
+      "cameraView": "left_profile",
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
+      "phases": [
+        {
+          "id": "dead_hang",
+          "label": "Dead Hang",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.2
+          ]
+        },
+        {
+          "id": "initiate_pull",
+          "label": "Initiate Pull",
+          "order": 1,
+          "progressWindow": [
+            0.2,
+            0.4
+          ]
+        },
+        {
+          "id": "pull",
+          "label": "Pull",
+          "order": 2,
+          "progressWindow": [
+            0.4,
+            0.6
+          ]
+        },
+        {
+          "id": "top",
+          "label": "Top",
+          "order": 3,
+          "progressWindow": [
+            0.6,
+            0.8
+          ]
+        },
+        {
+          "id": "controlled_descent",
+          "label": "Controlled Descent",
+          "order": 4,
+          "progressWindow": [
+            0.8,
+            1.0
+          ]
+        }
+      ],
+      "skeletonTemplate": {
+        "id": "pull_up_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "dead_hang",
+            "name": "Dead Hang",
+            "joints": {
+              "head": [
+                0.48,
+                0.3
+              ],
+              "shoulder_left": [
+                0.52,
+                0.34
+              ],
+              "shoulder_right": [
+                0.52,
+                0.4
+              ],
+              "hip_left": [
+                0.63,
+                0.48
+              ],
+              "hip_right": [
+                0.63,
+                0.54
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.8,
+                0.52
+              ],
+              "ankle_right": [
+                0.8,
+                0.58
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "initiate_pull",
+            "name": "Initiate Pull",
+            "joints": {
+              "head": [
+                0.47,
+                0.28
+              ],
+              "shoulder_left": [
+                0.51,
+                0.32
+              ],
+              "shoulder_right": [
+                0.51,
+                0.38
+              ],
+              "hip_left": [
+                0.62,
+                0.46
+              ],
+              "hip_right": [
+                0.62,
+                0.52
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.79,
+                0.5
+              ],
+              "ankle_right": [
+                0.79,
+                0.56
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "pull",
+            "name": "Pull",
+            "joints": {
+              "head": [
+                0.45,
+                0.24
+              ],
+              "shoulder_left": [
+                0.49,
+                0.28
+              ],
+              "shoulder_right": [
+                0.49,
+                0.34
+              ],
+              "hip_left": [
+                0.6,
+                0.42
+              ],
+              "hip_right": [
+                0.6,
+                0.48
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.77,
+                0.46
+              ],
+              "ankle_right": [
+                0.77,
+                0.52
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "top",
+            "name": "Top",
+            "joints": {
+              "head": [
+                0.43,
+                0.2
+              ],
+              "shoulder_left": [
+                0.47,
+                0.24
+              ],
+              "shoulder_right": [
+                0.47,
+                0.3
+              ],
+              "hip_left": [
+                0.59,
+                0.4
+              ],
+              "hip_right": [
+                0.59,
+                0.46
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.76,
+                0.44
+              ],
+              "ankle_right": [
+                0.76,
+                0.5
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "controlled_descent",
+            "name": "Controlled Descent",
+            "joints": {
+              "head": [
+                0.48,
+                0.3
+              ],
+              "shoulder_left": [
+                0.52,
+                0.34
+              ],
+              "shoulder_right": [
+                0.52,
+                0.4
+              ],
+              "hip_left": [
+                0.63,
+                0.48
+              ],
+              "hip_right": [
+                0.63,
+                0.54
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.8,
+                0.52
+              ],
+              "ankle_right": [
+                0.8,
+                0.58
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [
+                0.48,
+                0.3
+              ],
+              "shoulder_left": [
+                0.52,
+                0.34
+              ],
+              "shoulder_right": [
+                0.52,
+                0.4
+              ],
+              "hip_left": [
+                0.63,
+                0.48
+              ],
+              "hip_right": [
+                0.63,
+                0.54
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.8,
+                0.52
+              ],
+              "ankle_right": [
+                0.8,
+                0.58
+              ]
+            }
+          },
+          {
+            "progress": 0.2,
+            "joints": {
+              "head": [
+                0.47,
+                0.28
+              ],
+              "shoulder_left": [
+                0.51,
+                0.32
+              ],
+              "shoulder_right": [
+                0.51,
+                0.38
+              ],
+              "hip_left": [
+                0.62,
+                0.46
+              ],
+              "hip_right": [
+                0.62,
+                0.52
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.79,
+                0.5
+              ],
+              "ankle_right": [
+                0.79,
+                0.56
+              ]
+            }
+          },
+          {
+            "progress": 0.4,
+            "joints": {
+              "head": [
+                0.45,
+                0.24
+              ],
+              "shoulder_left": [
+                0.49,
+                0.28
+              ],
+              "shoulder_right": [
+                0.49,
+                0.34
+              ],
+              "hip_left": [
+                0.6,
+                0.42
+              ],
+              "hip_right": [
+                0.6,
+                0.48
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.77,
+                0.46
+              ],
+              "ankle_right": [
+                0.77,
+                0.52
+              ]
+            }
+          },
+          {
+            "progress": 0.6,
+            "joints": {
+              "head": [
+                0.43,
+                0.2
+              ],
+              "shoulder_left": [
+                0.47,
+                0.24
+              ],
+              "shoulder_right": [
+                0.47,
+                0.3
+              ],
+              "hip_left": [
+                0.59,
+                0.4
+              ],
+              "hip_right": [
+                0.59,
+                0.46
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.76,
+                0.44
+              ],
+              "ankle_right": [
+                0.76,
+                0.5
+              ]
+            }
+          },
+          {
+            "progress": 0.8,
+            "joints": {
+              "head": [
+                0.48,
+                0.3
+              ],
+              "shoulder_left": [
+                0.52,
+                0.34
+              ],
+              "shoulder_right": [
+                0.52,
+                0.4
+              ],
+              "hip_left": [
+                0.63,
+                0.48
+              ],
+              "hip_right": [
+                0.63,
+                0.54
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.8,
+                0.52
+              ],
+              "ankle_right": [
+                0.8,
+                0.58
+              ]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [
+                0.48,
+                0.3
+              ],
+              "shoulder_left": [
+                0.52,
+                0.34
+              ],
+              "shoulder_right": [
+                0.52,
+                0.4
+              ],
+              "hip_left": [
+                0.63,
+                0.48
+              ],
+              "hip_right": [
+                0.63,
+                0.54
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.8,
+                0.52
+              ],
+              "ankle_right": [
+                0.8,
+                0.58
+              ]
             }
           }
         ]
       },
       "calibration": {
         "metricThresholds": {
-          "depth_ratio": 0.72,
-          "elbow_flare_deg": 20.0,
-          "rep_tempo_lower": 1.1,
-          "rep_tempo_upper": 4.0
+          "tempo_consistency": 0.5
         },
         "phaseWindows": {
-          "eccentric": [0.10, 0.55],
-          "concentric": [0.55, 0.95]
+          "dead_hang": [
+            0.0,
+            0.2
+          ],
+          "initiate_pull": [
+            0.2,
+            0.4
+          ],
+          "pull": [
+            0.4,
+            0.6
+          ],
+          "top": [
+            0.6,
+            0.8
+          ],
+          "controlled_descent": [
+            0.8,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "inverted_row",
+      "title": "Inverted row",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "pull",
+      "movementType": "rep",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:high"
+      ],
+      "cameraView": "left_profile",
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
+      "phases": [
+        {
+          "id": "hang_setup",
+          "label": "Hang Setup",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.2
+          ]
+        },
+        {
+          "id": "pull",
+          "label": "Pull",
+          "order": 1,
+          "progressWindow": [
+            0.2,
+            0.4
+          ]
+        },
+        {
+          "id": "top_squeeze",
+          "label": "Top Squeeze",
+          "order": 2,
+          "progressWindow": [
+            0.4,
+            0.6
+          ]
+        },
+        {
+          "id": "lower",
+          "label": "Lower",
+          "order": 3,
+          "progressWindow": [
+            0.6,
+            0.8
+          ]
+        },
+        {
+          "id": "reset_hang",
+          "label": "Reset Hang",
+          "order": 4,
+          "progressWindow": [
+            0.8,
+            1.0
+          ]
+        }
+      ],
+      "skeletonTemplate": {
+        "id": "inverted_row_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "hang_setup",
+            "name": "Hang Setup",
+            "joints": {
+              "head": [
+                0.36,
+                0.56
+              ],
+              "shoulder_left": [
+                0.4,
+                0.58
+              ],
+              "shoulder_right": [
+                0.4,
+                0.64
+              ],
+              "hip_left": [
+                0.57,
+                0.6
+              ],
+              "hip_right": [
+                0.57,
+                0.66
+              ],
+              "wrist_left": [
+                0.44,
+                0.4
+              ],
+              "wrist_right": [
+                0.44,
+                0.46
+              ],
+              "ankle_left": [
+                0.78,
+                0.62
+              ],
+              "ankle_right": [
+                0.78,
+                0.68
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "pull",
+            "name": "Pull",
+            "joints": {
+              "head": [
+                0.34,
+                0.53
+              ],
+              "shoulder_left": [
+                0.38,
+                0.55
+              ],
+              "shoulder_right": [
+                0.38,
+                0.61
+              ],
+              "hip_left": [
+                0.55,
+                0.58
+              ],
+              "hip_right": [
+                0.55,
+                0.64
+              ],
+              "wrist_left": [
+                0.42,
+                0.4
+              ],
+              "wrist_right": [
+                0.42,
+                0.46
+              ],
+              "ankle_left": [
+                0.76,
+                0.6
+              ],
+              "ankle_right": [
+                0.76,
+                0.66
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "top_squeeze",
+            "name": "Top Squeeze",
+            "joints": {
+              "head": [
+                0.32,
+                0.5
+              ],
+              "shoulder_left": [
+                0.36,
+                0.52
+              ],
+              "shoulder_right": [
+                0.36,
+                0.58
+              ],
+              "hip_left": [
+                0.54,
+                0.57
+              ],
+              "hip_right": [
+                0.54,
+                0.63
+              ],
+              "wrist_left": [
+                0.4,
+                0.4
+              ],
+              "wrist_right": [
+                0.4,
+                0.46
+              ],
+              "ankle_left": [
+                0.75,
+                0.59
+              ],
+              "ankle_right": [
+                0.75,
+                0.65
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "lower",
+            "name": "Lower",
+            "joints": {
+              "head": [
+                0.34,
+                0.53
+              ],
+              "shoulder_left": [
+                0.38,
+                0.55
+              ],
+              "shoulder_right": [
+                0.38,
+                0.61
+              ],
+              "hip_left": [
+                0.55,
+                0.58
+              ],
+              "hip_right": [
+                0.55,
+                0.64
+              ],
+              "wrist_left": [
+                0.42,
+                0.4
+              ],
+              "wrist_right": [
+                0.42,
+                0.46
+              ],
+              "ankle_left": [
+                0.76,
+                0.6
+              ],
+              "ankle_right": [
+                0.76,
+                0.66
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "reset_hang",
+            "name": "Reset Hang",
+            "joints": {
+              "head": [
+                0.36,
+                0.56
+              ],
+              "shoulder_left": [
+                0.4,
+                0.58
+              ],
+              "shoulder_right": [
+                0.4,
+                0.64
+              ],
+              "hip_left": [
+                0.57,
+                0.6
+              ],
+              "hip_right": [
+                0.57,
+                0.66
+              ],
+              "wrist_left": [
+                0.44,
+                0.4
+              ],
+              "wrist_right": [
+                0.44,
+                0.46
+              ],
+              "ankle_left": [
+                0.78,
+                0.62
+              ],
+              "ankle_right": [
+                0.78,
+                0.68
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [
+                0.36,
+                0.56
+              ],
+              "shoulder_left": [
+                0.4,
+                0.58
+              ],
+              "shoulder_right": [
+                0.4,
+                0.64
+              ],
+              "hip_left": [
+                0.57,
+                0.6
+              ],
+              "hip_right": [
+                0.57,
+                0.66
+              ],
+              "wrist_left": [
+                0.44,
+                0.4
+              ],
+              "wrist_right": [
+                0.44,
+                0.46
+              ],
+              "ankle_left": [
+                0.78,
+                0.62
+              ],
+              "ankle_right": [
+                0.78,
+                0.68
+              ]
+            }
+          },
+          {
+            "progress": 0.2,
+            "joints": {
+              "head": [
+                0.34,
+                0.53
+              ],
+              "shoulder_left": [
+                0.38,
+                0.55
+              ],
+              "shoulder_right": [
+                0.38,
+                0.61
+              ],
+              "hip_left": [
+                0.55,
+                0.58
+              ],
+              "hip_right": [
+                0.55,
+                0.64
+              ],
+              "wrist_left": [
+                0.42,
+                0.4
+              ],
+              "wrist_right": [
+                0.42,
+                0.46
+              ],
+              "ankle_left": [
+                0.76,
+                0.6
+              ],
+              "ankle_right": [
+                0.76,
+                0.66
+              ]
+            }
+          },
+          {
+            "progress": 0.4,
+            "joints": {
+              "head": [
+                0.32,
+                0.5
+              ],
+              "shoulder_left": [
+                0.36,
+                0.52
+              ],
+              "shoulder_right": [
+                0.36,
+                0.58
+              ],
+              "hip_left": [
+                0.54,
+                0.57
+              ],
+              "hip_right": [
+                0.54,
+                0.63
+              ],
+              "wrist_left": [
+                0.4,
+                0.4
+              ],
+              "wrist_right": [
+                0.4,
+                0.46
+              ],
+              "ankle_left": [
+                0.75,
+                0.59
+              ],
+              "ankle_right": [
+                0.75,
+                0.65
+              ]
+            }
+          },
+          {
+            "progress": 0.6,
+            "joints": {
+              "head": [
+                0.34,
+                0.53
+              ],
+              "shoulder_left": [
+                0.38,
+                0.55
+              ],
+              "shoulder_right": [
+                0.38,
+                0.61
+              ],
+              "hip_left": [
+                0.55,
+                0.58
+              ],
+              "hip_right": [
+                0.55,
+                0.64
+              ],
+              "wrist_left": [
+                0.42,
+                0.4
+              ],
+              "wrist_right": [
+                0.42,
+                0.46
+              ],
+              "ankle_left": [
+                0.76,
+                0.6
+              ],
+              "ankle_right": [
+                0.76,
+                0.66
+              ]
+            }
+          },
+          {
+            "progress": 0.8,
+            "joints": {
+              "head": [
+                0.36,
+                0.56
+              ],
+              "shoulder_left": [
+                0.4,
+                0.58
+              ],
+              "shoulder_right": [
+                0.4,
+                0.64
+              ],
+              "hip_left": [
+                0.57,
+                0.6
+              ],
+              "hip_right": [
+                0.57,
+                0.66
+              ],
+              "wrist_left": [
+                0.44,
+                0.4
+              ],
+              "wrist_right": [
+                0.44,
+                0.46
+              ],
+              "ankle_left": [
+                0.78,
+                0.62
+              ],
+              "ankle_right": [
+                0.78,
+                0.68
+              ]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [
+                0.36,
+                0.56
+              ],
+              "shoulder_left": [
+                0.4,
+                0.58
+              ],
+              "shoulder_right": [
+                0.4,
+                0.64
+              ],
+              "hip_left": [
+                0.57,
+                0.6
+              ],
+              "hip_right": [
+                0.57,
+                0.66
+              ],
+              "wrist_left": [
+                0.44,
+                0.4
+              ],
+              "wrist_right": [
+                0.44,
+                0.46
+              ],
+              "ankle_left": [
+                0.78,
+                0.62
+              ],
+              "ankle_right": [
+                0.78,
+                0.68
+              ]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {
+          "tempo_consistency": 0.5
+        },
+        "phaseWindows": {
+          "hang_setup": [
+            0.0,
+            0.2
+          ],
+          "pull": [
+            0.2,
+            0.4
+          ],
+          "top_squeeze": [
+            0.4,
+            0.6
+          ],
+          "lower": [
+            0.6,
+            0.8
+          ],
+          "reset_hang": [
+            0.8,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "bodyweight_squat",
+      "title": "Bodyweight squat",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "legs",
+      "movementType": "rep",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:high"
+      ],
+      "cameraView": "left_profile",
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
+      "phases": [
+        {
+          "id": "standing_setup",
+          "label": "Standing Setup",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.2
+          ]
+        },
+        {
+          "id": "descent",
+          "label": "Descent",
+          "order": 1,
+          "progressWindow": [
+            0.2,
+            0.4
+          ]
+        },
+        {
+          "id": "bottom",
+          "label": "Bottom",
+          "order": 2,
+          "progressWindow": [
+            0.4,
+            0.6
+          ]
+        },
+        {
+          "id": "ascent",
+          "label": "Ascent",
+          "order": 3,
+          "progressWindow": [
+            0.6,
+            0.8
+          ]
+        },
+        {
+          "id": "stand",
+          "label": "Stand",
+          "order": 4,
+          "progressWindow": [
+            0.8,
+            1.0
+          ]
+        }
+      ],
+      "skeletonTemplate": {
+        "id": "bodyweight_squat_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "standing_setup",
+            "name": "Standing Setup",
+            "joints": {
+              "head": [
+                0.46,
+                0.2
+              ],
+              "shoulder_left": [
+                0.5,
+                0.24
+              ],
+              "shoulder_right": [
+                0.5,
+                0.3
+              ],
+              "hip_left": [
+                0.62,
+                0.42
+              ],
+              "hip_right": [
+                0.62,
+                0.48
+              ],
+              "wrist_left": [
+                0.51,
+                0.44
+              ],
+              "wrist_right": [
+                0.51,
+                0.5
+              ],
+              "ankle_left": [
+                0.78,
+                0.88
+              ],
+              "ankle_right": [
+                0.78,
+                0.94
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "descent",
+            "name": "Descent",
+            "joints": {
+              "head": [
+                0.47,
+                0.23
+              ],
+              "shoulder_left": [
+                0.51,
+                0.27
+              ],
+              "shoulder_right": [
+                0.51,
+                0.33
+              ],
+              "hip_left": [
+                0.64,
+                0.48
+              ],
+              "hip_right": [
+                0.64,
+                0.54
+              ],
+              "wrist_left": [
+                0.53,
+                0.46
+              ],
+              "wrist_right": [
+                0.53,
+                0.52
+              ],
+              "ankle_left": [
+                0.74,
+                0.86
+              ],
+              "ankle_right": [
+                0.82,
+                0.92
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "bottom",
+            "name": "Bottom",
+            "joints": {
+              "head": [
+                0.49,
+                0.28
+              ],
+              "shoulder_left": [
+                0.53,
+                0.32
+              ],
+              "shoulder_right": [
+                0.53,
+                0.38
+              ],
+              "hip_left": [
+                0.67,
+                0.56
+              ],
+              "hip_right": [
+                0.67,
+                0.62
+              ],
+              "wrist_left": [
+                0.57,
+                0.49
+              ],
+              "wrist_right": [
+                0.57,
+                0.55
+              ],
+              "ankle_left": [
+                0.7,
+                0.82
+              ],
+              "ankle_right": [
+                0.84,
+                0.9
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "ascent",
+            "name": "Ascent",
+            "joints": {
+              "head": [
+                0.47,
+                0.23
+              ],
+              "shoulder_left": [
+                0.51,
+                0.27
+              ],
+              "shoulder_right": [
+                0.51,
+                0.33
+              ],
+              "hip_left": [
+                0.64,
+                0.48
+              ],
+              "hip_right": [
+                0.64,
+                0.54
+              ],
+              "wrist_left": [
+                0.53,
+                0.46
+              ],
+              "wrist_right": [
+                0.53,
+                0.52
+              ],
+              "ankle_left": [
+                0.74,
+                0.86
+              ],
+              "ankle_right": [
+                0.82,
+                0.92
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "stand",
+            "name": "Stand",
+            "joints": {
+              "head": [
+                0.46,
+                0.2
+              ],
+              "shoulder_left": [
+                0.5,
+                0.24
+              ],
+              "shoulder_right": [
+                0.5,
+                0.3
+              ],
+              "hip_left": [
+                0.62,
+                0.42
+              ],
+              "hip_right": [
+                0.62,
+                0.48
+              ],
+              "wrist_left": [
+                0.51,
+                0.44
+              ],
+              "wrist_right": [
+                0.51,
+                0.5
+              ],
+              "ankle_left": [
+                0.78,
+                0.88
+              ],
+              "ankle_right": [
+                0.78,
+                0.94
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [
+                0.46,
+                0.2
+              ],
+              "shoulder_left": [
+                0.5,
+                0.24
+              ],
+              "shoulder_right": [
+                0.5,
+                0.3
+              ],
+              "hip_left": [
+                0.62,
+                0.42
+              ],
+              "hip_right": [
+                0.62,
+                0.48
+              ],
+              "wrist_left": [
+                0.51,
+                0.44
+              ],
+              "wrist_right": [
+                0.51,
+                0.5
+              ],
+              "ankle_left": [
+                0.78,
+                0.88
+              ],
+              "ankle_right": [
+                0.78,
+                0.94
+              ]
+            }
+          },
+          {
+            "progress": 0.2,
+            "joints": {
+              "head": [
+                0.47,
+                0.23
+              ],
+              "shoulder_left": [
+                0.51,
+                0.27
+              ],
+              "shoulder_right": [
+                0.51,
+                0.33
+              ],
+              "hip_left": [
+                0.64,
+                0.48
+              ],
+              "hip_right": [
+                0.64,
+                0.54
+              ],
+              "wrist_left": [
+                0.53,
+                0.46
+              ],
+              "wrist_right": [
+                0.53,
+                0.52
+              ],
+              "ankle_left": [
+                0.74,
+                0.86
+              ],
+              "ankle_right": [
+                0.82,
+                0.92
+              ]
+            }
+          },
+          {
+            "progress": 0.4,
+            "joints": {
+              "head": [
+                0.49,
+                0.28
+              ],
+              "shoulder_left": [
+                0.53,
+                0.32
+              ],
+              "shoulder_right": [
+                0.53,
+                0.38
+              ],
+              "hip_left": [
+                0.67,
+                0.56
+              ],
+              "hip_right": [
+                0.67,
+                0.62
+              ],
+              "wrist_left": [
+                0.57,
+                0.49
+              ],
+              "wrist_right": [
+                0.57,
+                0.55
+              ],
+              "ankle_left": [
+                0.7,
+                0.82
+              ],
+              "ankle_right": [
+                0.84,
+                0.9
+              ]
+            }
+          },
+          {
+            "progress": 0.6,
+            "joints": {
+              "head": [
+                0.47,
+                0.23
+              ],
+              "shoulder_left": [
+                0.51,
+                0.27
+              ],
+              "shoulder_right": [
+                0.51,
+                0.33
+              ],
+              "hip_left": [
+                0.64,
+                0.48
+              ],
+              "hip_right": [
+                0.64,
+                0.54
+              ],
+              "wrist_left": [
+                0.53,
+                0.46
+              ],
+              "wrist_right": [
+                0.53,
+                0.52
+              ],
+              "ankle_left": [
+                0.74,
+                0.86
+              ],
+              "ankle_right": [
+                0.82,
+                0.92
+              ]
+            }
+          },
+          {
+            "progress": 0.8,
+            "joints": {
+              "head": [
+                0.46,
+                0.2
+              ],
+              "shoulder_left": [
+                0.5,
+                0.24
+              ],
+              "shoulder_right": [
+                0.5,
+                0.3
+              ],
+              "hip_left": [
+                0.62,
+                0.42
+              ],
+              "hip_right": [
+                0.62,
+                0.48
+              ],
+              "wrist_left": [
+                0.51,
+                0.44
+              ],
+              "wrist_right": [
+                0.51,
+                0.5
+              ],
+              "ankle_left": [
+                0.78,
+                0.88
+              ],
+              "ankle_right": [
+                0.78,
+                0.94
+              ]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [
+                0.46,
+                0.2
+              ],
+              "shoulder_left": [
+                0.5,
+                0.24
+              ],
+              "shoulder_right": [
+                0.5,
+                0.3
+              ],
+              "hip_left": [
+                0.62,
+                0.42
+              ],
+              "hip_right": [
+                0.62,
+                0.48
+              ],
+              "wrist_left": [
+                0.51,
+                0.44
+              ],
+              "wrist_right": [
+                0.51,
+                0.5
+              ],
+              "ankle_left": [
+                0.78,
+                0.88
+              ],
+              "ankle_right": [
+                0.78,
+                0.94
+              ]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {
+          "tempo_consistency": 0.5
+        },
+        "phaseWindows": {
+          "standing_setup": [
+            0.0,
+            0.2
+          ],
+          "descent": [
+            0.2,
+            0.4
+          ],
+          "bottom": [
+            0.4,
+            0.6
+          ],
+          "ascent": [
+            0.6,
+            0.8
+          ],
+          "stand": [
+            0.8,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "forward_lunge",
+      "title": "Forward lunge",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "legs",
+      "movementType": "rep",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:high"
+      ],
+      "cameraView": "left_profile",
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
+      "phases": [
+        {
+          "id": "tall_start",
+          "label": "Tall Start",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.2
+          ]
+        },
+        {
+          "id": "step_forward",
+          "label": "Step Forward",
+          "order": 1,
+          "progressWindow": [
+            0.2,
+            0.4
+          ]
+        },
+        {
+          "id": "lowering",
+          "label": "Lowering",
+          "order": 2,
+          "progressWindow": [
+            0.4,
+            0.6
+          ]
+        },
+        {
+          "id": "bottom",
+          "label": "Bottom",
+          "order": 3,
+          "progressWindow": [
+            0.6,
+            0.8
+          ]
+        },
+        {
+          "id": "push_back_to_start",
+          "label": "Push Back To Start",
+          "order": 4,
+          "progressWindow": [
+            0.8,
+            1.0
+          ]
+        }
+      ],
+      "skeletonTemplate": {
+        "id": "forward_lunge_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "tall_start",
+            "name": "Tall Start",
+            "joints": {
+              "head": [
+                0.46,
+                0.2
+              ],
+              "shoulder_left": [
+                0.5,
+                0.24
+              ],
+              "shoulder_right": [
+                0.5,
+                0.3
+              ],
+              "hip_left": [
+                0.62,
+                0.42
+              ],
+              "hip_right": [
+                0.62,
+                0.48
+              ],
+              "wrist_left": [
+                0.51,
+                0.44
+              ],
+              "wrist_right": [
+                0.51,
+                0.5
+              ],
+              "ankle_left": [
+                0.78,
+                0.88
+              ],
+              "ankle_right": [
+                0.78,
+                0.94
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "step_forward",
+            "name": "Step Forward",
+            "joints": {
+              "head": [
+                0.45,
+                0.22
+              ],
+              "shoulder_left": [
+                0.49,
+                0.26
+              ],
+              "shoulder_right": [
+                0.49,
+                0.32
+              ],
+              "hip_left": [
+                0.61,
+                0.44
+              ],
+              "hip_right": [
+                0.61,
+                0.5
+              ],
+              "wrist_left": [
+                0.5,
+                0.45
+              ],
+              "wrist_right": [
+                0.5,
+                0.51
+              ],
+              "ankle_left": [
+                0.7,
+                0.88
+              ],
+              "ankle_right": [
+                0.84,
+                0.9
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "lowering",
+            "name": "Lowering",
+            "joints": {
+              "head": [
+                0.46,
+                0.25
+              ],
+              "shoulder_left": [
+                0.5,
+                0.29
+              ],
+              "shoulder_right": [
+                0.5,
+                0.35
+              ],
+              "hip_left": [
+                0.62,
+                0.52
+              ],
+              "hip_right": [
+                0.62,
+                0.58
+              ],
+              "wrist_left": [
+                0.51,
+                0.48
+              ],
+              "wrist_right": [
+                0.51,
+                0.54
+              ],
+              "ankle_left": [
+                0.68,
+                0.88
+              ],
+              "ankle_right": [
+                0.84,
+                0.86
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "bottom",
+            "name": "Bottom",
+            "joints": {
+              "head": [
+                0.45,
+                0.22
+              ],
+              "shoulder_left": [
+                0.49,
+                0.26
+              ],
+              "shoulder_right": [
+                0.49,
+                0.32
+              ],
+              "hip_left": [
+                0.61,
+                0.44
+              ],
+              "hip_right": [
+                0.61,
+                0.5
+              ],
+              "wrist_left": [
+                0.5,
+                0.45
+              ],
+              "wrist_right": [
+                0.5,
+                0.51
+              ],
+              "ankle_left": [
+                0.7,
+                0.88
+              ],
+              "ankle_right": [
+                0.84,
+                0.9
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "push_back_to_start",
+            "name": "Push Back To Start",
+            "joints": {
+              "head": [
+                0.46,
+                0.2
+              ],
+              "shoulder_left": [
+                0.5,
+                0.24
+              ],
+              "shoulder_right": [
+                0.5,
+                0.3
+              ],
+              "hip_left": [
+                0.62,
+                0.42
+              ],
+              "hip_right": [
+                0.62,
+                0.48
+              ],
+              "wrist_left": [
+                0.51,
+                0.44
+              ],
+              "wrist_right": [
+                0.51,
+                0.5
+              ],
+              "ankle_left": [
+                0.78,
+                0.88
+              ],
+              "ankle_right": [
+                0.78,
+                0.94
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [
+                0.46,
+                0.2
+              ],
+              "shoulder_left": [
+                0.5,
+                0.24
+              ],
+              "shoulder_right": [
+                0.5,
+                0.3
+              ],
+              "hip_left": [
+                0.62,
+                0.42
+              ],
+              "hip_right": [
+                0.62,
+                0.48
+              ],
+              "wrist_left": [
+                0.51,
+                0.44
+              ],
+              "wrist_right": [
+                0.51,
+                0.5
+              ],
+              "ankle_left": [
+                0.78,
+                0.88
+              ],
+              "ankle_right": [
+                0.78,
+                0.94
+              ]
+            }
+          },
+          {
+            "progress": 0.2,
+            "joints": {
+              "head": [
+                0.45,
+                0.22
+              ],
+              "shoulder_left": [
+                0.49,
+                0.26
+              ],
+              "shoulder_right": [
+                0.49,
+                0.32
+              ],
+              "hip_left": [
+                0.61,
+                0.44
+              ],
+              "hip_right": [
+                0.61,
+                0.5
+              ],
+              "wrist_left": [
+                0.5,
+                0.45
+              ],
+              "wrist_right": [
+                0.5,
+                0.51
+              ],
+              "ankle_left": [
+                0.7,
+                0.88
+              ],
+              "ankle_right": [
+                0.84,
+                0.9
+              ]
+            }
+          },
+          {
+            "progress": 0.4,
+            "joints": {
+              "head": [
+                0.46,
+                0.25
+              ],
+              "shoulder_left": [
+                0.5,
+                0.29
+              ],
+              "shoulder_right": [
+                0.5,
+                0.35
+              ],
+              "hip_left": [
+                0.62,
+                0.52
+              ],
+              "hip_right": [
+                0.62,
+                0.58
+              ],
+              "wrist_left": [
+                0.51,
+                0.48
+              ],
+              "wrist_right": [
+                0.51,
+                0.54
+              ],
+              "ankle_left": [
+                0.68,
+                0.88
+              ],
+              "ankle_right": [
+                0.84,
+                0.86
+              ]
+            }
+          },
+          {
+            "progress": 0.6,
+            "joints": {
+              "head": [
+                0.45,
+                0.22
+              ],
+              "shoulder_left": [
+                0.49,
+                0.26
+              ],
+              "shoulder_right": [
+                0.49,
+                0.32
+              ],
+              "hip_left": [
+                0.61,
+                0.44
+              ],
+              "hip_right": [
+                0.61,
+                0.5
+              ],
+              "wrist_left": [
+                0.5,
+                0.45
+              ],
+              "wrist_right": [
+                0.5,
+                0.51
+              ],
+              "ankle_left": [
+                0.7,
+                0.88
+              ],
+              "ankle_right": [
+                0.84,
+                0.9
+              ]
+            }
+          },
+          {
+            "progress": 0.8,
+            "joints": {
+              "head": [
+                0.46,
+                0.2
+              ],
+              "shoulder_left": [
+                0.5,
+                0.24
+              ],
+              "shoulder_right": [
+                0.5,
+                0.3
+              ],
+              "hip_left": [
+                0.62,
+                0.42
+              ],
+              "hip_right": [
+                0.62,
+                0.48
+              ],
+              "wrist_left": [
+                0.51,
+                0.44
+              ],
+              "wrist_right": [
+                0.51,
+                0.5
+              ],
+              "ankle_left": [
+                0.78,
+                0.88
+              ],
+              "ankle_right": [
+                0.78,
+                0.94
+              ]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [
+                0.46,
+                0.2
+              ],
+              "shoulder_left": [
+                0.5,
+                0.24
+              ],
+              "shoulder_right": [
+                0.5,
+                0.3
+              ],
+              "hip_left": [
+                0.62,
+                0.42
+              ],
+              "hip_right": [
+                0.62,
+                0.48
+              ],
+              "wrist_left": [
+                0.51,
+                0.44
+              ],
+              "wrist_right": [
+                0.51,
+                0.5
+              ],
+              "ankle_left": [
+                0.78,
+                0.88
+              ],
+              "ankle_right": [
+                0.78,
+                0.94
+              ]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {
+          "tempo_consistency": 0.5
+        },
+        "phaseWindows": {
+          "tall_start": [
+            0.0,
+            0.2
+          ],
+          "step_forward": [
+            0.2,
+            0.4
+          ],
+          "lowering": [
+            0.4,
+            0.6
+          ],
+          "bottom": [
+            0.6,
+            0.8
+          ],
+          "push_back_to_start": [
+            0.8,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "pistol_squat",
+      "title": "Pistol squat",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "legs",
+      "movementType": "rep",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:medium",
+        "thresholds:editable"
+      ],
+      "cameraView": "left_profile",
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
+      "phases": [
+        {
+          "id": "single_leg_setup",
+          "label": "Single Leg Setup",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.2
+          ]
+        },
+        {
+          "id": "descent",
+          "label": "Descent",
+          "order": 1,
+          "progressWindow": [
+            0.2,
+            0.4
+          ]
+        },
+        {
+          "id": "bottom",
+          "label": "Bottom",
+          "order": 2,
+          "progressWindow": [
+            0.4,
+            0.6
+          ]
+        },
+        {
+          "id": "ascent",
+          "label": "Ascent",
+          "order": 3,
+          "progressWindow": [
+            0.6,
+            0.8
+          ]
+        },
+        {
+          "id": "single_leg_stand",
+          "label": "Single Leg Stand",
+          "order": 4,
+          "progressWindow": [
+            0.8,
+            1.0
+          ]
+        }
+      ],
+      "skeletonTemplate": {
+        "id": "pistol_squat_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "single_leg_setup",
+            "name": "Single Leg Setup",
+            "joints": {
+              "head": [
+                0.44,
+                0.2
+              ],
+              "shoulder_left": [
+                0.48,
+                0.24
+              ],
+              "shoulder_right": [
+                0.48,
+                0.3
+              ],
+              "hip_left": [
+                0.6,
+                0.42
+              ],
+              "hip_right": [
+                0.6,
+                0.48
+              ],
+              "wrist_left": [
+                0.49,
+                0.44
+              ],
+              "wrist_right": [
+                0.49,
+                0.5
+              ],
+              "ankle_left": [
+                0.74,
+                0.88
+              ],
+              "ankle_right": [
+                0.74,
+                0.6
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "descent",
+            "name": "Descent",
+            "joints": {
+              "head": [
+                0.45,
+                0.24
+              ],
+              "shoulder_left": [
+                0.49,
+                0.28
+              ],
+              "shoulder_right": [
+                0.49,
+                0.34
+              ],
+              "hip_left": [
+                0.62,
+                0.5
+              ],
+              "hip_right": [
+                0.62,
+                0.56
+              ],
+              "wrist_left": [
+                0.5,
+                0.47
+              ],
+              "wrist_right": [
+                0.5,
+                0.53
+              ],
+              "ankle_left": [
+                0.72,
+                0.84
+              ],
+              "ankle_right": [
+                0.8,
+                0.58
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "bottom",
+            "name": "Bottom",
+            "joints": {
+              "head": [
+                0.47,
+                0.31
+              ],
+              "shoulder_left": [
+                0.51,
+                0.35
+              ],
+              "shoulder_right": [
+                0.51,
+                0.41
+              ],
+              "hip_left": [
+                0.65,
+                0.6
+              ],
+              "hip_right": [
+                0.65,
+                0.66
+              ],
+              "wrist_left": [
+                0.53,
+                0.52
+              ],
+              "wrist_right": [
+                0.53,
+                0.58
+              ],
+              "ankle_left": [
+                0.69,
+                0.82
+              ],
+              "ankle_right": [
+                0.84,
+                0.56
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "ascent",
+            "name": "Ascent",
+            "joints": {
+              "head": [
+                0.45,
+                0.24
+              ],
+              "shoulder_left": [
+                0.49,
+                0.28
+              ],
+              "shoulder_right": [
+                0.49,
+                0.34
+              ],
+              "hip_left": [
+                0.62,
+                0.5
+              ],
+              "hip_right": [
+                0.62,
+                0.56
+              ],
+              "wrist_left": [
+                0.5,
+                0.47
+              ],
+              "wrist_right": [
+                0.5,
+                0.53
+              ],
+              "ankle_left": [
+                0.72,
+                0.84
+              ],
+              "ankle_right": [
+                0.8,
+                0.58
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "single_leg_stand",
+            "name": "Single Leg Stand",
+            "joints": {
+              "head": [
+                0.44,
+                0.2
+              ],
+              "shoulder_left": [
+                0.48,
+                0.24
+              ],
+              "shoulder_right": [
+                0.48,
+                0.3
+              ],
+              "hip_left": [
+                0.6,
+                0.42
+              ],
+              "hip_right": [
+                0.6,
+                0.48
+              ],
+              "wrist_left": [
+                0.49,
+                0.44
+              ],
+              "wrist_right": [
+                0.49,
+                0.5
+              ],
+              "ankle_left": [
+                0.74,
+                0.88
+              ],
+              "ankle_right": [
+                0.74,
+                0.6
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [
+                0.44,
+                0.2
+              ],
+              "shoulder_left": [
+                0.48,
+                0.24
+              ],
+              "shoulder_right": [
+                0.48,
+                0.3
+              ],
+              "hip_left": [
+                0.6,
+                0.42
+              ],
+              "hip_right": [
+                0.6,
+                0.48
+              ],
+              "wrist_left": [
+                0.49,
+                0.44
+              ],
+              "wrist_right": [
+                0.49,
+                0.5
+              ],
+              "ankle_left": [
+                0.74,
+                0.88
+              ],
+              "ankle_right": [
+                0.74,
+                0.6
+              ]
+            }
+          },
+          {
+            "progress": 0.2,
+            "joints": {
+              "head": [
+                0.45,
+                0.24
+              ],
+              "shoulder_left": [
+                0.49,
+                0.28
+              ],
+              "shoulder_right": [
+                0.49,
+                0.34
+              ],
+              "hip_left": [
+                0.62,
+                0.5
+              ],
+              "hip_right": [
+                0.62,
+                0.56
+              ],
+              "wrist_left": [
+                0.5,
+                0.47
+              ],
+              "wrist_right": [
+                0.5,
+                0.53
+              ],
+              "ankle_left": [
+                0.72,
+                0.84
+              ],
+              "ankle_right": [
+                0.8,
+                0.58
+              ]
+            }
+          },
+          {
+            "progress": 0.4,
+            "joints": {
+              "head": [
+                0.47,
+                0.31
+              ],
+              "shoulder_left": [
+                0.51,
+                0.35
+              ],
+              "shoulder_right": [
+                0.51,
+                0.41
+              ],
+              "hip_left": [
+                0.65,
+                0.6
+              ],
+              "hip_right": [
+                0.65,
+                0.66
+              ],
+              "wrist_left": [
+                0.53,
+                0.52
+              ],
+              "wrist_right": [
+                0.53,
+                0.58
+              ],
+              "ankle_left": [
+                0.69,
+                0.82
+              ],
+              "ankle_right": [
+                0.84,
+                0.56
+              ]
+            }
+          },
+          {
+            "progress": 0.6,
+            "joints": {
+              "head": [
+                0.45,
+                0.24
+              ],
+              "shoulder_left": [
+                0.49,
+                0.28
+              ],
+              "shoulder_right": [
+                0.49,
+                0.34
+              ],
+              "hip_left": [
+                0.62,
+                0.5
+              ],
+              "hip_right": [
+                0.62,
+                0.56
+              ],
+              "wrist_left": [
+                0.5,
+                0.47
+              ],
+              "wrist_right": [
+                0.5,
+                0.53
+              ],
+              "ankle_left": [
+                0.72,
+                0.84
+              ],
+              "ankle_right": [
+                0.8,
+                0.58
+              ]
+            }
+          },
+          {
+            "progress": 0.8,
+            "joints": {
+              "head": [
+                0.44,
+                0.2
+              ],
+              "shoulder_left": [
+                0.48,
+                0.24
+              ],
+              "shoulder_right": [
+                0.48,
+                0.3
+              ],
+              "hip_left": [
+                0.6,
+                0.42
+              ],
+              "hip_right": [
+                0.6,
+                0.48
+              ],
+              "wrist_left": [
+                0.49,
+                0.44
+              ],
+              "wrist_right": [
+                0.49,
+                0.5
+              ],
+              "ankle_left": [
+                0.74,
+                0.88
+              ],
+              "ankle_right": [
+                0.74,
+                0.6
+              ]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [
+                0.44,
+                0.2
+              ],
+              "shoulder_left": [
+                0.48,
+                0.24
+              ],
+              "shoulder_right": [
+                0.48,
+                0.3
+              ],
+              "hip_left": [
+                0.6,
+                0.42
+              ],
+              "hip_right": [
+                0.6,
+                0.48
+              ],
+              "wrist_left": [
+                0.49,
+                0.44
+              ],
+              "wrist_right": [
+                0.49,
+                0.5
+              ],
+              "ankle_left": [
+                0.74,
+                0.88
+              ],
+              "ankle_right": [
+                0.74,
+                0.6
+              ]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {},
+        "phaseWindows": {
+          "single_leg_setup": [
+            0.0,
+            0.2
+          ],
+          "descent": [
+            0.2,
+            0.4
+          ],
+          "bottom": [
+            0.4,
+            0.6
+          ],
+          "ascent": [
+            0.6,
+            0.8
+          ],
+          "single_leg_stand": [
+            0.8,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "front_plank",
+      "title": "Front plank",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "core",
+      "movementType": "hold",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:high"
+      ],
+      "cameraView": "left_profile",
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
+      "phases": [
+        {
+          "id": "forearm_setup",
+          "label": "Forearm Setup",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.25
+          ]
+        },
+        {
+          "id": "lift_to_plank",
+          "label": "Lift To Plank",
+          "order": 1,
+          "progressWindow": [
+            0.25,
+            0.5
+          ]
+        },
+        {
+          "id": "hold",
+          "label": "Hold",
+          "order": 2,
+          "progressWindow": [
+            0.5,
+            0.75
+          ]
+        },
+        {
+          "id": "lower",
+          "label": "Lower",
+          "order": 3,
+          "progressWindow": [
+            0.75,
+            1.0
+          ]
+        }
+      ],
+      "skeletonTemplate": {
+        "id": "front_plank_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "forearm_setup",
+            "name": "Forearm Setup",
+            "joints": {
+              "head": [
+                0.37,
+                0.76
+              ],
+              "shoulder_left": [
+                0.43,
+                0.74
+              ],
+              "shoulder_right": [
+                0.43,
+                0.8
+              ],
+              "hip_left": [
+                0.63,
+                0.75
+              ],
+              "hip_right": [
+                0.63,
+                0.81
+              ],
+              "wrist_left": [
+                0.47,
+                0.78
+              ],
+              "wrist_right": [
+                0.47,
+                0.84
+              ],
+              "ankle_left": [
+                0.82,
+                0.76
+              ],
+              "ankle_right": [
+                0.82,
+                0.82
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "lift_to_plank",
+            "name": "Lift To Plank",
+            "joints": {
+              "head": [
+                0.31,
+                0.68
+              ],
+              "shoulder_left": [
+                0.37,
+                0.66
+              ],
+              "shoulder_right": [
+                0.37,
+                0.72
+              ],
+              "hip_left": [
+                0.59,
+                0.67
+              ],
+              "hip_right": [
+                0.59,
+                0.73
+              ],
+              "wrist_left": [
+                0.41,
+                0.7
+              ],
+              "wrist_right": [
+                0.41,
+                0.76
+              ],
+              "ankle_left": [
+                0.79,
+                0.68
+              ],
+              "ankle_right": [
+                0.79,
+                0.74
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "hold",
+            "name": "Hold",
+            "joints": {
+              "head": [
+                0.28,
+                0.65
+              ],
+              "shoulder_left": [
+                0.34,
+                0.63
+              ],
+              "shoulder_right": [
+                0.34,
+                0.69
+              ],
+              "hip_left": [
+                0.56,
+                0.64
+              ],
+              "hip_right": [
+                0.56,
+                0.7
+              ],
+              "wrist_left": [
+                0.38,
+                0.67
+              ],
+              "wrist_right": [
+                0.38,
+                0.73
+              ],
+              "ankle_left": [
+                0.76,
+                0.66
+              ],
+              "ankle_right": [
+                0.76,
+                0.72
+              ]
+            },
+            "holdDurationMs": 800,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "lower",
+            "name": "Lower",
+            "joints": {
+              "head": [
+                0.34,
+                0.72
+              ],
+              "shoulder_left": [
+                0.4,
+                0.7
+              ],
+              "shoulder_right": [
+                0.4,
+                0.76
+              ],
+              "hip_left": [
+                0.61,
+                0.71
+              ],
+              "hip_right": [
+                0.61,
+                0.77
+              ],
+              "wrist_left": [
+                0.44,
+                0.74
+              ],
+              "wrist_right": [
+                0.44,
+                0.8
+              ],
+              "ankle_left": [
+                0.8,
+                0.73
+              ],
+              "ankle_right": [
+                0.8,
+                0.79
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [
+                0.37,
+                0.76
+              ],
+              "shoulder_left": [
+                0.43,
+                0.74
+              ],
+              "shoulder_right": [
+                0.43,
+                0.8
+              ],
+              "hip_left": [
+                0.63,
+                0.75
+              ],
+              "hip_right": [
+                0.63,
+                0.81
+              ],
+              "wrist_left": [
+                0.47,
+                0.78
+              ],
+              "wrist_right": [
+                0.47,
+                0.84
+              ],
+              "ankle_left": [
+                0.82,
+                0.76
+              ],
+              "ankle_right": [
+                0.82,
+                0.82
+              ]
+            }
+          },
+          {
+            "progress": 0.33,
+            "joints": {
+              "head": [
+                0.31,
+                0.68
+              ],
+              "shoulder_left": [
+                0.37,
+                0.66
+              ],
+              "shoulder_right": [
+                0.37,
+                0.72
+              ],
+              "hip_left": [
+                0.59,
+                0.67
+              ],
+              "hip_right": [
+                0.59,
+                0.73
+              ],
+              "wrist_left": [
+                0.41,
+                0.7
+              ],
+              "wrist_right": [
+                0.41,
+                0.76
+              ],
+              "ankle_left": [
+                0.79,
+                0.68
+              ],
+              "ankle_right": [
+                0.79,
+                0.74
+              ]
+            }
+          },
+          {
+            "progress": 0.67,
+            "joints": {
+              "head": [
+                0.28,
+                0.65
+              ],
+              "shoulder_left": [
+                0.34,
+                0.63
+              ],
+              "shoulder_right": [
+                0.34,
+                0.69
+              ],
+              "hip_left": [
+                0.56,
+                0.64
+              ],
+              "hip_right": [
+                0.56,
+                0.7
+              ],
+              "wrist_left": [
+                0.38,
+                0.67
+              ],
+              "wrist_right": [
+                0.38,
+                0.73
+              ],
+              "ankle_left": [
+                0.76,
+                0.66
+              ],
+              "ankle_right": [
+                0.76,
+                0.72
+              ]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [
+                0.34,
+                0.72
+              ],
+              "shoulder_left": [
+                0.4,
+                0.7
+              ],
+              "shoulder_right": [
+                0.4,
+                0.76
+              ],
+              "hip_left": [
+                0.61,
+                0.71
+              ],
+              "hip_right": [
+                0.61,
+                0.77
+              ],
+              "wrist_left": [
+                0.44,
+                0.74
+              ],
+              "wrist_right": [
+                0.44,
+                0.8
+              ],
+              "ankle_left": [
+                0.8,
+                0.73
+              ],
+              "ankle_right": [
+                0.8,
+                0.79
+              ]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {
+          "tempo_consistency": 0.5
+        },
+        "phaseWindows": {
+          "forearm_setup": [
+            0.0,
+            0.25
+          ],
+          "lift_to_plank": [
+            0.25,
+            0.5
+          ],
+          "hold": [
+            0.5,
+            0.75
+          ],
+          "lower": [
+            0.75,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "side_plank",
+      "title": "Side plank",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "core",
+      "movementType": "hold",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:high"
+      ],
+      "cameraView": "left_profile",
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
+      "phases": [
+        {
+          "id": "side_setup",
+          "label": "Side Setup",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.25
+          ]
+        },
+        {
+          "id": "lift_hips",
+          "label": "Lift Hips",
+          "order": 1,
+          "progressWindow": [
+            0.25,
+            0.5
+          ]
+        },
+        {
+          "id": "hold",
+          "label": "Hold",
+          "order": 2,
+          "progressWindow": [
+            0.5,
+            0.75
+          ]
+        },
+        {
+          "id": "lower",
+          "label": "Lower",
+          "order": 3,
+          "progressWindow": [
+            0.75,
+            1.0
+          ]
+        }
+      ],
+      "skeletonTemplate": {
+        "id": "side_plank_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "side_setup",
+            "name": "Side Setup",
+            "joints": {
+              "head": [
+                0.52,
+                0.82
+              ],
+              "shoulder_left": [
+                0.56,
+                0.8
+              ],
+              "shoulder_right": [
+                0.56,
+                0.86
+              ],
+              "hip_left": [
+                0.66,
+                0.82
+              ],
+              "hip_right": [
+                0.66,
+                0.88
+              ],
+              "wrist_left": [
+                0.6,
+                0.84
+              ],
+              "wrist_right": [
+                0.6,
+                0.9
+              ],
+              "ankle_left": [
+                0.78,
+                0.84
+              ],
+              "ankle_right": [
+                0.78,
+                0.9
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "lift_hips",
+            "name": "Lift Hips",
+            "joints": {
+              "head": [
+                0.46,
+                0.7
+              ],
+              "shoulder_left": [
+                0.5,
+                0.68
+              ],
+              "shoulder_right": [
+                0.5,
+                0.74
+              ],
+              "hip_left": [
+                0.6,
+                0.7
+              ],
+              "hip_right": [
+                0.6,
+                0.76
+              ],
+              "wrist_left": [
+                0.54,
+                0.72
+              ],
+              "wrist_right": [
+                0.54,
+                0.78
+              ],
+              "ankle_left": [
+                0.72,
+                0.72
+              ],
+              "ankle_right": [
+                0.72,
+                0.78
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "hold",
+            "name": "Hold",
+            "joints": {
+              "head": [
+                0.42,
+                0.62
+              ],
+              "shoulder_left": [
+                0.46,
+                0.6
+              ],
+              "shoulder_right": [
+                0.46,
+                0.66
+              ],
+              "hip_left": [
+                0.56,
+                0.62
+              ],
+              "hip_right": [
+                0.56,
+                0.68
+              ],
+              "wrist_left": [
+                0.5,
+                0.64
+              ],
+              "wrist_right": [
+                0.5,
+                0.7
+              ],
+              "ankle_left": [
+                0.68,
+                0.64
+              ],
+              "ankle_right": [
+                0.68,
+                0.7
+              ]
+            },
+            "holdDurationMs": 800,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "lower",
+            "name": "Lower",
+            "joints": {
+              "head": [
+                0.49,
+                0.77
+              ],
+              "shoulder_left": [
+                0.53,
+                0.75
+              ],
+              "shoulder_right": [
+                0.53,
+                0.81
+              ],
+              "hip_left": [
+                0.63,
+                0.77
+              ],
+              "hip_right": [
+                0.63,
+                0.83
+              ],
+              "wrist_left": [
+                0.57,
+                0.79
+              ],
+              "wrist_right": [
+                0.57,
+                0.85
+              ],
+              "ankle_left": [
+                0.75,
+                0.79
+              ],
+              "ankle_right": [
+                0.75,
+                0.85
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [
+                0.52,
+                0.82
+              ],
+              "shoulder_left": [
+                0.56,
+                0.8
+              ],
+              "shoulder_right": [
+                0.56,
+                0.86
+              ],
+              "hip_left": [
+                0.66,
+                0.82
+              ],
+              "hip_right": [
+                0.66,
+                0.88
+              ],
+              "wrist_left": [
+                0.6,
+                0.84
+              ],
+              "wrist_right": [
+                0.6,
+                0.9
+              ],
+              "ankle_left": [
+                0.78,
+                0.84
+              ],
+              "ankle_right": [
+                0.78,
+                0.9
+              ]
+            }
+          },
+          {
+            "progress": 0.33,
+            "joints": {
+              "head": [
+                0.46,
+                0.7
+              ],
+              "shoulder_left": [
+                0.5,
+                0.68
+              ],
+              "shoulder_right": [
+                0.5,
+                0.74
+              ],
+              "hip_left": [
+                0.6,
+                0.7
+              ],
+              "hip_right": [
+                0.6,
+                0.76
+              ],
+              "wrist_left": [
+                0.54,
+                0.72
+              ],
+              "wrist_right": [
+                0.54,
+                0.78
+              ],
+              "ankle_left": [
+                0.72,
+                0.72
+              ],
+              "ankle_right": [
+                0.72,
+                0.78
+              ]
+            }
+          },
+          {
+            "progress": 0.67,
+            "joints": {
+              "head": [
+                0.42,
+                0.62
+              ],
+              "shoulder_left": [
+                0.46,
+                0.6
+              ],
+              "shoulder_right": [
+                0.46,
+                0.66
+              ],
+              "hip_left": [
+                0.56,
+                0.62
+              ],
+              "hip_right": [
+                0.56,
+                0.68
+              ],
+              "wrist_left": [
+                0.5,
+                0.64
+              ],
+              "wrist_right": [
+                0.5,
+                0.7
+              ],
+              "ankle_left": [
+                0.68,
+                0.64
+              ],
+              "ankle_right": [
+                0.68,
+                0.7
+              ]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [
+                0.49,
+                0.77
+              ],
+              "shoulder_left": [
+                0.53,
+                0.75
+              ],
+              "shoulder_right": [
+                0.53,
+                0.81
+              ],
+              "hip_left": [
+                0.63,
+                0.77
+              ],
+              "hip_right": [
+                0.63,
+                0.83
+              ],
+              "wrist_left": [
+                0.57,
+                0.79
+              ],
+              "wrist_right": [
+                0.57,
+                0.85
+              ],
+              "ankle_left": [
+                0.75,
+                0.79
+              ],
+              "ankle_right": [
+                0.75,
+                0.85
+              ]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {
+          "tempo_consistency": 0.5
+        },
+        "phaseWindows": {
+          "side_setup": [
+            0.0,
+            0.25
+          ],
+          "lift_hips": [
+            0.25,
+            0.5
+          ],
+          "hold": [
+            0.5,
+            0.75
+          ],
+          "lower": [
+            0.75,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "hanging_leg_raise",
+      "title": "Leg raise",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "core",
+      "movementType": "rep",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:high"
+      ],
+      "cameraView": "left_profile",
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
+      "phases": [
+        {
+          "id": "dead_hang",
+          "label": "Dead Hang",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.2
+          ]
+        },
+        {
+          "id": "raise",
+          "label": "Raise",
+          "order": 1,
+          "progressWindow": [
+            0.2,
+            0.4
+          ]
+        },
+        {
+          "id": "top",
+          "label": "Top",
+          "order": 2,
+          "progressWindow": [
+            0.4,
+            0.6
+          ]
+        },
+        {
+          "id": "controlled_lower",
+          "label": "Controlled Lower",
+          "order": 3,
+          "progressWindow": [
+            0.6,
+            0.8
+          ]
+        },
+        {
+          "id": "reset_hang",
+          "label": "Reset Hang",
+          "order": 4,
+          "progressWindow": [
+            0.8,
+            1.0
+          ]
+        }
+      ],
+      "skeletonTemplate": {
+        "id": "hanging_leg_raise_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "dead_hang",
+            "name": "Dead Hang",
+            "joints": {
+              "head": [
+                0.48,
+                0.3
+              ],
+              "shoulder_left": [
+                0.52,
+                0.34
+              ],
+              "shoulder_right": [
+                0.52,
+                0.4
+              ],
+              "hip_left": [
+                0.63,
+                0.48
+              ],
+              "hip_right": [
+                0.63,
+                0.54
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.8,
+                0.54
+              ],
+              "ankle_right": [
+                0.8,
+                0.6
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "raise",
+            "name": "Raise",
+            "joints": {
+              "head": [
+                0.47,
+                0.28
+              ],
+              "shoulder_left": [
+                0.51,
+                0.32
+              ],
+              "shoulder_right": [
+                0.51,
+                0.38
+              ],
+              "hip_left": [
+                0.61,
+                0.45
+              ],
+              "hip_right": [
+                0.61,
+                0.51
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.72,
+                0.46
+              ],
+              "ankle_right": [
+                0.72,
+                0.52
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "top",
+            "name": "Top",
+            "joints": {
+              "head": [
+                0.45,
+                0.24
+              ],
+              "shoulder_left": [
+                0.49,
+                0.28
+              ],
+              "shoulder_right": [
+                0.49,
+                0.34
+              ],
+              "hip_left": [
+                0.58,
+                0.4
+              ],
+              "hip_right": [
+                0.58,
+                0.46
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.62,
+                0.34
+              ],
+              "ankle_right": [
+                0.62,
+                0.4
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "controlled_lower",
+            "name": "Controlled Lower",
+            "joints": {
+              "head": [
+                0.47,
+                0.28
+              ],
+              "shoulder_left": [
+                0.51,
+                0.32
+              ],
+              "shoulder_right": [
+                0.51,
+                0.38
+              ],
+              "hip_left": [
+                0.61,
+                0.45
+              ],
+              "hip_right": [
+                0.61,
+                0.51
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.72,
+                0.46
+              ],
+              "ankle_right": [
+                0.72,
+                0.52
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "reset_hang",
+            "name": "Reset Hang",
+            "joints": {
+              "head": [
+                0.48,
+                0.3
+              ],
+              "shoulder_left": [
+                0.52,
+                0.34
+              ],
+              "shoulder_right": [
+                0.52,
+                0.4
+              ],
+              "hip_left": [
+                0.63,
+                0.48
+              ],
+              "hip_right": [
+                0.63,
+                0.54
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.8,
+                0.54
+              ],
+              "ankle_right": [
+                0.8,
+                0.6
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [
+                0.48,
+                0.3
+              ],
+              "shoulder_left": [
+                0.52,
+                0.34
+              ],
+              "shoulder_right": [
+                0.52,
+                0.4
+              ],
+              "hip_left": [
+                0.63,
+                0.48
+              ],
+              "hip_right": [
+                0.63,
+                0.54
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.8,
+                0.54
+              ],
+              "ankle_right": [
+                0.8,
+                0.6
+              ]
+            }
+          },
+          {
+            "progress": 0.2,
+            "joints": {
+              "head": [
+                0.47,
+                0.28
+              ],
+              "shoulder_left": [
+                0.51,
+                0.32
+              ],
+              "shoulder_right": [
+                0.51,
+                0.38
+              ],
+              "hip_left": [
+                0.61,
+                0.45
+              ],
+              "hip_right": [
+                0.61,
+                0.51
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.72,
+                0.46
+              ],
+              "ankle_right": [
+                0.72,
+                0.52
+              ]
+            }
+          },
+          {
+            "progress": 0.4,
+            "joints": {
+              "head": [
+                0.45,
+                0.24
+              ],
+              "shoulder_left": [
+                0.49,
+                0.28
+              ],
+              "shoulder_right": [
+                0.49,
+                0.34
+              ],
+              "hip_left": [
+                0.58,
+                0.4
+              ],
+              "hip_right": [
+                0.58,
+                0.46
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.62,
+                0.34
+              ],
+              "ankle_right": [
+                0.62,
+                0.4
+              ]
+            }
+          },
+          {
+            "progress": 0.6,
+            "joints": {
+              "head": [
+                0.47,
+                0.28
+              ],
+              "shoulder_left": [
+                0.51,
+                0.32
+              ],
+              "shoulder_right": [
+                0.51,
+                0.38
+              ],
+              "hip_left": [
+                0.61,
+                0.45
+              ],
+              "hip_right": [
+                0.61,
+                0.51
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.72,
+                0.46
+              ],
+              "ankle_right": [
+                0.72,
+                0.52
+              ]
+            }
+          },
+          {
+            "progress": 0.8,
+            "joints": {
+              "head": [
+                0.48,
+                0.3
+              ],
+              "shoulder_left": [
+                0.52,
+                0.34
+              ],
+              "shoulder_right": [
+                0.52,
+                0.4
+              ],
+              "hip_left": [
+                0.63,
+                0.48
+              ],
+              "hip_right": [
+                0.63,
+                0.54
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.8,
+                0.54
+              ],
+              "ankle_right": [
+                0.8,
+                0.6
+              ]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [
+                0.48,
+                0.3
+              ],
+              "shoulder_left": [
+                0.52,
+                0.34
+              ],
+              "shoulder_right": [
+                0.52,
+                0.4
+              ],
+              "hip_left": [
+                0.63,
+                0.48
+              ],
+              "hip_right": [
+                0.63,
+                0.54
+              ],
+              "wrist_left": [
+                0.5,
+                0.1
+              ],
+              "wrist_right": [
+                0.5,
+                0.16
+              ],
+              "ankle_left": [
+                0.8,
+                0.54
+              ],
+              "ankle_right": [
+                0.8,
+                0.6
+              ]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {
+          "tempo_consistency": 0.5
+        },
+        "phaseWindows": {
+          "dead_hang": [
+            0.0,
+            0.2
+          ],
+          "raise": [
+            0.2,
+            0.4
+          ],
+          "top": [
+            0.4,
+            0.6
+          ],
+          "controlled_lower": [
+            0.6,
+            0.8
+          ],
+          "reset_hang": [
+            0.8,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "hollow_hold",
+      "title": "Hollow hold",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "core",
+      "movementType": "hold",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:high"
+      ],
+      "cameraView": "left_profile",
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
+      "phases": [
+        {
+          "id": "supine_setup",
+          "label": "Supine Setup",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.25
+          ]
+        },
+        {
+          "id": "lift_to_hollow",
+          "label": "Lift To Hollow",
+          "order": 1,
+          "progressWindow": [
+            0.25,
+            0.5
+          ]
+        },
+        {
+          "id": "hold",
+          "label": "Hold",
+          "order": 2,
+          "progressWindow": [
+            0.5,
+            0.75
+          ]
+        },
+        {
+          "id": "lower",
+          "label": "Lower",
+          "order": 3,
+          "progressWindow": [
+            0.75,
+            1.0
+          ]
+        }
+      ],
+      "skeletonTemplate": {
+        "id": "hollow_hold_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "supine_setup",
+            "name": "Supine Setup",
+            "joints": {
+              "head": [
+                0.34,
+                0.84
+              ],
+              "shoulder_left": [
+                0.4,
+                0.82
+              ],
+              "shoulder_right": [
+                0.4,
+                0.88
+              ],
+              "hip_left": [
+                0.58,
+                0.86
+              ],
+              "hip_right": [
+                0.58,
+                0.92
+              ],
+              "wrist_left": [
+                0.44,
+                0.86
+              ],
+              "wrist_right": [
+                0.44,
+                0.92
+              ],
+              "ankle_left": [
+                0.76,
+                0.88
+              ],
+              "ankle_right": [
+                0.76,
+                0.94
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "lift_to_hollow",
+            "name": "Lift To Hollow",
+            "joints": {
+              "head": [
+                0.31,
+                0.78
+              ],
+              "shoulder_left": [
+                0.37,
+                0.76
+              ],
+              "shoulder_right": [
+                0.37,
+                0.82
+              ],
+              "hip_left": [
+                0.55,
+                0.8
+              ],
+              "hip_right": [
+                0.55,
+                0.86
+              ],
+              "wrist_left": [
+                0.41,
+                0.8
+              ],
+              "wrist_right": [
+                0.41,
+                0.86
+              ],
+              "ankle_left": [
+                0.73,
+                0.82
+              ],
+              "ankle_right": [
+                0.73,
+                0.88
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "hold",
+            "name": "Hold",
+            "joints": {
+              "head": [
+                0.28,
+                0.72
+              ],
+              "shoulder_left": [
+                0.34,
+                0.7
+              ],
+              "shoulder_right": [
+                0.34,
+                0.76
+              ],
+              "hip_left": [
+                0.52,
+                0.74
+              ],
+              "hip_right": [
+                0.52,
+                0.8
+              ],
+              "wrist_left": [
+                0.38,
+                0.74
+              ],
+              "wrist_right": [
+                0.38,
+                0.8
+              ],
+              "ankle_left": [
+                0.7,
+                0.76
+              ],
+              "ankle_right": [
+                0.7,
+                0.82
+              ]
+            },
+            "holdDurationMs": 800,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "lower",
+            "name": "Lower",
+            "joints": {
+              "head": [
+                0.32,
+                0.79
+              ],
+              "shoulder_left": [
+                0.38,
+                0.77
+              ],
+              "shoulder_right": [
+                0.38,
+                0.83
+              ],
+              "hip_left": [
+                0.56,
+                0.81
+              ],
+              "hip_right": [
+                0.56,
+                0.87
+              ],
+              "wrist_left": [
+                0.42,
+                0.81
+              ],
+              "wrist_right": [
+                0.42,
+                0.87
+              ],
+              "ankle_left": [
+                0.74,
+                0.83
+              ],
+              "ankle_right": [
+                0.74,
+                0.89
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [
+                0.34,
+                0.84
+              ],
+              "shoulder_left": [
+                0.4,
+                0.82
+              ],
+              "shoulder_right": [
+                0.4,
+                0.88
+              ],
+              "hip_left": [
+                0.58,
+                0.86
+              ],
+              "hip_right": [
+                0.58,
+                0.92
+              ],
+              "wrist_left": [
+                0.44,
+                0.86
+              ],
+              "wrist_right": [
+                0.44,
+                0.92
+              ],
+              "ankle_left": [
+                0.76,
+                0.88
+              ],
+              "ankle_right": [
+                0.76,
+                0.94
+              ]
+            }
+          },
+          {
+            "progress": 0.33,
+            "joints": {
+              "head": [
+                0.31,
+                0.78
+              ],
+              "shoulder_left": [
+                0.37,
+                0.76
+              ],
+              "shoulder_right": [
+                0.37,
+                0.82
+              ],
+              "hip_left": [
+                0.55,
+                0.8
+              ],
+              "hip_right": [
+                0.55,
+                0.86
+              ],
+              "wrist_left": [
+                0.41,
+                0.8
+              ],
+              "wrist_right": [
+                0.41,
+                0.86
+              ],
+              "ankle_left": [
+                0.73,
+                0.82
+              ],
+              "ankle_right": [
+                0.73,
+                0.88
+              ]
+            }
+          },
+          {
+            "progress": 0.67,
+            "joints": {
+              "head": [
+                0.28,
+                0.72
+              ],
+              "shoulder_left": [
+                0.34,
+                0.7
+              ],
+              "shoulder_right": [
+                0.34,
+                0.76
+              ],
+              "hip_left": [
+                0.52,
+                0.74
+              ],
+              "hip_right": [
+                0.52,
+                0.8
+              ],
+              "wrist_left": [
+                0.38,
+                0.74
+              ],
+              "wrist_right": [
+                0.38,
+                0.8
+              ],
+              "ankle_left": [
+                0.7,
+                0.76
+              ],
+              "ankle_right": [
+                0.7,
+                0.82
+              ]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [
+                0.32,
+                0.79
+              ],
+              "shoulder_left": [
+                0.38,
+                0.77
+              ],
+              "shoulder_right": [
+                0.38,
+                0.83
+              ],
+              "hip_left": [
+                0.56,
+                0.81
+              ],
+              "hip_right": [
+                0.56,
+                0.87
+              ],
+              "wrist_left": [
+                0.42,
+                0.81
+              ],
+              "wrist_right": [
+                0.42,
+                0.87
+              ],
+              "ankle_left": [
+                0.74,
+                0.83
+              ],
+              "ankle_right": [
+                0.74,
+                0.89
+              ]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {
+          "tempo_consistency": 0.5
+        },
+        "phaseWindows": {
+          "supine_setup": [
+            0.0,
+            0.25
+          ],
+          "lift_to_hollow": [
+            0.25,
+            0.5
+          ],
+          "hold": [
+            0.5,
+            0.75
+          ],
+          "lower": [
+            0.75,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "handstand_hold",
+      "title": "Handstand hold",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "inversion",
+      "movementType": "hold",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:high"
+      ],
+      "cameraView": "left_profile",
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
+      "phases": [
+        {
+          "id": "entry_setup",
+          "label": "Entry Setup",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.25
+          ]
+        },
+        {
+          "id": "stack_hold",
+          "label": "Stack Hold",
+          "order": 1,
+          "progressWindow": [
+            0.25,
+            0.5
+          ]
+        },
+        {
+          "id": "balance_adjust",
+          "label": "Balance Adjust",
+          "order": 2,
+          "progressWindow": [
+            0.5,
+            0.75
+          ]
+        },
+        {
+          "id": "exit",
+          "label": "Exit",
+          "order": 3,
+          "progressWindow": [
+            0.75,
+            1.0
+          ]
+        }
+      ],
+      "skeletonTemplate": {
+        "id": "handstand_hold_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "entry_setup",
+            "name": "Entry Setup",
+            "joints": {
+              "head": [
+                0.56,
+                0.45
+              ],
+              "shoulder_left": [
+                0.52,
+                0.5
+              ],
+              "shoulder_right": [
+                0.52,
+                0.56
+              ],
+              "hip_left": [
+                0.46,
+                0.66
+              ],
+              "hip_right": [
+                0.46,
+                0.72
+              ],
+              "wrist_left": [
+                0.5,
+                0.82
+              ],
+              "wrist_right": [
+                0.5,
+                0.88
+              ],
+              "ankle_left": [
+                0.4,
+                0.78
+              ],
+              "ankle_right": [
+                0.4,
+                0.84
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "stack_hold",
+            "name": "Stack Hold",
+            "joints": {
+              "head": [
+                0.52,
+                0.22
+              ],
+              "shoulder_left": [
+                0.48,
+                0.28
+              ],
+              "shoulder_right": [
+                0.48,
+                0.34
+              ],
+              "hip_left": [
+                0.45,
+                0.48
+              ],
+              "hip_right": [
+                0.45,
+                0.54
+              ],
+              "wrist_left": [
+                0.46,
+                0.8
+              ],
+              "wrist_right": [
+                0.46,
+                0.86
+              ],
+              "ankle_left": [
+                0.42,
+                0.2
+              ],
+              "ankle_right": [
+                0.42,
+                0.26
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "balance_adjust",
+            "name": "Balance Adjust",
+            "joints": {
+              "head": [
+                0.5,
+                0.14
+              ],
+              "shoulder_left": [
+                0.46,
+                0.2
+              ],
+              "shoulder_right": [
+                0.46,
+                0.26
+              ],
+              "hip_left": [
+                0.44,
+                0.4
+              ],
+              "hip_right": [
+                0.44,
+                0.46
+              ],
+              "wrist_left": [
+                0.45,
+                0.78
+              ],
+              "wrist_right": [
+                0.45,
+                0.84
+              ],
+              "ankle_left": [
+                0.43,
+                0.08
+              ],
+              "ankle_right": [
+                0.43,
+                0.14
+              ]
+            },
+            "holdDurationMs": 800,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "exit",
+            "name": "Exit",
+            "joints": {
+              "head": [
+                0.54,
+                0.38
+              ],
+              "shoulder_left": [
+                0.5,
+                0.44
+              ],
+              "shoulder_right": [
+                0.5,
+                0.5
+              ],
+              "hip_left": [
+                0.46,
+                0.6
+              ],
+              "hip_right": [
+                0.46,
+                0.66
+              ],
+              "wrist_left": [
+                0.49,
+                0.81
+              ],
+              "wrist_right": [
+                0.49,
+                0.87
+              ],
+              "ankle_left": [
+                0.41,
+                0.52
+              ],
+              "ankle_right": [
+                0.41,
+                0.58
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [
+                0.56,
+                0.45
+              ],
+              "shoulder_left": [
+                0.52,
+                0.5
+              ],
+              "shoulder_right": [
+                0.52,
+                0.56
+              ],
+              "hip_left": [
+                0.46,
+                0.66
+              ],
+              "hip_right": [
+                0.46,
+                0.72
+              ],
+              "wrist_left": [
+                0.5,
+                0.82
+              ],
+              "wrist_right": [
+                0.5,
+                0.88
+              ],
+              "ankle_left": [
+                0.4,
+                0.78
+              ],
+              "ankle_right": [
+                0.4,
+                0.84
+              ]
+            }
+          },
+          {
+            "progress": 0.33,
+            "joints": {
+              "head": [
+                0.52,
+                0.22
+              ],
+              "shoulder_left": [
+                0.48,
+                0.28
+              ],
+              "shoulder_right": [
+                0.48,
+                0.34
+              ],
+              "hip_left": [
+                0.45,
+                0.48
+              ],
+              "hip_right": [
+                0.45,
+                0.54
+              ],
+              "wrist_left": [
+                0.46,
+                0.8
+              ],
+              "wrist_right": [
+                0.46,
+                0.86
+              ],
+              "ankle_left": [
+                0.42,
+                0.2
+              ],
+              "ankle_right": [
+                0.42,
+                0.26
+              ]
+            }
+          },
+          {
+            "progress": 0.67,
+            "joints": {
+              "head": [
+                0.5,
+                0.14
+              ],
+              "shoulder_left": [
+                0.46,
+                0.2
+              ],
+              "shoulder_right": [
+                0.46,
+                0.26
+              ],
+              "hip_left": [
+                0.44,
+                0.4
+              ],
+              "hip_right": [
+                0.44,
+                0.46
+              ],
+              "wrist_left": [
+                0.45,
+                0.78
+              ],
+              "wrist_right": [
+                0.45,
+                0.84
+              ],
+              "ankle_left": [
+                0.43,
+                0.08
+              ],
+              "ankle_right": [
+                0.43,
+                0.14
+              ]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [
+                0.54,
+                0.38
+              ],
+              "shoulder_left": [
+                0.5,
+                0.44
+              ],
+              "shoulder_right": [
+                0.5,
+                0.5
+              ],
+              "hip_left": [
+                0.46,
+                0.6
+              ],
+              "hip_right": [
+                0.46,
+                0.66
+              ],
+              "wrist_left": [
+                0.49,
+                0.81
+              ],
+              "wrist_right": [
+                0.49,
+                0.87
+              ],
+              "ankle_left": [
+                0.41,
+                0.52
+              ],
+              "ankle_right": [
+                0.41,
+                0.58
+              ]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {
+          "tempo_consistency": 0.5
+        },
+        "phaseWindows": {
+          "entry_setup": [
+            0.0,
+            0.25
+          ],
+          "stack_hold": [
+            0.25,
+            0.5
+          ],
+          "balance_adjust": [
+            0.5,
+            0.75
+          ],
+          "exit": [
+            0.75,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "handstand_push_up",
+      "title": "Handstand push-up",
+      "description": "Seeded v1 prebuilt calisthenics drill with phase-true skeleton poses.",
+      "family": "inversion",
+      "movementType": "rep",
+      "tags": [
+        "seeded",
+        "v1",
+        "calisthenics",
+        "confidence:medium",
+        "thresholds:editable"
+      ],
+      "cameraView": "left_profile",
+      "supportedViews": [
+        "left_profile",
+        "right_profile"
+      ],
+      "analysisPlane": "sagittal",
+      "comparisonMode": "phase_checkpoints",
+      "keyJoints": [
+        "shoulder_left",
+        "shoulder_right",
+        "hip_left",
+        "hip_right",
+        "wrist_left",
+        "wrist_right",
+        "ankle_left",
+        "ankle_right"
+      ],
+      "normalizationBasis": "hips",
+      "phases": [
+        {
+          "id": "stack_top",
+          "label": "Stack Top",
+          "order": 0,
+          "progressWindow": [
+            0.0,
+            0.2
+          ]
+        },
+        {
+          "id": "descent",
+          "label": "Descent",
+          "order": 1,
+          "progressWindow": [
+            0.2,
+            0.4
+          ]
+        },
+        {
+          "id": "bottom_tripod",
+          "label": "Bottom Tripod",
+          "order": 2,
+          "progressWindow": [
+            0.4,
+            0.6
+          ]
+        },
+        {
+          "id": "press",
+          "label": "Press",
+          "order": 3,
+          "progressWindow": [
+            0.6,
+            0.8
+          ]
+        },
+        {
+          "id": "restack",
+          "label": "Restack",
+          "order": 4,
+          "progressWindow": [
+            0.8,
+            1.0
+          ]
+        }
+      ],
+      "skeletonTemplate": {
+        "id": "handstand_push_up_v1",
+        "loop": true,
+        "mirroredSupported": true,
+        "framesPerSecond": 16,
+        "phasePoses": [
+          {
+            "phaseId": "stack_top",
+            "name": "Stack Top",
+            "joints": {
+              "head": [
+                0.5,
+                0.14
+              ],
+              "shoulder_left": [
+                0.46,
+                0.2
+              ],
+              "shoulder_right": [
+                0.46,
+                0.26
+              ],
+              "hip_left": [
+                0.44,
+                0.4
+              ],
+              "hip_right": [
+                0.44,
+                0.46
+              ],
+              "wrist_left": [
+                0.45,
+                0.78
+              ],
+              "wrist_right": [
+                0.45,
+                0.84
+              ],
+              "ankle_left": [
+                0.43,
+                0.08
+              ],
+              "ankle_right": [
+                0.43,
+                0.14
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "descent",
+            "name": "Descent",
+            "joints": {
+              "head": [
+                0.53,
+                0.22
+              ],
+              "shoulder_left": [
+                0.49,
+                0.28
+              ],
+              "shoulder_right": [
+                0.49,
+                0.34
+              ],
+              "hip_left": [
+                0.45,
+                0.42
+              ],
+              "hip_right": [
+                0.45,
+                0.48
+              ],
+              "wrist_left": [
+                0.48,
+                0.79
+              ],
+              "wrist_right": [
+                0.48,
+                0.85
+              ],
+              "ankle_left": [
+                0.43,
+                0.1
+              ],
+              "ankle_right": [
+                0.43,
+                0.16
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "bottom_tripod",
+            "name": "Bottom Tripod",
+            "joints": {
+              "head": [
+                0.57,
+                0.33
+              ],
+              "shoulder_left": [
+                0.53,
+                0.39
+              ],
+              "shoulder_right": [
+                0.53,
+                0.45
+              ],
+              "hip_left": [
+                0.47,
+                0.47
+              ],
+              "hip_right": [
+                0.47,
+                0.53
+              ],
+              "wrist_left": [
+                0.53,
+                0.82
+              ],
+              "wrist_right": [
+                0.53,
+                0.88
+              ],
+              "ankle_left": [
+                0.44,
+                0.12
+              ],
+              "ankle_right": [
+                0.44,
+                0.18
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "press",
+            "name": "Press",
+            "joints": {
+              "head": [
+                0.53,
+                0.22
+              ],
+              "shoulder_left": [
+                0.49,
+                0.28
+              ],
+              "shoulder_right": [
+                0.49,
+                0.34
+              ],
+              "hip_left": [
+                0.45,
+                0.42
+              ],
+              "hip_right": [
+                0.45,
+                0.48
+              ],
+              "wrist_left": [
+                0.48,
+                0.79
+              ],
+              "wrist_right": [
+                0.48,
+                0.85
+              ],
+              "ankle_left": [
+                0.43,
+                0.1
+              ],
+              "ankle_right": [
+                0.43,
+                0.16
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          },
+          {
+            "phaseId": "restack",
+            "name": "Restack",
+            "joints": {
+              "head": [
+                0.5,
+                0.14
+              ],
+              "shoulder_left": [
+                0.46,
+                0.2
+              ],
+              "shoulder_right": [
+                0.46,
+                0.26
+              ],
+              "hip_left": [
+                0.44,
+                0.4
+              ],
+              "hip_right": [
+                0.44,
+                0.46
+              ],
+              "wrist_left": [
+                0.45,
+                0.78
+              ],
+              "wrist_right": [
+                0.45,
+                0.84
+              ],
+              "ankle_left": [
+                0.43,
+                0.08
+              ],
+              "ankle_right": [
+                0.43,
+                0.14
+              ]
+            },
+            "holdDurationMs": 350,
+            "transitionDurationMs": 450
+          }
+        ],
+        "keyframes": [
+          {
+            "progress": 0.0,
+            "joints": {
+              "head": [
+                0.5,
+                0.14
+              ],
+              "shoulder_left": [
+                0.46,
+                0.2
+              ],
+              "shoulder_right": [
+                0.46,
+                0.26
+              ],
+              "hip_left": [
+                0.44,
+                0.4
+              ],
+              "hip_right": [
+                0.44,
+                0.46
+              ],
+              "wrist_left": [
+                0.45,
+                0.78
+              ],
+              "wrist_right": [
+                0.45,
+                0.84
+              ],
+              "ankle_left": [
+                0.43,
+                0.08
+              ],
+              "ankle_right": [
+                0.43,
+                0.14
+              ]
+            }
+          },
+          {
+            "progress": 0.2,
+            "joints": {
+              "head": [
+                0.53,
+                0.22
+              ],
+              "shoulder_left": [
+                0.49,
+                0.28
+              ],
+              "shoulder_right": [
+                0.49,
+                0.34
+              ],
+              "hip_left": [
+                0.45,
+                0.42
+              ],
+              "hip_right": [
+                0.45,
+                0.48
+              ],
+              "wrist_left": [
+                0.48,
+                0.79
+              ],
+              "wrist_right": [
+                0.48,
+                0.85
+              ],
+              "ankle_left": [
+                0.43,
+                0.1
+              ],
+              "ankle_right": [
+                0.43,
+                0.16
+              ]
+            }
+          },
+          {
+            "progress": 0.4,
+            "joints": {
+              "head": [
+                0.57,
+                0.33
+              ],
+              "shoulder_left": [
+                0.53,
+                0.39
+              ],
+              "shoulder_right": [
+                0.53,
+                0.45
+              ],
+              "hip_left": [
+                0.47,
+                0.47
+              ],
+              "hip_right": [
+                0.47,
+                0.53
+              ],
+              "wrist_left": [
+                0.53,
+                0.82
+              ],
+              "wrist_right": [
+                0.53,
+                0.88
+              ],
+              "ankle_left": [
+                0.44,
+                0.12
+              ],
+              "ankle_right": [
+                0.44,
+                0.18
+              ]
+            }
+          },
+          {
+            "progress": 0.6,
+            "joints": {
+              "head": [
+                0.53,
+                0.22
+              ],
+              "shoulder_left": [
+                0.49,
+                0.28
+              ],
+              "shoulder_right": [
+                0.49,
+                0.34
+              ],
+              "hip_left": [
+                0.45,
+                0.42
+              ],
+              "hip_right": [
+                0.45,
+                0.48
+              ],
+              "wrist_left": [
+                0.48,
+                0.79
+              ],
+              "wrist_right": [
+                0.48,
+                0.85
+              ],
+              "ankle_left": [
+                0.43,
+                0.1
+              ],
+              "ankle_right": [
+                0.43,
+                0.16
+              ]
+            }
+          },
+          {
+            "progress": 0.8,
+            "joints": {
+              "head": [
+                0.5,
+                0.14
+              ],
+              "shoulder_left": [
+                0.46,
+                0.2
+              ],
+              "shoulder_right": [
+                0.46,
+                0.26
+              ],
+              "hip_left": [
+                0.44,
+                0.4
+              ],
+              "hip_right": [
+                0.44,
+                0.46
+              ],
+              "wrist_left": [
+                0.45,
+                0.78
+              ],
+              "wrist_right": [
+                0.45,
+                0.84
+              ],
+              "ankle_left": [
+                0.43,
+                0.08
+              ],
+              "ankle_right": [
+                0.43,
+                0.14
+              ]
+            }
+          },
+          {
+            "progress": 1.0,
+            "joints": {
+              "head": [
+                0.5,
+                0.14
+              ],
+              "shoulder_left": [
+                0.46,
+                0.2
+              ],
+              "shoulder_right": [
+                0.46,
+                0.26
+              ],
+              "hip_left": [
+                0.44,
+                0.4
+              ],
+              "hip_right": [
+                0.44,
+                0.46
+              ],
+              "wrist_left": [
+                0.45,
+                0.78
+              ],
+              "wrist_right": [
+                0.45,
+                0.84
+              ],
+              "ankle_left": [
+                0.43,
+                0.08
+              ],
+              "ankle_right": [
+                0.43,
+                0.14
+              ]
+            }
+          }
+        ]
+      },
+      "calibration": {
+        "metricThresholds": {},
+        "phaseWindows": {
+          "stack_top": [
+            0.0,
+            0.2
+          ],
+          "descent": [
+            0.2,
+            0.4
+          ],
+          "bottom_tripod": [
+            0.4,
+            0.6
+          ],
+          "press": [
+            0.6,
+            0.8
+          ],
+          "restack": [
+            0.8,
+            1.0
+          ]
         }
       }
     }
