@@ -228,40 +228,18 @@ class DrillStudioViewModel(
         current.copy(phases = phases.mapIndexed { idx, phase -> phase.copy(order = idx + 1) })
     }
 
-    fun saveDraft() {
-        val current = _uiState.value as? DrillStudioUiState.Ready ?: return
-        val repository = sessionRepository
-        if (repository == null) {
-            _uiState.value = current.copy(statusMessage = "Draft save unavailable.")
-            return
-        }
-        viewModelScope.launch {
-            val persisted = runCatching {
-                val drillId = current.editingDrillId ?: "user_drill_${System.currentTimeMillis()}"
-                val existing = repository.getDrill(drillId)
-                val record = current.draft.toDrillDefinitionRecord(existingId = drillId, existing = existing, ready = false)
-                repository.updateDrill(record)
-                record
-            }.getOrNull()
-            val refreshed = (_uiState.value as? DrillStudioUiState.Ready) ?: current
-            _uiState.value = refreshed.copy(
-                editingDrillId = persisted?.id ?: refreshed.editingDrillId,
-                validationErrors = emptyList(),
-                statusMessage = if (persisted != null) "Draft saved" else "Draft save failed.",
-            )
-        }
-    }
-
-    fun saveAndMarkReady() {
+    fun save(onComplete: (Boolean) -> Unit = {}) {
         val current = _uiState.value as? DrillStudioUiState.Ready ?: return
         val repository = sessionRepository
         if (repository == null) {
             _uiState.value = current.copy(statusMessage = "Save unavailable.")
+            onComplete(false)
             return
         }
         val errors = validateReady(current.draft)
         if (errors.isNotEmpty()) {
             _uiState.value = current.copy(validationErrors = errors, statusMessage = null)
+            onComplete(false)
             return
         }
         viewModelScope.launch {
@@ -276,10 +254,15 @@ class DrillStudioViewModel(
             _uiState.value = refreshed.copy(
                 editingDrillId = persisted?.id ?: refreshed.editingDrillId,
                 validationErrors = emptyList(),
-                statusMessage = if (persisted != null) "Draft validated and saved" else "Save failed.",
+                statusMessage = if (persisted != null) "Saved" else "Save failed.",
             )
+            onComplete(persisted != null)
         }
     }
+
+    fun saveDraft() = save()
+
+    fun saveAndMarkReady() = save()
 
     fun saveTemplate(setAsBaseline: Boolean) {
         val current = _uiState.value as? DrillStudioUiState.Ready ?: return

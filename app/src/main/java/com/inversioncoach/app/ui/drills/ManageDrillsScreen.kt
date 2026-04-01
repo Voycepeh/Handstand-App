@@ -11,14 +11,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +31,7 @@ import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManageDrillsScreen(
     onBack: () -> Unit,
@@ -37,6 +42,7 @@ fun ManageDrillsScreen(
     val repo = remember { ServiceLocator.repository(context) }
     val drills by repo.observeManageDrills().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    var drillPendingDeleteId by remember { mutableStateOf<String?>(null) }
 
     ScaffoldedScreen(title = "Manage Drills", onBack = onBack) { padding ->
         Column(
@@ -56,20 +62,32 @@ fun ManageDrillsScreen(
                             Text(drill.description, style = MaterialTheme.typography.bodySmall)
                             Text("${drill.movementMode} • ${drill.cameraView} • ${drill.status}", style = MaterialTheme.typography.labelSmall)
                             Button(onClick = { onOpenDrill(drill.id) }, modifier = Modifier.fillMaxWidth()) { Text("Open") }
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                OutlinedButton(
-                                    onClick = { scope.launch { repo.archiveDrill(drill.id) } },
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) { Text("Archive") }
-                                OutlinedButton(
-                                    onClick = { scope.launch { repo.deleteDrill(drill.id) } },
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) { Text("Delete") }
-                            }
+                            OutlinedButton(
+                                onClick = { drillPendingDeleteId = drill.id },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("Delete") }
                         }
                     }
                 }
             }
         }
+    }
+
+    val pendingDelete = drills.firstOrNull { it.id == drillPendingDeleteId }
+    if (pendingDelete != null) {
+        AlertDialog(
+            onDismissRequest = { drillPendingDeleteId = null },
+            title = { Text("Delete drill?") },
+            text = { Text("This will permanently delete \"${pendingDelete.name}\".") },
+            confirmButton = {
+                Button(onClick = {
+                    scope.launch { repo.deleteDrill(pendingDelete.id) }
+                    drillPendingDeleteId = null
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { drillPendingDeleteId = null }) { Text("Cancel") }
+            },
+        )
     }
 }

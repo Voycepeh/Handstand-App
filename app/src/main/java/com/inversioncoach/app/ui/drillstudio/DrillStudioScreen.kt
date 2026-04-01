@@ -65,6 +65,7 @@ import kotlinx.coroutines.isActive
 fun DrillStudioScreen(
     onBack: () -> Unit,
     initRequest: DrillStudioInitRequest,
+    onSaveSuccess: () -> Unit = onBack,
 ) {
     val context = LocalContext.current
     val vm = remember {
@@ -96,8 +97,6 @@ fun DrillStudioScreen(
                 padding = padding,
                 draft = state.draft,
                 sourceSeedId = state.sourceSeedId,
-                editingDrillId = state.editingDrillId,
-                editingTemplateId = state.editingTemplateId,
                 validationErrors = state.validationErrors,
                 statusMessage = state.statusMessage,
                 onUpdateDraft = vm::updateDraft,
@@ -112,10 +111,8 @@ fun DrillStudioScreen(
                 onResetPose = vm::resetPose,
                 onApplyPreset = vm::applyPosePreset,
                 onUpdatePhasePoseJoint = vm::updatePhasePoseJoint,
-                onSaveDraft = vm::saveDraft,
-                onSaveAndMarkReady = vm::saveAndMarkReady,
-                onSaveTemplate = vm::saveTemplate,
-                onSaveAsNewTemplate = vm::saveAsNewTemplate,
+                onSave = { onComplete -> vm.save(onComplete) },
+                onSaveSuccess = onSaveSuccess,
                 bodyProfile = bodyProfile,
             )
         }
@@ -158,8 +155,6 @@ private fun DrillStudioEditor(
     padding: PaddingValues,
     draft: DrillTemplate,
     sourceSeedId: String?,
-    editingDrillId: String?,
-    editingTemplateId: String?,
     validationErrors: List<String>,
     statusMessage: String?,
     onUpdateDraft: ((DrillTemplate) -> DrillTemplate) -> Unit,
@@ -174,10 +169,8 @@ private fun DrillStudioEditor(
     onResetPose: (String) -> Unit,
     onApplyPreset: (String, String) -> Unit,
     onUpdatePhasePoseJoint: (String, String, JointPoint) -> Unit,
-    onSaveDraft: () -> Unit,
-    onSaveAndMarkReady: () -> Unit,
-    onSaveTemplate: (Boolean) -> Unit,
-    onSaveAsNewTemplate: (Boolean) -> Unit,
+    onSave: ((Boolean) -> Unit) -> Unit,
+    onSaveSuccess: () -> Unit,
     bodyProfile: UserBodyProfile?,
 ) {
     val phasePoses = draft.skeletonTemplate.phasePoses
@@ -187,13 +180,11 @@ private fun DrillStudioEditor(
     var previewProgress by remember(draft.id) { mutableFloatStateOf(0f) }
     var autoPlay by remember(draft.id) { mutableStateOf(true) }
     var advancedMode by remember(draft.id) { mutableStateOf(false) }
-    var setAsBaseline by remember(draft.id) { mutableStateOf(false) }
     var selectedJoint by remember(draft.id, selectedPhaseId) {
         mutableStateOf(phasePoses.firstOrNull { it.phaseId == selectedPhaseId }?.joints?.keys?.firstOrNull())
     }
     val orderedPhases = draft.phases.sortedBy { it.order }
     val selectedPhaseTemplate = orderedPhases.firstOrNull { it.id == selectedPhaseId }
-    val hasPersistedDrillId = !editingDrillId.isNullOrBlank()
 
     LaunchedEffect(orderedPhases.map { it.id }, selectedPhaseId) {
         selectedPhaseId = DrillStudioPhaseEditor.recoverSelectionAfterDelete(
@@ -400,22 +391,11 @@ private fun DrillStudioEditor(
             statusMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             validationErrors.forEach { Text(it, color = MaterialTheme.colorScheme.error) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(onClick = onSaveDraft) { Text("Save Draft") }
-                Button(onClick = onSaveAndMarkReady) { Text("Validate and Save") }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                if (editingTemplateId != null) {
-                    Button(onClick = { onSaveTemplate(setAsBaseline) }, enabled = hasPersistedDrillId) { Text("Save Template") }
-                }
-                Button(onClick = { onSaveAsNewTemplate(setAsBaseline) }, enabled = hasPersistedDrillId) { Text("Save as New Template") }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Set as baseline")
-                Switch(
-                    checked = setAsBaseline,
-                    onCheckedChange = { setAsBaseline = it },
-                    enabled = hasPersistedDrillId,
-                )
+                Button(onClick = {
+                    onSave { success ->
+                        if (success) onSaveSuccess()
+                    }
+                }) { Text("Save") }
             }
         }
     }

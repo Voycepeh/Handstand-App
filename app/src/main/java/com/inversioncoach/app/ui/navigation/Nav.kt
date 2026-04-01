@@ -161,6 +161,11 @@ fun AppNavHost(modifier: Modifier = Modifier) {
         )) {
             DrillStudioScreen(
                 onBack = { navController.popBackStack() },
+                onSaveSuccess = {
+                    navController.navigate(Route.ManageDrills.value) {
+                        popUpTo(Route.ManageDrills.value) { inclusive = true }
+                    }
+                },
                 initRequest = DrillStudioInitRequest(
                     mode = it.arguments?.getString("mode") ?: "drill",
                     drillId = it.arguments?.getString("drillId")?.takeIf { id -> id.isNotBlank() },
