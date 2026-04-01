@@ -108,6 +108,97 @@ class DrillStudioJointEditingRegressionTest {
         assertEquals(draft, unchanged)
     }
 
+    @Test
+    fun selectedPhaseResolution_prefersSelectedPhaseIdOverFirstPhase() {
+        val phases = listOf(
+            DrillStudioPhase(
+                id = "phase_1",
+                label = "Setup",
+                order = 1,
+                progressWindow = DrillStudioPhaseWindow(0.00f, 0.20f),
+                anchorKeyframeName = "setup",
+            ),
+            DrillStudioPhase(
+                id = "phase_3",
+                label = "Finish",
+                order = 3,
+                progressWindow = DrillStudioPhaseWindow(0.80f, 1.00f),
+                anchorKeyframeName = "finish",
+            ),
+        )
+        val draft = draftForRegression(phases = phases)
+
+        val selectedPhase = resolveSelectedPhase(draft, "phase_3")
+        val selectedFrame = selectedPhase?.let { resolveFrameIndexForPhase(draft, it) }
+
+        assertEquals("phase_3", selectedPhase?.id)
+        assertEquals(2, selectedFrame)
+    }
+
+    @Test
+    fun resolveFrameIndexForSelectedPhase_resolvesFromSelectedPhaseIdInternally() {
+        val draft = draftForRegression(
+            phases = listOf(
+                DrillStudioPhase("phase_1", "Setup", 1, DrillStudioPhaseWindow(0.00f, 0.20f), anchorKeyframeName = "setup"),
+                DrillStudioPhase("phase_2", "Stack", 2, DrillStudioPhaseWindow(0.35f, 0.65f), anchorKeyframeName = "stack"),
+            ),
+        )
+
+        val selectedIndex = resolveFrameIndexForSelectedPhase(draft, "phase_2")
+        val invalidIndex = resolveFrameIndexForSelectedPhase(draft, "phase_missing")
+
+        assertEquals(1, selectedIndex)
+        assertEquals(-1, invalidIndex)
+    }
+
+    @Test
+    fun updateJointForSelectedPhase_writesOnlySelectedPhaseAnchorKeyframe() {
+        val phases = listOf(
+            DrillStudioPhase(
+                id = "phase_1",
+                label = "Setup",
+                order = 1,
+                progressWindow = DrillStudioPhaseWindow(0.00f, 0.20f),
+                anchorKeyframeName = "setup",
+            ),
+            DrillStudioPhase(
+                id = "phase_2",
+                label = "Stack",
+                order = 2,
+                progressWindow = DrillStudioPhaseWindow(0.35f, 0.65f),
+                anchorKeyframeName = "stack",
+            ),
+        )
+        val draft = draftForRegression(phases = phases)
+
+        val updated = updateJointForSelectedPhase(
+            draft = draft,
+            selectedPhaseId = "phase_2",
+            joint = BodyJoint.LEFT_WRIST,
+            x = 0.11f,
+            y = 0.88f,
+        )
+
+        assertFalse(updated.animationSpec.keyframes[0].joints.containsKey(BodyJoint.LEFT_WRIST))
+        assertEquals(0.11f, updated.animationSpec.keyframes[1].joints[BodyJoint.LEFT_WRIST]?.x ?: -1f, 0.0001f)
+        assertEquals(0.88f, updated.animationSpec.keyframes[1].joints[BodyJoint.LEFT_WRIST]?.y ?: -1f, 0.0001f)
+    }
+
+    @Test
+    fun coerceSelectedPhaseId_rebindsSelectionWhenPhaseChanges() {
+        val originalDraft = draftForRegression(
+            phases = listOf(
+                DrillStudioPhase("phase_1", "Setup", 1, DrillStudioPhaseWindow(0.0f, 0.3f), anchorKeyframeName = "setup"),
+                DrillStudioPhase("phase_2", "Stack", 2, DrillStudioPhaseWindow(0.3f, 0.7f), anchorKeyframeName = "stack"),
+            ),
+        )
+        val reducedDraft = originalDraft.copy(phases = originalDraft.phases.filterNot { it.id == "phase_2" })
+
+        val reboundSelection = coerceSelectedPhaseId(reducedDraft, selectedPhaseId = "phase_2")
+
+        assertEquals("phase_1", reboundSelection)
+    }
+
     private fun draftForRegression(
         phases: List<DrillStudioPhase>,
         keyframes: List<SkeletonKeyframe> = listOf(
