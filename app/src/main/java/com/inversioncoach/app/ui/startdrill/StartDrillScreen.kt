@@ -25,6 +25,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -89,7 +90,7 @@ fun StartDrillScreen(
         selectedView = if (drill.legacyDrillType == DrillType.FREESTYLE) EffectiveView.FREESTYLE else EffectiveView.SIDE
     }
 
-    ScaffoldedScreen(title = "Choose Drill", onBack = onBack) { padding ->
+    ScaffoldedScreen(title = if (destination == StartDrillDestination.WORKSPACE) "Drills" else "Choose Drill", onBack = onBack) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -97,7 +98,7 @@ fun StartDrillScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Choose your flow", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(if (destination == StartDrillDestination.WORKSPACE) "Drill catalog" else "Choose your flow", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(
                 text = if (destination == StartDrillDestination.WORKSPACE) {
                     "Tap a drill to open its workspace for coaching, uploads, comparison, and history."
@@ -119,7 +120,26 @@ fun StartDrillScreen(
                     DrillGridCard(
                         drill = drill,
                         selected = selectedDrillId == drill.id,
-                        onClick = { selectedDrillId = drill.id },
+                        onClick = {
+                            selectedDrillId = drill.id
+                            if (destination == StartDrillDestination.WORKSPACE) {
+                                onOpenWorkspace?.invoke(drill.id)
+                            }
+                        },
+                    )
+                }
+            }
+
+            if (drills.isEmpty()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    tonalElevation = 1.dp,
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(
+                        text = "No drills available yet. Create or import a drill to get started.",
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }
@@ -160,20 +180,6 @@ fun StartDrillScreen(
                     ) {
                         Text(
                             "Start ${selectedDrill.name}",
-                            modifier = Modifier.padding(14.dp),
-                            textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    }
-                } else {
-                    Card(
-                        onClick = { selectedDrillId?.let { onOpenWorkspace?.invoke(it) } },
-                        enabled = selectedDrillId != null,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                    ) {
-                        Text(
-                            "Open ${selectedDrill.name} Workspace",
                             modifier = Modifier.padding(14.dp),
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.titleMedium,

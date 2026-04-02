@@ -29,7 +29,7 @@ import java.util.Date
 
 
 internal object DrillWorkspacePrimaryActions {
-    val primary = listOf("Start Live Coaching", "Upload Attempt", "Compare Attempts", "View Past Sessions")
+    val primary = listOf("Start Live Coaching", "Upload Attempt", "Compare Attempts", "View Past Sessions", "Manage This Drill")
     val hiddenLegacy = listOf(
         "Upload New Reference",
         "Use Past Session as Reference",
@@ -47,6 +47,7 @@ fun DrillWorkspaceScreen(
     onCompareAttempts: (String) -> Unit,
     onViewHistory: (String) -> Unit,
     onStartLiveSession: (DrillType) -> Unit,
+    onManageDrill: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val repo = remember { ServiceLocator.repository(context) }
@@ -103,6 +104,11 @@ fun DrillWorkspaceScreen(
                 onClick = { onViewHistory(drillId) },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(DrillWorkspacePrimaryActions.primary[3]) }
+
+            Button(
+                onClick = { onManageDrill(drillId) },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(DrillWorkspacePrimaryActions.primary[4]) }
 
             Text("Recent sessions", style = MaterialTheme.typography.titleMedium)
             if (drillSessions.isEmpty()) {

@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowOutward
-import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
@@ -64,10 +63,8 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     onStart: () -> Unit,
     onStartFreestyle: () -> Unit,
-    onLatestSession: (Long) -> Unit,
-    onHistory: () -> Unit,
-    onProgress: () -> Unit,
-    onDrillHub: () -> Unit,
+    onHistoryEntry: () -> Unit,
+    onDrills: () -> Unit,
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
     onCalibration: () -> Unit,
@@ -79,24 +76,17 @@ fun HomeScreen(
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
     val profileStatuses by repository.observeProfileStatuses().collectAsState(initial = emptyList())
 
-    val latestSession = sessions.maxByOrNull { it.startedAtMs }
-
     ScaffoldedScreen(title = "Inversion Coach") { padding ->
         Content(
             padding = padding,
             onStart = onStart,
             onStartFreestyle = onStartFreestyle,
-            onLatestSession = onLatestSession,
-            onHistory = onHistory,
-            onProgress = onProgress,
-            onDrillHub = onDrillHub,
+            onHistoryEntry = onHistoryEntry,
+            onDrills = onDrills,
             onSettings = onSettings,
             onUploadVideo = onUploadVideo,
             onCalibration = onCalibration,
             sessionSummaries = sessions,
-            latestSessionId = latestSession?.id,
-            latestSessionStartMs = latestSession?.startedAtMs ?: 0L,
-            latestSessionDurationMs = computeSessionDurationMs(latestSession?.startedAtMs ?: 0L, latestSession?.completedAtMs ?: 0L),
             profileStatuses = profileStatuses,
             onSelectProfile = { profileId ->
                 scope.launch { repository.setActiveProfile(profileId) }
@@ -122,17 +112,12 @@ private fun Content(
     padding: PaddingValues,
     onStart: () -> Unit,
     onStartFreestyle: () -> Unit,
-    onLatestSession: (Long) -> Unit,
-    onHistory: () -> Unit,
-    onProgress: () -> Unit,
-    onDrillHub: () -> Unit,
+    onHistoryEntry: () -> Unit,
+    onDrills: () -> Unit,
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
     onCalibration: () -> Unit,
     sessionSummaries: List<SessionRecord>,
-    latestSessionId: Long?,
-    latestSessionStartMs: Long,
-    latestSessionDurationMs: Long,
     profileStatuses: List<UserProfileStatus>,
     onSelectProfile: (Long) -> Unit,
     onCreateProfile: (String) -> Unit,
@@ -203,18 +188,8 @@ private fun Content(
             icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
             onClick = onUploadVideo,
         )
-        ActionTile(
-            label = "Latest Session",
-            subtitle = if (latestSessionStartMs > 0L) "${formatSessionDateTime(latestSessionStartMs)} • ${formatSessionDuration(latestSessionDurationMs)}" else "No sessions yet",
-            icon = { Icon(Icons.Default.History, contentDescription = null) },
-            onClick = { latestSessionId?.let(onLatestSession) ?: onHistory() },
-        )
-        ProgressSummaryCard(summary = progressSummary, onClick = onProgress)
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ActionTile("History", "Session history", { Icon(Icons.Default.History, contentDescription = null) }, onHistory, modifier = Modifier.weight(1f))
-            ActionTile("Drills", "Hub for drill tools", { Icon(Icons.Default.SportsMartialArts, contentDescription = null) }, onDrillHub, modifier = Modifier.weight(1f))
-        }
+        ProgressSummaryCard(summary = progressSummary, onClick = onHistoryEntry, label = "History")
+        ActionTile("Drills", "Browse drills and open workspace", { Icon(Icons.Default.SportsMartialArts, contentDescription = null) }, onDrills)
 
         ActionTile(
             label = "Settings",
@@ -368,22 +343,30 @@ private fun List<SessionRecord>.toProgressSummary(nowMs: Long = System.currentTi
 private fun ProgressSummaryCard(
     summary: ProgressSummary,
     onClick: () -> Unit,
+    label: String = "Progress",
 ) {
     val hasActivity = summary.lastActivityAtMs != null
     ActionTile(
-        label = "Progress",
+        label = label,
         subtitle = if (hasActivity) {
-            "This week: ${summary.sessionsThisWeek} sessions • ${formatSessionDuration(summary.totalPracticeTimeMsThisWeek)}"
+            "Review past sessions and recent training activity."
         } else {
-            "No activity yet. Start live coaching or upload a video."
+            "No history yet. Start live coaching or upload a video."
         },
-        icon = { Icon(Icons.Default.BarChart, contentDescription = null) },
+        icon = { Icon(Icons.Default.History, contentDescription = null) },
         details = if (hasActivity) {
             buildString {
-                append("Most used: ")
-                append(summary.mostUsedDrillLabel ?: "N/A")
-                append(" • Last activity: ")
+                append("Last activity: ")
                 append(formatSessionDateTime(summary.lastActivityAtMs ?: 0L))
+                append(" • This week: ")
+                append(summary.sessionsThisWeek)
+                append(" sessions")
+                append(" • Practice: ")
+                append(formatSessionDuration(summary.totalPracticeTimeMsThisWeek))
+                if (!summary.mostUsedDrillLabel.isNullOrBlank()) {
+                    append(" • Most used: ")
+                    append(summary.mostUsedDrillLabel)
+                }
             }
         } else {
             null
