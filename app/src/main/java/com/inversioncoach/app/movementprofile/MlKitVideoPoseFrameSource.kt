@@ -102,6 +102,15 @@ class MlKitVideoPoseFrameSource(
                                 for (packet in frameQueue) {
                                     activeWorkers.incrementAndGet()
                                     try {
+                                        observer.onProgress(
+                                            AnalysisProgressEvent(
+                                                stage = "pose_detection_running",
+                                                processedFrames = packet.index,
+                                                estimatedTotalFrames = estimatedTotalFrames,
+                                                timestampMs = packet.timestampMs,
+                                                detail = "Pose detection started",
+                                            ),
+                                        )
                                         var poseFrame: PoseFrame
                                         val inferenceNanos = measureNanoTime {
                                             poseFrame = mapBitmapToPoseFrame(packet.bitmap, detector, packet.index, packet.timestampMs)

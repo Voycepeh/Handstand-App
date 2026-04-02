@@ -32,6 +32,7 @@ class UploadVideoViewModelTest {
         val runner = object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                ownerToken: String,
                 trackingMode: UploadTrackingMode,
                 selectedDrillId: String?,
                 selectedReferenceTemplateId: String?,
@@ -77,6 +78,7 @@ class UploadVideoViewModelTest {
         val runner = object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                ownerToken: String,
                 trackingMode: UploadTrackingMode,
                 selectedDrillId: String?,
                 selectedReferenceTemplateId: String?,
@@ -119,6 +121,7 @@ class UploadVideoViewModelTest {
         val runner = object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                ownerToken: String,
                 trackingMode: UploadTrackingMode,
                 selectedDrillId: String?,
                 selectedReferenceTemplateId: String?,
@@ -162,6 +165,7 @@ class UploadVideoViewModelTest {
         val runner = object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                ownerToken: String,
                 trackingMode: UploadTrackingMode,
                 selectedDrillId: String?,
                 selectedReferenceTemplateId: String?,
@@ -204,6 +208,7 @@ class UploadVideoViewModelTest {
         val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                ownerToken: String,
                 trackingMode: UploadTrackingMode,
                 selectedDrillId: String?,
                 selectedReferenceTemplateId: String?,
@@ -231,6 +236,7 @@ class UploadVideoViewModelTest {
         val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                ownerToken: String,
                 trackingMode: UploadTrackingMode,
                 selectedDrillId: String?,
                 selectedReferenceTemplateId: String?,
@@ -257,6 +263,7 @@ class UploadVideoViewModelTest {
         val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                ownerToken: String,
                 trackingMode: UploadTrackingMode,
                 selectedDrillId: String?,
                 selectedReferenceTemplateId: String?,
@@ -287,6 +294,7 @@ class UploadVideoViewModelTest {
         val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
             override suspend fun run(
                 uri: Uri,
+                ownerToken: String,
                 trackingMode: UploadTrackingMode,
                 selectedDrillId: String?,
                 selectedReferenceTemplateId: String?,
@@ -319,6 +327,7 @@ class UploadVideoViewModelTest {
             runner = object : UploadVideoAnalysisRunner {
                 override suspend fun run(
                     uri: Uri,
+            ownerToken: String,
                     trackingMode: UploadTrackingMode,
                     selectedDrillId: String?,
                     selectedReferenceTemplateId: String?,
@@ -359,6 +368,7 @@ class UploadVideoViewModelTest {
             runner = object : UploadVideoAnalysisRunner {
                 override suspend fun run(
                     uri: Uri,
+            ownerToken: String,
                     trackingMode: UploadTrackingMode,
                     selectedDrillId: String?,
                     selectedReferenceTemplateId: String?,
@@ -416,6 +426,7 @@ class UploadVideoViewModelTest {
     private fun noOpRunner() = object : UploadVideoAnalysisRunner {
         override suspend fun run(
             uri: Uri,
+            ownerToken: String,
             trackingMode: UploadTrackingMode,
             selectedDrillId: String?,
             selectedReferenceTemplateId: String?,

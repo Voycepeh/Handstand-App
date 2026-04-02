@@ -9,6 +9,8 @@ import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.RetainedAssetType
 import com.inversioncoach.app.model.SessionSource
+import com.inversioncoach.app.model.UploadJobPipelineType
+import com.inversioncoach.app.model.UploadJobStatus
 
 class Converters {
     @TypeConverter
@@ -74,5 +76,19 @@ class Converters {
 
     @TypeConverter
     fun sessionSourceToString(value: SessionSource): String = value.name
+
+    @TypeConverter
+    fun uploadJobStatusFromString(raw: String): UploadJobStatus =
+        runCatching { UploadJobStatus.valueOf(raw) }.getOrDefault(UploadJobStatus.IDLE)
+
+    @TypeConverter
+    fun uploadJobStatusToString(value: UploadJobStatus): String = value.name
+
+    @TypeConverter
+    fun uploadJobPipelineTypeFromString(raw: String?): UploadJobPipelineType? =
+        raw?.let { runCatching { UploadJobPipelineType.valueOf(it) }.getOrNull() }
+
+    @TypeConverter
+    fun uploadJobPipelineTypeToString(value: UploadJobPipelineType?): String? = value?.name
 
 }

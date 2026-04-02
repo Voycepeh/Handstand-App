@@ -156,6 +156,19 @@ enum class RawPersistStatus {
     FAILED,
 }
 
+enum class UploadJobPipelineType {
+    UPLOADED_VIDEO_ANALYSIS,
+}
+
+enum class UploadJobStatus {
+    IDLE,
+    PROCESSING,
+    COMPLETED,
+    FAILED,
+    CANCELLED,
+    STALLED,
+}
+
 enum class AnnotatedExportStage {
     QUEUED,
     PREPARING,
@@ -381,6 +394,14 @@ data class SessionRecord(
     val uploadAnalysisTotalFrames: Int = 0,
     val uploadAnalysisTimestampMs: Long? = null,
     val uploadProgressDetail: String? = null,
+    val uploadJobPipelineType: UploadJobPipelineType? = null,
+    val uploadJobStatus: UploadJobStatus = UploadJobStatus.IDLE,
+    val uploadJobOwnerToken: String? = null,
+    val uploadJobStartedAtMs: Long? = null,
+    val uploadJobUpdatedAtMs: Long? = null,
+    val uploadJobHeartbeatAtMs: Long? = null,
+    val uploadJobTerminalOutcome: String? = null,
+    val uploadJobFailureReason: String? = null,
     val rawCompressionStatus: CompressionStatus = CompressionStatus.NOT_STARTED,
     val annotatedCompressionStatus: CompressionStatus = CompressionStatus.NOT_STARTED,
     val cleanupStatus: CleanupStatus = CleanupStatus.NOT_STARTED,
