@@ -1,15 +1,19 @@
 package com.inversioncoach.app.drills
 
+import com.inversioncoach.app.drills.catalog.DrillCatalogJson
 import com.inversioncoach.app.model.DrillDefinitionRecord
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class DrillSeederReadyTest {
+    private fun loadCatalog() = DrillCatalogJson.decode(File("app/src/main/assets/drill_catalog/drill_catalog_v1.json").readText())
+
     @Test
     fun seededCatalog_containsIntendedDrillSet() {
-        val seeded = DrillSeeder.seedDrills(0L)
+        val seeded = DrillSeeder.seedDrills(nowMs = 0L, catalog = loadCatalog())
         assertEquals(15, seeded.size)
 
         val ids = seeded.map { it.id }.toSet()
@@ -38,12 +42,13 @@ class DrillSeederReadyTest {
         assertTrue(seeded.all { it.sourceType == DrillSourceType.SEEDED })
         assertTrue(seeded.all { it.cueConfigJson.contains("seedKey:${it.id}") })
         assertTrue(seeded.all { it.cueConfigJson.contains("seedSource:system") })
+        assertTrue(seeded.all { it.cueConfigJson.contains("studioPayload:") })
         assertTrue(seeded.none { it.name.isBlank() || it.name.contains("draft", ignoreCase = true) })
     }
 
     @Test
     fun reconcileSeededDrills_cleanInstall_insertsAllSeeds() {
-        val writes = DrillSeeder.reconcileSeededDrills(existing = emptyList(), nowMs = 100L)
+        val writes = DrillSeeder.reconcileSeededDrills(existing = emptyList(), nowMs = 100L, catalog = loadCatalog())
         assertEquals(15, writes.size)
     }
 
@@ -54,18 +59,19 @@ class DrillSeederReadyTest {
             legacySeed(id = "seed_wall_handstand", name = "Wall Handstand", movementMode = DrillMovementMode.HOLD),
         )
 
-        val writes = DrillSeeder.reconcileSeededDrills(existing = legacy, nowMs = 1234L)
+        val writes = DrillSeeder.reconcileSeededDrills(existing = legacy, nowMs = 1234L, catalog = loadCatalog())
 
         assertEquals(15, writes.size)
         val repairedWall = writes.first { it.id == "seed_wall_handstand" }
-        assertEquals("Handstand Push Up", repairedWall.name)
+        assertEquals("Handstand push-up", repairedWall.name)
         assertEquals(DrillMovementMode.REP, repairedWall.movementMode)
+        assertTrue(repairedWall.cueConfigJson.contains("studioPayload:"))
     }
 
     @Test
     fun reconcileSeededDrills_isIdempotent() {
-        val firstPass = DrillSeeder.reconcileSeededDrills(existing = emptyList(), nowMs = 1L)
-        val secondPass = DrillSeeder.reconcileSeededDrills(existing = firstPass, nowMs = 2L)
+        val firstPass = DrillSeeder.reconcileSeededDrills(existing = emptyList(), nowMs = 1L, catalog = loadCatalog())
+        val secondPass = DrillSeeder.reconcileSeededDrills(existing = firstPass, nowMs = 2L, catalog = loadCatalog())
         assertTrue(secondPass.isEmpty())
     }
 
@@ -76,7 +82,7 @@ class DrillSeederReadyTest {
             name = "My Custom Push-up",
             sourceType = DrillSourceType.USER_CREATED,
         )
-        val writes = DrillSeeder.reconcileSeededDrills(existing = listOf(userDrill), nowMs = 44L)
+        val writes = DrillSeeder.reconcileSeededDrills(existing = listOf(userDrill), nowMs = 44L, catalog = loadCatalog())
 
         assertFalse(writes.any { it.id == "seed_push_up" })
         assertEquals(14, writes.size)

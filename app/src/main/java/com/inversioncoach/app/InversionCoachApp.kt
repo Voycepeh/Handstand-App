@@ -3,6 +3,7 @@ package com.inversioncoach.app
 import android.app.Application
 import androidx.work.Configuration
 import com.inversioncoach.app.drills.DrillSeeder
+import com.inversioncoach.app.drills.catalog.DrillCatalogRepository
 import com.inversioncoach.app.movementprofile.ReferenceTemplateLoader
 import com.inversioncoach.app.movementprofile.toRecord
 import com.inversioncoach.app.history.RetentionCleanupWorker
@@ -23,7 +24,8 @@ class InversionCoachApp : Application(), Configuration.Provider {
             val repo = ServiceLocator.repository(this@InversionCoachApp)
             val now = System.currentTimeMillis()
             val existingDrills = repo.getAllDrills().first()
-            val reconciledSeeds = DrillSeeder.reconcileSeededDrills(existing = existingDrills, nowMs = now)
+            val catalog = runCatching { DrillCatalogRepository(this@InversionCoachApp).loadCatalog() }.getOrNull()
+            val reconciledSeeds = DrillSeeder.reconcileSeededDrills(existing = existingDrills, nowMs = now, catalog = catalog)
             if (reconciledSeeds.isNotEmpty()) {
                 repo.seedDrills(reconciledSeeds)
             }

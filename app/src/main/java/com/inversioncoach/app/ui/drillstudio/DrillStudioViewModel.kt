@@ -598,43 +598,31 @@ internal fun DrillDefinitionRecord.toDrillTemplate(seed: DrillTemplate?): DrillT
     val payload = decodeStudioPayload(cueConfigJson)
     val fallback = seed ?: DrillStudioDraftRepository.createBlankDraft().template
     val phaseNames = phaseSchemaJson.split('|').mapNotNull { token -> token.trim().takeIf { it.isNotEmpty() } }
-    val phases = if (payload != null) payload.phases else phaseNames.mapIndexed { index, name ->
-        DrillPhaseTemplate(
-            id = "phase_${index + 1}",
-            label = name,
-            order = index + 1,
-            progressWindow = PhaseWindow(
-                start = index.toFloat() / phaseNames.size.coerceAtLeast(1),
-                end = ((index + 1).toFloat() / phaseNames.size.coerceAtLeast(1)).coerceAtMost(1f),
-            ),
-        )
+
+    val phases = when {
+        payload?.phases?.isNotEmpty() == true -> payload.phases
+        fallback.phases.isNotEmpty() -> fallback.phases
+        else -> phaseNames.mapIndexed { index, name ->
+            DrillPhaseTemplate(
+                id = normalizePhaseId(name, index),
+                label = name,
+                order = index + 1,
+                progressWindow = PhaseWindow(
+                    start = index.toFloat() / phaseNames.size.coerceAtLeast(1),
+                    end = ((index + 1).toFloat() / phaseNames.size.coerceAtLeast(1)).coerceAtMost(1f),
+                ),
+            )
+        }
     }
-    val seededOrAuthoredPoses = payload?.phasePoses
-        ?.takeIf { it.isNotEmpty() }
-        ?: fallback.skeletonTemplate.phasePoses.takeIf { it.isNotEmpty() }
-    val seededOrAuthoredKeyframes = payload?.keyframes
-        ?.takeIf { it.isNotEmpty() }
-        ?: fallback.skeletonTemplate.keyframes.takeIf { it.isNotEmpty() }
-    val phasePoses = phases.map { phase ->
-        val exactMatch = seededOrAuthoredPoses?.firstOrNull { it.phaseId == phase.id }
-        val fallbackPose = seededOrAuthoredPoses?.firstOrNull()
-        val chosenJoints = exactMatch?.joints
-            ?: fallbackPose?.joints
-            ?: DrillStudioPosePresets.neutralUpright.joints
-        PhasePoseTemplate(
-            phaseId = phase.id,
-            name = phase.label,
-            joints = DrillStudioPoseUtils.normalizeJointNames(chosenJoints),
-            holdDurationMs = exactMatch?.holdDurationMs,
-            transitionDurationMs = exactMatch?.transitionDurationMs ?: 700,
-        )
-    }
+
+    val resolved = resolveVisiblePhaseData(phases = phases, payload = payload, fallback = fallback)
     Log.d(
         "DrillStudioHydration",
-        "toDrillTemplate record=$id payloadPoses=${payload?.phasePoses?.size ?: 0} payloadKeyframes=${payload?.keyframes?.size ?: 0} " +
-            "seedPoses=${fallback.skeletonTemplate.phasePoses.size} seedKeyframes=${fallback.skeletonTemplate.keyframes.size} " +
-            "resolvedPoses=${phasePoses.size}",
+        "toDrillTemplate drill=$id sourceType=$sourceType phaseSource=${resolved.source} payloadPoses=${payload?.phasePoses?.size ?: 0} " +
+            "seedPoses=${fallback.skeletonTemplate.phasePoses.size} selectedPhase=${phases.firstOrNull()?.id} " +
+            "jointCount=${resolved.phasePoses.firstOrNull()?.joints?.size ?: 0} keyframes=${resolved.keyframes.size}",
     )
+
     return fallback.copy(
         id = id,
         title = name,
@@ -647,13 +635,85 @@ internal fun DrillDefinitionRecord.toDrillTemplate(seed: DrillTemplate?): DrillT
         normalizationBasis = payload?.normalizationBasis ?: normalizationBasisJson.toCatalogNormalizationBasis(),
         phases = phases,
         skeletonTemplate = fallback.skeletonTemplate.copy(
-            phasePoses = phasePoses,
-            keyframes = seededOrAuthoredKeyframes ?: phasePosesToKeyframesForRecord(phasePoses),
+            phasePoses = resolved.phasePoses,
+            keyframes = resolved.keyframes,
         ),
         calibration = fallback.calibration.copy(
             metricThresholds = payload?.metricThresholds ?: fallback.calibration.metricThresholds,
         ),
     )
+}
+
+private data class ResolvedVisiblePhaseData(
+    val source: String,
+    val phasePoses: List<PhasePoseTemplate>,
+    val keyframes: List<SkeletonKeyframeTemplate>,
+)
+
+private fun resolveVisiblePhaseData(
+    phases: List<DrillPhaseTemplate>,
+    payload: PersistedStudioPayload?,
+    fallback: DrillTemplate,
+): ResolvedVisiblePhaseData {
+    val payloadHasData = payload?.phasePoses?.isNotEmpty() == true || payload?.keyframes?.isNotEmpty() == true
+    val fallbackHasData = fallback.skeletonTemplate.phasePoses.isNotEmpty() || fallback.skeletonTemplate.keyframes.isNotEmpty()
+
+    val source = when {
+        payloadHasData -> "authored_or_persisted_seeded"
+        fallbackHasData -> "catalog_seeded"
+        else -> "fallback"
+    }
+
+    val sourcePoses = when {
+        payload?.phasePoses?.isNotEmpty() == true -> payload.phasePoses
+        fallback.skeletonTemplate.phasePoses.isNotEmpty() -> fallback.skeletonTemplate.phasePoses
+        else -> emptyList()
+    }
+
+    val resolvedPhasePoses = phases.mapIndexed { index, phase ->
+        val matched = sourcePoses.firstOrNull { matchesPhase(it.phaseId, phase) }
+        val derivedFromKeyframe = if (matched == null) {
+            val sourceKeyframes = payload?.keyframes?.takeIf { it.isNotEmpty() } ?: fallback.skeletonTemplate.keyframes
+            sourceKeyframes.sortedBy { it.progress }.getOrNull(index)
+        } else {
+            null
+        }
+        PhasePoseTemplate(
+            phaseId = phase.id,
+            name = phase.label,
+            joints = DrillStudioPoseUtils.normalizeJointNames(
+                matched?.joints
+                    ?: derivedFromKeyframe?.joints
+                    ?: DrillStudioPosePresets.neutralUpright.joints,
+            ),
+            holdDurationMs = matched?.holdDurationMs,
+            transitionDurationMs = matched?.transitionDurationMs ?: 700,
+        )
+    }
+
+    val resolvedKeyframes = when {
+        payload?.keyframes?.isNotEmpty() == true -> payload.keyframes
+        fallback.skeletonTemplate.keyframes.isNotEmpty() -> fallback.skeletonTemplate.keyframes
+        else -> phasePosesToKeyframesForRecord(resolvedPhasePoses)
+    }
+
+    return ResolvedVisiblePhaseData(
+        source = source,
+        phasePoses = resolvedPhasePoses,
+        keyframes = resolvedKeyframes,
+    )
+}
+
+private fun normalizePhaseId(raw: String, index: Int): String {
+    val normalized = raw.lowercase()
+        .replace(Regex("[^a-z0-9]+"), "_")
+        .trim('_')
+    return normalized.ifBlank { "phase_${index + 1}" }
+}
+
+private fun matchesPhase(sourcePhaseId: String, phase: DrillPhaseTemplate): Boolean {
+    val source = sourcePhaseId.trim().lowercase()
+    return source == phase.id.trim().lowercase() || source == normalizePhaseId(phase.label, phase.order - 1)
 }
 
 internal data class PersistedStudioPayload(

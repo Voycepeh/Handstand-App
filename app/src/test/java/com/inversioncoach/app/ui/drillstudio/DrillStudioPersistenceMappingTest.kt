@@ -13,6 +13,11 @@ import com.inversioncoach.app.drills.catalog.PhasePoseTemplate
 import com.inversioncoach.app.drills.catalog.PhaseWindow
 import com.inversioncoach.app.drills.catalog.SkeletonKeyframeTemplate
 import com.inversioncoach.app.drills.catalog.SkeletonTemplate
+import com.inversioncoach.app.drills.DrillCameraView
+import com.inversioncoach.app.drills.DrillMovementMode
+import com.inversioncoach.app.drills.DrillSourceType
+import com.inversioncoach.app.drills.DrillStatus
+import com.inversioncoach.app.model.DrillDefinitionRecord
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -182,6 +187,79 @@ class DrillStudioPersistenceMappingTest {
         assertEquals(seeded.skeletonTemplate.keyframes, reopened.skeletonTemplate.keyframes)
     }
 
+
+
+    @Test
+    fun toDrillTemplate_legacySeededRecordResolvesCatalogPhaseIdsAndPoses() {
+        val seed = sampleDraft().copy(
+            id = "elevated_pike_push_up",
+            phases = listOf(
+                DrillPhaseTemplate(id = "setup", label = "Setup", order = 1, progressWindow = PhaseWindow(0f, 0.33f)),
+                DrillPhaseTemplate(id = "eccentric", label = "Eccentric", order = 2, progressWindow = PhaseWindow(0.33f, 0.66f)),
+                DrillPhaseTemplate(id = "concentric", label = "Concentric", order = 3, progressWindow = PhaseWindow(0.66f, 1f)),
+            ),
+            skeletonTemplate = sampleDraft().skeletonTemplate.copy(
+                phasePoses = listOf(
+                    PhasePoseTemplate("setup", "Setup", mapOf("wrist_left" to JointPoint(0.11f, 0.22f))),
+                    PhasePoseTemplate("eccentric", "Eccentric", mapOf("wrist_left" to JointPoint(0.33f, 0.44f))),
+                    PhasePoseTemplate("concentric", "Concentric", mapOf("wrist_left" to JointPoint(0.55f, 0.66f))),
+                ),
+                keyframes = listOf(
+                    SkeletonKeyframeTemplate(0f, mapOf("wrist_left" to JointPoint(0.11f, 0.22f))),
+                    SkeletonKeyframeTemplate(0.5f, mapOf("wrist_left" to JointPoint(0.33f, 0.44f))),
+                    SkeletonKeyframeTemplate(1f, mapOf("wrist_left" to JointPoint(0.55f, 0.66f))),
+                ),
+            ),
+        )
+        val legacyPersisted = DrillDefinitionRecord(
+            id = "seed_elevated_pike_push_up",
+            name = "Elevated pike push-up",
+            description = "legacy seeded",
+            movementMode = DrillMovementMode.REP,
+            cameraView = DrillCameraView.LEFT,
+            phaseSchemaJson = "setup|eccentric|concentric",
+            keyJointsJson = "shoulder_left|shoulder_right",
+            normalizationBasisJson = "HIPS",
+            cueConfigJson = "seedKey:seed_elevated_pike_push_up|comparisonMode:POSE_TIMELINE",
+            sourceType = DrillSourceType.SEEDED,
+            status = DrillStatus.READY,
+            version = 1,
+            createdAtMs = 1L,
+            updatedAtMs = 1L,
+        )
+
+        val reopened = legacyPersisted.toDrillTemplate(seed = seed)
+
+        assertEquals(listOf("setup", "eccentric", "concentric"), reopened.phases.map { it.id })
+        assertEquals(0.11f, reopened.skeletonTemplate.phasePoses[0].joints.getValue("wrist_left").x, 0.0001f)
+        assertEquals(0.33f, reopened.skeletonTemplate.phasePoses[1].joints.getValue("wrist_left").x, 0.0001f)
+        assertEquals(3, reopened.skeletonTemplate.keyframes.size)
+    }
+
+    @Test
+    fun toDrillTemplate_usesFallbackOnlyWhenNoPayloadAndNoSeedData() {
+        val record = DrillDefinitionRecord(
+            id = "seed_empty",
+            name = "Empty",
+            description = "",
+            movementMode = DrillMovementMode.HOLD,
+            cameraView = DrillCameraView.LEFT,
+            phaseSchemaJson = "setup|hold",
+            keyJointsJson = "",
+            normalizationBasisJson = "HIPS",
+            cueConfigJson = "seedKey:seed_empty|comparisonMode:POSE_TIMELINE",
+            sourceType = DrillSourceType.SEEDED,
+            status = DrillStatus.READY,
+            version = 1,
+            createdAtMs = 1L,
+            updatedAtMs = 1L,
+        )
+
+        val reopened = record.toDrillTemplate(seed = null)
+
+        assertTrue(reopened.skeletonTemplate.phasePoses.isNotEmpty())
+        assertTrue(reopened.skeletonTemplate.keyframes.isNotEmpty())
+    }
     private fun sampleDraft(
         title: String = "Handstand Flow",
         description: String = "Desc",
