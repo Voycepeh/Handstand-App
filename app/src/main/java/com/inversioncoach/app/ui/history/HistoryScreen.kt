@@ -144,7 +144,7 @@ fun HistoryScreen(
                 MetricCard("Total sessions", "${sortedSessions.size}", Modifier.weight(1f))
                 MetricCard(
                     "Storage",
-                    "${formatMb(totalStorageBytes)} MB used • ${formatMb((maxStorageBytes - totalStorageBytes).coerceAtLeast(0L))} MB left",
+                    "${formatGb(totalStorageBytes)} GB used • ${formatGb((maxStorageBytes - totalStorageBytes).coerceAtLeast(0L))} GB left",
                     Modifier.weight(1f),
                 )
             }
@@ -172,7 +172,7 @@ fun HistoryScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(sortedSessions) { session ->
-                    val sizeMb = formatMb(sessionSizes[session.id] ?: 0L)
+                    val sizeGb = formatGb(sessionSizes[session.id] ?: 0L)
                     val status = videoStatus(session)
                     val progress = uploadProgress(session)
                     Card(
@@ -209,7 +209,7 @@ fun HistoryScreen(
                                     Text("Similarity score: $score", color = MaterialTheme.colorScheme.primary)
                                 }
                             }
-                            Text("Storage: $sizeMb MB", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Storage: $sizeGb GB", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -292,7 +292,7 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
     }
 }
 
-private fun formatMb(bytes: Long): String {
-    val mb = bytes.toDouble() / (1024.0 * 1024.0)
-    return "%.1f".format(mb)
+private fun formatGb(bytes: Long): String {
+    val gb = bytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+    return "%.1f".format(gb)
 }

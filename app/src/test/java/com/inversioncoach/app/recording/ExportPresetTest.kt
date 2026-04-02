@@ -8,6 +8,6 @@ class ExportPresetTest {
     fun presetDefaultsMatchExpectedPerformanceProfiles() {
         assertEquals(24, ExportPreset.FAST.outputFps)
         assertEquals(720, ExportPreset.BALANCED.targetHeight)
-        assertEquals(1080, ExportPreset.HIGH.targetHeight)
+        assertEquals(1080, ExportPreset.HIGH_QUALITY.targetHeight)
     }
 }

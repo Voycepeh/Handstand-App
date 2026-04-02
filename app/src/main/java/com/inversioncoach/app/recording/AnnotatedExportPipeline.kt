@@ -21,7 +21,7 @@ import kotlin.math.abs
 private const val TAG = "AnnotatedExportPipeline"
 private const val DEFAULT_STALL_WINDOW_MS = 20_000L
 private const val SOFT_SLOW_EXPORT_THRESHOLD_MS = 90_000L
-private const val MAX_EXPORT_FPS = 12
+private const val OVERLAY_EXPORT_FPS_CAP = 12
 private const val LONG_EXPORT_SESSION_MS = 30_000L
 private const val BASE_EXPORT_TIMEOUT_MS = 180_000L
 private const val MAX_EXPORT_TIMEOUT_MS = 300_000L
@@ -138,6 +138,7 @@ class AnnotatedExportPipeline(
         width: Int,
         height: Int,
         overlayFrameCount: Int,
+        preset: ExportPreset,
     ): Long {
         val durationBudgetMs = (rawDurationMs.coerceAtLeast(0L) * 2L)
         val resolutionPixels = width.coerceAtLeast(0).toLong() * height.coerceAtLeast(0).toLong()
@@ -148,13 +149,23 @@ class AnnotatedExportPipeline(
             else -> 0L
         }
         val overlayBudgetMs = (overlayFrameCount.coerceAtLeast(0).toLong() * 30L).coerceAtMost(90_000L)
-        return (exportTimeoutMs + durationBudgetMs + resolutionBudgetMs + overlayBudgetMs)
-            .coerceAtMost(MAX_EXPORT_TIMEOUT_MS)
+        val presetBudgetMs = when (preset) {
+            ExportPreset.FAST -> 0L
+            ExportPreset.BALANCED -> 20_000L
+            ExportPreset.HIGH_QUALITY -> 60_000L
+        }
+        val timeoutCapMs = when (preset) {
+            ExportPreset.FAST, ExportPreset.BALANCED -> MAX_EXPORT_TIMEOUT_MS
+            ExportPreset.HIGH_QUALITY -> MAX_EXPORT_TIMEOUT_MS + 120_000L
+        }
+        return (exportTimeoutMs + durationBudgetMs + resolutionBudgetMs + overlayBudgetMs + presetBudgetMs)
+            .coerceAtMost(timeoutCapMs)
     }
 
     internal fun freezeSnapshotForExport(
         overlayTimeline: OverlayTimeline,
         rawDurationMsHint: Long? = null,
+        preset: ExportPreset = ExportPreset.BALANCED,
     ): FrozenExportSnapshot {
         val sortedFrames = overlayTimeline.frames.sortedBy { it.timestampMs }
         val clampedFrames = if (rawDurationMsHint != null && rawDurationMsHint > 0L) {
@@ -162,7 +173,7 @@ class AnnotatedExportPipeline(
         } else {
             sortedFrames
         }
-        val minSpacingMs = (1_000L / MAX_EXPORT_FPS).coerceAtLeast(1L)
+        val minSpacingMs = (1_000L / OVERLAY_EXPORT_FPS_CAP).coerceAtLeast(1L)
         val normalizedFrames = ArrayList<OverlayTimelineFrame>(clampedFrames.size)
         var lastAcceptedTimestampMs = Long.MIN_VALUE
         for (frame in clampedFrames) {
@@ -308,6 +319,7 @@ class AnnotatedExportPipeline(
         val frozenSnapshot = freezeSnapshotForExport(
             overlayTimeline = overlayTimeline,
             rawDurationMsHint = rawDurationMsHint,
+            preset = preset,
         )
         if (frozenSnapshot.overlayTimeline.frames.isEmpty()) {
             updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
@@ -322,6 +334,7 @@ class AnnotatedExportPipeline(
             width = frozenSnapshot.sourceWidth,
             height = frozenSnapshot.sourceHeight,
             overlayFrameCount = frozenSnapshot.usableOverlayFrameCount,
+            preset = preset,
         )
         var telemetry: AnnotatedExportTelemetry? = null
         updateExportStatus(sessionId, AnnotatedExportStatus.PROCESSING)

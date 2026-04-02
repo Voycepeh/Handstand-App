@@ -285,6 +285,13 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_18_19: Migration = object : Migration(18, 19) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE user_settings ADD COLUMN annotatedExportQuality TEXT NOT NULL DEFAULT 'STABLE'")
+            db.execSQL("ALTER TABLE user_settings ADD COLUMN hasCompletedPreferencesOnboarding INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_11_12,
         MIGRATION_12_13,
@@ -293,5 +300,6 @@ object DatabaseMigrations {
         MIGRATION_15_16,
         MIGRATION_16_17,
         MIGRATION_17_18,
+        MIGRATION_18_19,
     )
 }

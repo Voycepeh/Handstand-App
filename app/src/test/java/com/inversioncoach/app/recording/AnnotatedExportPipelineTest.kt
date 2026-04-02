@@ -256,12 +256,14 @@ class AnnotatedExportPipelineTest {
             width = 640,
             height = 480,
             overlayFrameCount = 20,
+            preset = ExportPreset.BALANCED,
         )
         val largeBudget = pipeline.computeDynamicTimeoutMs(
             rawDurationMs = 60_000L,
             width = 1920,
             height = 1080,
             overlayFrameCount = 1_000,
+            preset = ExportPreset.HIGH_QUALITY,
         )
 
         assertTrue(largeBudget > smallBudget)
@@ -359,7 +361,7 @@ class AnnotatedExportPipelineTest {
             ),
         )
 
-        val frozen = pipeline.freezeSnapshotForExport(denseTimeline, rawDurationMsHint = null)
+        val frozen = pipeline.freezeSnapshotForExport(denseTimeline, rawDurationMsHint = null, preset = ExportPreset.BALANCED)
 
         assertEquals(5, frozen.rawOverlayFrameCount)
         assertTrue(frozen.usableOverlayFrameCount < frozen.rawOverlayFrameCount)
@@ -376,7 +378,7 @@ class AnnotatedExportPipelineTest {
         )
         val timeline = testTimeline(listOf(testFrame(1_000L), testFrame(4_000L)))
 
-        val frozen = pipeline.freezeSnapshotForExport(timeline, rawDurationMsHint = 2_000L)
+        val frozen = pipeline.freezeSnapshotForExport(timeline, rawDurationMsHint = 2_000L, preset = ExportPreset.BALANCED)
 
         assertEquals(2_000L, frozen.rawDurationMs)
         assertEquals(1, frozen.usableOverlayFrameCount)

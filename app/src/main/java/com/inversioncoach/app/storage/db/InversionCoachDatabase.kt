@@ -38,7 +38,7 @@ import com.inversioncoach.app.model.UserSettings
         MovementProfileRecord::class,
         CalibrationConfigRecord::class,
     ],
-    version = 18,
+    version = 19,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
