@@ -63,7 +63,7 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     onStart: () -> Unit,
     onStartFreestyle: () -> Unit,
-    onHistoryEntry: () -> Unit,
+    onHistory: () -> Unit,
     onDrills: () -> Unit,
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
@@ -81,7 +81,7 @@ fun HomeScreen(
             padding = padding,
             onStart = onStart,
             onStartFreestyle = onStartFreestyle,
-            onHistoryEntry = onHistoryEntry,
+            onHistory = onHistory,
             onDrills = onDrills,
             onSettings = onSettings,
             onUploadVideo = onUploadVideo,
@@ -112,7 +112,7 @@ private fun Content(
     padding: PaddingValues,
     onStart: () -> Unit,
     onStartFreestyle: () -> Unit,
-    onHistoryEntry: () -> Unit,
+    onHistory: () -> Unit,
     onDrills: () -> Unit,
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
@@ -124,7 +124,7 @@ private fun Content(
     onRenameProfile: (Long, String) -> Unit,
     onArchiveProfile: (Long) -> Unit,
 ) {
-    val progressSummary = remember(sessionSummaries) { sessionSummaries.toProgressSummary() }
+    val historySummary = remember(sessionSummaries) { sessionSummaries.toHistorySummary() }
     val orderedProfiles = remember(profileStatuses) {
         profileStatuses.sortedWith(
             compareByDescending<UserProfileStatus> { it.isActive }
@@ -188,7 +188,7 @@ private fun Content(
             icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
             onClick = onUploadVideo,
         )
-        ProgressSummaryCard(summary = progressSummary, onClick = onHistoryEntry, label = "History")
+        HistorySummaryCard(summary = historySummary, onClick = onHistory, label = "History")
         ActionTile("Drills", "Browse drills and open workspace", { Icon(Icons.Default.SportsMartialArts, contentDescription = null) }, onDrills)
 
         ActionTile(
@@ -303,16 +303,16 @@ private fun Content(
     }
 }
 
-private data class ProgressSummary(
+private data class HistorySummary(
     val sessionsThisWeek: Int,
     val totalPracticeTimeMsThisWeek: Long,
     val mostUsedDrillLabel: String?,
     val lastActivityAtMs: Long?,
 )
 
-private fun List<SessionRecord>.toProgressSummary(nowMs: Long = System.currentTimeMillis()): ProgressSummary {
+private fun List<SessionRecord>.toHistorySummary(nowMs: Long = System.currentTimeMillis()): HistorySummary {
     if (isEmpty()) {
-        return ProgressSummary(0, 0L, null, null)
+        return HistorySummary(0, 0L, null, null)
     }
     val zoneId = ZoneId.systemDefault()
     val now = Instant.ofEpochMilli(nowMs).atZone(zoneId)
@@ -331,7 +331,7 @@ private fun List<SessionRecord>.toProgressSummary(nowMs: Long = System.currentTi
         ?.key
     val lastActivity = maxByOrNull { it.startedAtMs }?.startedAtMs
 
-    return ProgressSummary(
+    return HistorySummary(
         sessionsThisWeek = thisWeek.size,
         totalPracticeTimeMsThisWeek = totalPracticeTimeMs,
         mostUsedDrillLabel = mostUsedDrill,
@@ -340,10 +340,10 @@ private fun List<SessionRecord>.toProgressSummary(nowMs: Long = System.currentTi
 }
 
 @Composable
-private fun ProgressSummaryCard(
-    summary: ProgressSummary,
+private fun HistorySummaryCard(
+    summary: HistorySummary,
     onClick: () -> Unit,
-    label: String = "Progress",
+    label: String = "History",
 ) {
     val hasActivity = summary.lastActivityAtMs != null
     ActionTile(

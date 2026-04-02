@@ -55,7 +55,7 @@ private enum class HeatmapZoom(val label: String, val blockHours: Int) {
 }
 
 @Composable
-fun ProgressScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
+fun HomeHistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
@@ -90,7 +90,7 @@ fun ProgressScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     val hasNewerWeek = weekOffset < 0
     val weekLabel = remember(weekDays) { formatWeekLabel(weekDays.first(), weekDays.last()) }
 
-    ScaffoldedScreen(title = "Progress", onBack = onBack) { padding ->
+    ScaffoldedScreen(title = "History", onBack = onBack) { padding ->
         val contentScrollState = rememberScrollState()
         Column(
             modifier = Modifier
@@ -100,7 +100,7 @@ fun ProgressScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
                 .verticalScroll(contentScrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Progress at a glance", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("History at a glance", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text("Activity heatmap counts only sessions >= ${settings.startupCountdownSeconds}s", style = MaterialTheme.typography.bodySmall)
 
             FilterChips(
