@@ -1,5 +1,6 @@
 package com.inversioncoach.app.storage.repository
 
+import android.util.Log
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.CalibrationConfigRecord
@@ -48,6 +49,7 @@ import java.util.UUID
 
 private const val STALE_EXPORT_RECONCILIATION_MS = 2 * 60 * 1000L
 private const val STALE_UPLOAD_HEARTBEAT_MS = 45 * 1000L
+private const val UPLOAD_REPO_TAG = "UploadJobRepo"
 private const val DEFAULT_PROFILE_NAME = "Profile 1"
 
 data class UserProfileStatus(
@@ -518,7 +520,12 @@ class SessionRepository(
         val heartbeat = active.uploadJobHeartbeatAtMs ?: active.uploadJobUpdatedAtMs ?: active.annotatedExportLastUpdatedAt ?: 0L
         val now = System.currentTimeMillis()
         val stale = heartbeat > 0 && now - heartbeat >= STALE_UPLOAD_HEARTBEAT_MS
+        Log.i(
+            UPLOAD_REPO_TAG,
+            "reconcile sessionId=${active.id} hasActiveWorker=$hasActiveWorker stale=$stale heartbeatAgeMs=${now - heartbeat} reason=$reason",
+        )
         if (hasActiveWorker || !stale) return active
+        Log.w(UPLOAD_REPO_TAG, "stall_detected sessionId=${active.id} reason=$reason")
         sessionDao.upsert(
             active.copy(
                 uploadJobStatus = UploadJobStatus.STALLED,

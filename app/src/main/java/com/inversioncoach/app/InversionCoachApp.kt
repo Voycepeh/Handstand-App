@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import android.util.Log
 
 class InversionCoachApp : Application(), Configuration.Provider {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -26,6 +27,11 @@ class InversionCoachApp : Application(), Configuration.Provider {
         }
         appScope.launch {
             val repo = ServiceLocator.repository(this@InversionCoachApp)
+            Log.i("InversionCoachApp", "process_recreation_reconcile_start")
+            repo.reconcileActiveUploadJobs(
+                hasActiveWorker = false,
+                reason = "app_launch_process_recreation",
+            )
             val now = System.currentTimeMillis()
             val existingDrills = repo.getAllDrills().first()
             val catalog = runCatching { DrillCatalogRepository(this@InversionCoachApp).loadCatalog() }.getOrNull()

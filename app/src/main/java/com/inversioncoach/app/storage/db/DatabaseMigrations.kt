@@ -285,28 +285,16 @@ object DatabaseMigrations {
         }
     }
 
-
-
     val MIGRATION_18_19: Migration = object : Migration(18, 19) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL(
-                """
-                CREATE TABLE IF NOT EXISTS `upload_processing_jobs` (
-                    `id` TEXT NOT NULL,
-                    `workId` TEXT,
-                    `sessionId` INTEGER,
-                    `stage` TEXT NOT NULL,
-                    `processedFrames` INTEGER NOT NULL,
-                    `totalFrames` INTEGER NOT NULL,
-                    `startedAt` INTEGER NOT NULL,
-                    `updatedAt` INTEGER NOT NULL,
-                    `lastHeartbeatAt` INTEGER NOT NULL,
-                    `terminalStatus` TEXT NOT NULL,
-                    `reason` TEXT,
-                    PRIMARY KEY(`id`)
-                )
-                """.trimIndent(),
-            )
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobPipelineType TEXT")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobStatus TEXT NOT NULL DEFAULT 'IDLE'")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobOwnerToken TEXT")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobStartedAtMs INTEGER")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobUpdatedAtMs INTEGER")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobHeartbeatAtMs INTEGER")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobTerminalOutcome TEXT")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobFailureReason TEXT")
         }
     }
 

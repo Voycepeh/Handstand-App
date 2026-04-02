@@ -1281,7 +1281,13 @@ class UploadVideoViewModel(
         ),
     )
     val state: StateFlow<UploadVideoUiState> = _state.asStateFlow()
-    constructor(appContext: Context) : this(appContext, null, null, null, false, false, null)
+    private var runningJob: Job? = null
+    private var observedSessionId: Long? = null
+    companion object {
+        private val uploadScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    }
+
+    constructor(runner: UploadVideoAnalysisRunner) : this(runner, null, null, null, false, false, null)
 
     init {
         if (selectedDrillId != null) {
@@ -1311,13 +1317,15 @@ class UploadVideoViewModel(
         val repo = repository
         if (repo != null) {
             viewModelScope.launch {
+                Log.i(TAG, "process_recreation_reconcile_start hasActiveWorker=${UploadJobCoordinator.isActive()}")
                 val reconciled = repo.reconcileActiveUploadJobs(
                     hasActiveWorker = UploadJobCoordinator.isActive(),
                     reason = "upload_screen_entry",
                 )
                 val active = reconciled ?: repo.getActiveUploadedSession()
+                Log.i(TAG, "reconciliation_result sessionId=${active?.id ?: -1} status=${active?.uploadJobStatus ?: "none"}")
                 if (active != null) {
-                    activeSessionId = active.id
+                    observedSessionId = active.id
                     _state.update { current ->
                         current.copy(
                             sessionId = active.id,
@@ -1337,7 +1345,7 @@ class UploadVideoViewModel(
             }
             viewModelScope.launch {
                 repo.observeSessions().collectLatest { sessions ->
-                    val sessionId = _state.value.sessionId ?: return@collectLatest
+                    val sessionId = observedSessionId ?: return@collectLatest
                     val session = sessions.firstOrNull { it.id == sessionId } ?: return@collectLatest
                     val stage = deriveUploadStage(session)
                     _state.update { current ->
@@ -1400,7 +1408,7 @@ class UploadVideoViewModel(
     }
 
     fun analyze(uri: Uri) {
-        if (activeJob?.isActive == true || UploadJobCoordinator.isActive()) {
+        if (runningJob?.isActive == true || UploadJobCoordinator.isActive()) {
             _state.update {
                 it.copy(
                     stageText = "Another upload is already in progress.",
@@ -1434,7 +1442,7 @@ class UploadVideoViewModel(
             }
             return
         }
-        activeJob = uploadScope.launch {
+        runningJob = uploadScope.launch {
             val existingActive = repository?.getActiveUploadedSession()
             if (existingActive != null) {
                 _state.update {
@@ -1481,7 +1489,7 @@ class UploadVideoViewModel(
                     pendingDrillName = _state.value.pendingDrillName,
                     onSessionCreated = { sessionId ->
                         UploadJobCoordinator.begin(sessionId, ownerToken)
-                        activeSessionId = sessionId
+                        observedSessionId = sessionId
                         _state.update { current -> current.copy(sessionId = sessionId) }
                     },
                     onProgress = { progress ->
@@ -1522,7 +1530,7 @@ class UploadVideoViewModel(
                         }
                     },
                     onLog = { line ->
-                        (_state.value.sessionId ?: activeSessionId)?.let { sessionId ->
+                        (_state.value.sessionId ?: observedSessionId)?.let { sessionId ->
                             repository?.saveSessionDiagnostics(sessionId, (_state.value.technicalLog + "\n" + line).trim())
                         }
                         _state.update { current ->
@@ -1588,8 +1596,9 @@ class UploadVideoViewModel(
     }
 
     fun cancel() {
-        activeJob?.cancel()
+        runningJob?.cancel()
         UploadJobCoordinator.clear()
+        Log.i(TAG, "upload_cancel requested sessionId=${_state.value.sessionId ?: -1}")
         _state.value.sessionId?.let { sessionId ->
             viewModelScope.launch {
                 repository?.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
