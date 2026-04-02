@@ -483,7 +483,7 @@ class AnnotatedVideoCompositor(
     private fun computeBitrate(width: Int, height: Int, preset: ExportPreset): Int = when (preset) {
         ExportPreset.FAST -> (width * height * 4).coerceAtLeast(1_000_000)
         ExportPreset.BALANCED -> (width * height * 6).coerceAtLeast(1_500_000)
-        ExportPreset.HIGH -> (width * height * 8).coerceAtLeast(2_500_000)
+        ExportPreset.HIGH_QUALITY -> (width * height * 8).coerceAtLeast(2_500_000)
     }
 
     private data class RenderInstruction(

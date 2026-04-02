@@ -39,6 +39,7 @@ import androidx.lifecycle.viewModelScope
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.AnnotatedExportFailureReason
+import com.inversioncoach.app.model.AnnotatedExportQuality
 import com.inversioncoach.app.drills.DrillStatus
 import com.inversioncoach.app.drills.DrillCameraView
 import com.inversioncoach.app.drills.DrillMovementMode
@@ -73,10 +74,10 @@ import com.inversioncoach.app.overlay.FreestyleOrientationClassifier
 import com.inversioncoach.app.recording.AnnotatedExportPipeline
 import com.inversioncoach.app.recording.AnnotatedOverlayFrame
 import com.inversioncoach.app.recording.AnnotatedVideoCompositor
-import com.inversioncoach.app.recording.ExportPreset
 import com.inversioncoach.app.recording.OverlayTimeline
 import com.inversioncoach.app.recording.OverlayTimelineJson
 import com.inversioncoach.app.recording.toTimelineFrame
+import com.inversioncoach.app.model.toExportPreset
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
@@ -204,8 +205,6 @@ class DefaultUploadVideoAnalysisRunner(
         AnnotatedExportPipeline(repository, AnnotatedVideoCompositor(context.applicationContext))
     },
 ) : UploadVideoAnalysisRunner {
-    private val preset = ExportPreset.BALANCED
-
     private data class UploadSourceMetadata(
         val durationMs: Long,
         val width: Int,
@@ -231,6 +230,10 @@ class DefaultUploadVideoAnalysisRunner(
         onProgress: (UploadProgress) -> Unit,
         onLog: (String) -> Unit,
     ): UploadFlowResult = withContext(Dispatchers.IO) {
+        val exportQuality = repository.observeSettings().first().annotatedExportQuality
+        val preset = runCatching { AnnotatedExportQuality.valueOf(exportQuality) }
+            .getOrDefault(AnnotatedExportQuality.STABLE)
+            .toExportPreset()
         val startedAt = System.currentTimeMillis()
         val drillDefinition = selectedDrillId?.let { repository.getDrill(it) }
         val activeProfileContext = runtimeBodyProfileResolver?.resolve()
@@ -1257,7 +1260,7 @@ internal fun validateSelectedDrillForUpload(
 }
 
 class UploadVideoViewModel(
-    private val runner: UploadVideoAnalysisRunner,
+    private val appContext: Context,
     private val repository: SessionRepository?,
     private val selectedDrillId: String?,
     private val selectedReferenceTemplateId: String?,
@@ -1689,11 +1692,7 @@ fun UploadVideoScreen(
     }
     val viewModel = remember(selectedDrillId, selectedReferenceTemplateId, isReferenceUpload, createDrillFromReferenceUpload) {
         UploadVideoViewModel(
-            DefaultUploadVideoAnalysisRunner(
-                context = context.applicationContext,
-                repository = repository,
-                runtimeBodyProfileResolver = ServiceLocator.runtimeBodyProfileResolver(context),
-            ),
+            context.applicationContext,
             repository,
             selectedDrillId,
             selectedReferenceTemplateId,

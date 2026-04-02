@@ -131,22 +131,24 @@ fun HistoryScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp),
-            drillIdFilter = drillIdFilter,
-            comparisonMode = comparisonMode,
-            drills = drills,
-            sortedSessions = sortedSessions,
-            selectedSort = selectedSort,
-            sortAscending = sortAscending,
-            sessionSizes = sessionSizes,
-            totalStorageBytes = totalStorageBytes,
-            maxStorageBytes = maxStorageBytes,
-            comparedSessionIds = comparedSessionIds,
-            latestComparisonScores = latestComparisonScores,
-            onSortSelected = ::onSortSelected,
-            onOpenSession = onOpenSession,
-        )
-    }
-}
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(if (comparisonMode) "Compare drill attempts" else "Session insights", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            if (comparisonMode) {
+                Text("Select a session to review results. Entries are drill-scoped when launched from Drill Workspace.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (!drillIdFilter.isNullOrBlank()) {
+                val drillName = drills.firstOrNull { it.id == drillIdFilter }?.name ?: drillIdFilter
+                Text("Filtered to drill: $drillName", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                MetricCard("Total sessions", "${sortedSessions.size}", Modifier.weight(1f))
+                MetricCard(
+                    "Storage",
+                    "${formatGb(totalStorageBytes)} GB used • ${formatGb((maxStorageBytes - totalStorageBytes).coerceAtLeast(0L))} GB left",
+                    Modifier.weight(1f),
+                )
+            }
 
 @Composable
 fun DrillSessionsSection(
@@ -191,46 +193,35 @@ fun DrillSessionsSection(
             )
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = selectedSort == HistorySort.RECENCY,
-                onClick = { onSortSelected(HistorySort.RECENCY) },
-                label = { Text(sortLabel("By recency", selectedSort == HistorySort.RECENCY, sortAscending)) },
-            )
-            FilterChip(
-                selected = selectedSort == HistorySort.STORAGE_SIZE,
-                onClick = { onSortSelected(HistorySort.STORAGE_SIZE) },
-                label = { Text(sortLabel("By storage", selectedSort == HistorySort.STORAGE_SIZE, sortAscending)) },
-            )
-            FilterChip(
-                selected = selectedSort == HistorySort.SESSION_DURATION,
-                onClick = { onSortSelected(HistorySort.SESSION_DURATION) },
-                label = { Text(sortLabel("By duration", selectedSort == HistorySort.SESSION_DURATION, sortAscending)) },
-            )
-        }
-
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(sortedSessions) { session ->
-                val sizeMb = formatMb(sessionSizes[session.id] ?: 0L)
-                val status = videoStatus(session)
-                val progress = uploadProgress(session)
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpenSession(session.id) },
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                    ),
-                ) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(session.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                        val drillId = parseHistoryMetric(session.metricsJson, "drillId")
-                        val drillName = drills.firstOrNull { it.id == drillId }?.name
-                        if (!drillId.isNullOrBlank()) {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(sortedSessions) { session ->
+                    val sizeGb = formatGb(sessionSizes[session.id] ?: 0L)
+                    val status = videoStatus(session)
+                    val progress = uploadProgress(session)
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenSession(session.id) },
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        ),
+                    ) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(session.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                            val drillId = parseHistoryMetric(session.metricsJson, "drillId")
+                            val drillName = drills.firstOrNull { it.id == drillId }?.name
+                            if (!drillId.isNullOrBlank()) {
+                                Text(
+                                    "Drill: ${drillName ?: drillId}",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(historyCardDurationText(session), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Time: ${formatSessionDateTime(session.startedAtMs)}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 "Drill: ${drillName ?: drillId}",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -250,6 +241,7 @@ fun DrillSessionsSection(
                             latestComparisonScores[session.id]?.let { score ->
                                 Text("Similarity score: $score", color = MaterialTheme.colorScheme.primary)
                             }
+                            Text("Storage: $sizeGb GB", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Text("Storage: $sizeMb MB", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -333,7 +325,7 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
     }
 }
 
-private fun formatMb(bytes: Long): String {
-    val mb = bytes.toDouble() / (1024.0 * 1024.0)
-    return "%.1f".format(mb)
+private fun formatGb(bytes: Long): String {
+    val gb = bytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+    return "%.1f".format(gb)
 }

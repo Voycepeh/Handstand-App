@@ -26,7 +26,7 @@ object ServiceLocator {
     @Volatile
     private var runtimeBodyProfileResolver: RuntimeBodyProfileResolver? = null
 
-    private fun db(context: Context): InversionCoachDatabase {
+    fun db(context: Context): InversionCoachDatabase {
         return db ?: synchronized(this) {
             db ?: Room.databaseBuilder(
                 context.applicationContext,
