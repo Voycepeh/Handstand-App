@@ -22,7 +22,6 @@ import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.overlay.EffectiveView
 import com.inversioncoach.app.ui.calibration.CalibrationScreen
 import com.inversioncoach.app.ui.drilldetail.DrillDetailScreen
-import com.inversioncoach.app.ui.drills.DrillHubScreen
 import com.inversioncoach.app.ui.drills.ManageDrillsScreen
 import com.inversioncoach.app.ui.drillstudio.DrillStudioInitRequest
 import com.inversioncoach.app.ui.drillstudio.DrillStudioScreen
@@ -64,7 +63,6 @@ sealed class Route(val value: String) {
             "history?drillId=${Uri.encode(drillId ?: "")}&mode=${Uri.encode(mode)}"
     }
     data object Progress : Route("progress")
-    data object DrillHub : Route("drill-hub")
     data object DrillStudio : Route("drill-studio?mode={mode}&drillId={drillId}&templateId={templateId}") {
         fun createNew(): String = "drill-studio?mode=create&drillId=&templateId="
         fun createForDrill(drillId: String): String = "drill-studio?mode=drill&drillId=${Uri.encode(drillId)}&templateId="
@@ -92,10 +90,8 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             HomeScreen(
                 onStart = { navController.navigate(Route.Start.create(StartDrillDestination.LIVE)) },
                 onStartFreestyle = { navController.navigate(Route.Live.create(DrillType.FREESTYLE, LiveSessionOptions.freestyleDefaults())) },
-                onLatestSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
-                onHistory = { navController.navigate(Route.History.create()) },
-                onProgress = { navController.navigate(Route.Progress.value) },
-                onDrillHub = { navController.navigate(Route.DrillHub.value) },
+                onHistoryEntry = { navController.navigate(Route.Progress.value) },
+                onDrills = { navController.navigate(Route.Start.create(StartDrillDestination.WORKSPACE)) },
                 onSettings = { navController.navigate(Route.Settings.value) },
                 onUploadVideo = { navController.navigate(Route.UploadVideo.value) },
                 onCalibration = { navController.navigate(Route.Calibration.value) },
@@ -164,14 +160,6 @@ fun AppNavHost(modifier: Modifier = Modifier) {
             )
         }
         composable(Route.Progress.value) { ProgressScreen(onBack = { navController.popBackStack() }, onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) }) }
-        composable(Route.DrillHub.value) {
-            DrillHubScreen(
-                onBack = { navController.popBackStack() },
-                onChooseDrill = { navController.navigate(Route.Start.create(StartDrillDestination.LIVE)) },
-                onManageDrills = { navController.navigate(Route.ManageDrills.value) },
-                onOpenDrillWorkspace = { navController.navigate(Route.Start.create(StartDrillDestination.WORKSPACE)) },
-            )
-        }
         composable(Route.DrillStudio.value, arguments = listOf(
             navArgument("mode") { type = NavType.StringType; defaultValue = "drill" },
             navArgument("drillId") { type = NavType.StringType; defaultValue = "" },
@@ -240,6 +228,9 @@ fun AppNavHost(modifier: Modifier = Modifier) {
                 onViewHistory = { selectedDrillId -> navController.navigate(Route.History.create(selectedDrillId, mode = "history")) },
                 onStartLiveSession = { drillType ->
                     navController.navigate(Route.Live.create(drillType, LiveSessionOptions()))
+                },
+                onManageDrill = { selectedDrillId ->
+                    navController.navigate(Route.DrillStudio.createForDrill(selectedDrillId))
                 },
             )
         }
