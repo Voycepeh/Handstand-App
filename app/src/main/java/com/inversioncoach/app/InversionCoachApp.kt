@@ -8,6 +8,7 @@ import com.inversioncoach.app.movementprofile.ReferenceTemplateLoader
 import com.inversioncoach.app.movementprofile.toRecord
 import com.inversioncoach.app.history.RetentionCleanupWorker
 import com.inversioncoach.app.storage.ServiceLocator
+import com.inversioncoach.app.ui.upload.UploadProcessingOrchestrator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,6 +21,9 @@ class InversionCoachApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         RetentionCleanupWorker.enqueuePeriodic(this)
+        appScope.launch {
+            UploadProcessingOrchestrator.reconcileState(this@InversionCoachApp)
+        }
         appScope.launch {
             val repo = ServiceLocator.repository(this@InversionCoachApp)
             val now = System.currentTimeMillis()

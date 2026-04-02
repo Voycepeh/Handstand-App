@@ -1209,7 +1209,7 @@ internal fun validateSelectedDrillForUpload(
 }
 
 class UploadVideoViewModel(
-    private val runner: UploadVideoAnalysisRunner,
+    private val appContext: Context,
     private val repository: SessionRepository?,
     private val selectedDrillId: String?,
     private val selectedReferenceTemplateId: String?,
@@ -1227,20 +1227,45 @@ class UploadVideoViewModel(
         ),
     )
     val state: StateFlow<UploadVideoUiState> = _state.asStateFlow()
-    companion object {
-        private val uploadScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        private var activeJob: Job? = null
-        private var activeSessionId: Long? = null
-    }
-
-    constructor(runner: UploadVideoAnalysisRunner) : this(runner, null, null, null, false, false, null)
+    constructor(appContext: Context) : this(appContext, null, null, null, false, false, null)
 
     init {
         val repo = repository
         if (repo != null) {
             viewModelScope.launch {
+                UploadProcessingOrchestrator.reconcileState(appContext)
+            }
+            viewModelScope.launch {
+                UploadProcessingOrchestrator.observeActiveJob(appContext).collectLatest { job ->
+                    val sessionId = job?.sessionId
+                    if (job == null) return@collectLatest
+                    val stage = when (job.stage) {
+                        com.inversioncoach.app.model.UploadJobStage.IMPORTING -> UploadStage.IMPORTING_RAW_VIDEO
+                        com.inversioncoach.app.model.UploadJobStage.ANALYZING -> UploadStage.ANALYZING_VIDEO
+                        com.inversioncoach.app.model.UploadJobStage.VALIDATING -> UploadStage.VERIFYING_OUTPUT
+                        com.inversioncoach.app.model.UploadJobStage.RENDERING -> UploadStage.RENDERING_OVERLAY
+                        com.inversioncoach.app.model.UploadJobStage.COMPLETED -> UploadStage.COMPLETED_ANNOTATED
+                        com.inversioncoach.app.model.UploadJobStage.CANCELLED -> UploadStage.CANCELLED
+                        com.inversioncoach.app.model.UploadJobStage.STALLED,
+                        com.inversioncoach.app.model.UploadJobStage.FAILED,
+                        -> UploadStage.FAILED
+                    }
+                    _state.update { current ->
+                        current.copy(
+                            sessionId = sessionId ?: current.sessionId,
+                            stage = stage,
+                            currentProcessingStage = stage,
+                            canCancel = job.terminalStatus == com.inversioncoach.app.model.UploadJobTerminalStatus.NONE,
+                            analysisProcessedFrames = job.processedFrames,
+                            analysisTotalFrames = job.totalFrames,
+                            errorMessage = if (job.terminalStatus == com.inversioncoach.app.model.UploadJobTerminalStatus.NONE) null else job.reason,
+                        )
+                    }
+                }
+            }
+            viewModelScope.launch {
                 repo.observeSessions().collectLatest { sessions ->
-                    val sessionId = activeSessionId ?: return@collectLatest
+                    val sessionId = _state.value.sessionId ?: return@collectLatest
                     val session = sessions.firstOrNull { it.id == sessionId } ?: return@collectLatest
                     val stage = deriveUploadStage(session)
                     _state.update { current ->
@@ -1293,7 +1318,6 @@ class UploadVideoViewModel(
     }
 
     fun analyze(uri: Uri) {
-        if (activeJob?.isActive == true) return
         val trackingMode = _state.value.selectedTrackingMode
         if (trackingMode == null) {
             _state.update {
@@ -1319,130 +1343,19 @@ class UploadVideoViewModel(
             }
             return
         }
-        activeJob = uploadScope.launch {
-            _state.update {
-                it.copy(
-                    selectedVideoUri = uri,
-                    stage = UploadStage.VIDEO_SELECTED,
-                    currentProcessingStage = UploadStage.VIDEO_SELECTED,
-                    stageText = UploadStage.VIDEO_SELECTED.label,
-                    errorMessage = null,
-                    sessionId = null,
-                    replayUri = null,
-                    canCancel = true,
-                    technicalLog = "",
-                    rawVideoStatus = RawPersistStatus.PROCESSING,
-                    annotatedVideoStatus = AnnotatedExportStatus.NOT_STARTED,
-                    analysisPhaseLabel = "",
-                    analysisProcessedFrames = 0,
-                    analysisTotalFrames = 0,
-                    analysisPhasePercent = null,
-                )
-            }
-            runCatching {
-                runner.run(
-                    uri = uri,
-                    trackingMode = trackingMode,
-                    selectedDrillId = selectedDrillId,
-                    selectedReferenceTemplateId = selectedReferenceTemplateId,
-                    isReferenceUpload = isReferenceUpload,
-                    createDrillFromReferenceUpload = createDrillFromReferenceUpload,
-                    pendingDrillName = _state.value.pendingDrillName,
-                    onSessionCreated = { sessionId ->
-                        activeSessionId = sessionId
-                        _state.update { current -> current.copy(sessionId = sessionId) }
-                    },
-                    onProgress = { progress ->
-                        _state.update { current ->
-                            val rawStatus = if (progress.stage.ordinal >= UploadStage.RAW_IMPORT_COMPLETE.ordinal) {
-                                RawPersistStatus.SUCCEEDED
-                            } else {
-                                current.rawVideoStatus
-                            }
-                            val annotatedStatus = when (progress.stage) {
-                                UploadStage.PREPARING_ANALYSIS,
-                                UploadStage.ANALYZING_VIDEO,
-                                UploadStage.RENDERING_OVERLAY,
-                                UploadStage.EXPORTING_ANNOTATED_VIDEO,
-                                UploadStage.VERIFYING_OUTPUT,
-                                -> AnnotatedExportStatus.PROCESSING
-
-                                UploadStage.COMPLETED_ANNOTATED -> AnnotatedExportStatus.ANNOTATED_READY
-                                UploadStage.COMPLETED_RAW_ONLY,
-                                UploadStage.FAILED,
-                                -> AnnotatedExportStatus.ANNOTATED_FAILED
-
-                                else -> current.annotatedVideoStatus
-                            }
-                            current.copy(
-                                stage = progress.stage,
-                                currentProcessingStage = progress.stage,
-                                stageText = progress.detail ?: progress.stage.label,
-                                progressPercent = progress.percent.coerceIn(0f, 1f),
-                                etaMs = progress.etaMs,
-                                rawVideoStatus = rawStatus,
-                                annotatedVideoStatus = annotatedStatus,
-                                analysisPhaseLabel = progress.phaseLabel ?: current.analysisPhaseLabel,
-                                analysisProcessedFrames = progress.processedFrames ?: current.analysisProcessedFrames,
-                                analysisTotalFrames = progress.totalFrames ?: current.analysisTotalFrames,
-                                analysisPhasePercent = progress.phasePercent ?: current.analysisPhasePercent,
-                            )
-                        }
-                    },
-                    onLog = { line ->
-                        (_state.value.sessionId ?: activeSessionId)?.let { sessionId ->
-                            repository?.saveSessionDiagnostics(sessionId, (_state.value.technicalLog + "\n" + line).trim())
-                        }
-                        _state.update { current ->
-                            current.copy(
-                                technicalLog = if (current.technicalLog.isBlank()) line else "${current.technicalLog}\n$line",
-                            )
-                        }
-                    },
-                )
-            }.onSuccess { result ->
-                val completionMessage = if (result.annotatedReady) {
-                    "Annotated replay ready"
-                } else {
-                    "Raw replay ready, annotated replay unavailable"
-                }
-                _state.update {
-                    it.copy(
-                        stage = result.finalStage,
-                        currentProcessingStage = result.finalStage,
-                        stageText = completionMessage,
-                        sessionId = result.sessionId,
-                        replayUri = result.replayUri,
-                        selectedDrillId = result.drillId ?: it.selectedDrillId,
-                        selectedReferenceTemplateId = result.referenceTemplateId ?: it.selectedReferenceTemplateId,
-                        errorMessage = result.exportFailureReason?.let { reason -> "Annotated stage failed: $reason" },
-                        progressPercent = 1f,
-                        canCancel = false,
-                        rawVideoStatus = if (result.rawReady) RawPersistStatus.SUCCEEDED else RawPersistStatus.FAILED,
-                        annotatedVideoStatus = if (result.annotatedReady) AnnotatedExportStatus.ANNOTATED_READY else AnnotatedExportStatus.ANNOTATED_FAILED,
-                        analysisPhaseLabel = "",
-                        analysisProcessedFrames = 0,
-                        analysisTotalFrames = 0,
-                        analysisPhasePercent = null,
-                    )
-                }
-            }.onFailure { error ->
-                Log.e(TAG, "analysis_failed uri=$uri", error)
-                _state.update {
-                    it.copy(
-                        stage = UploadStage.FAILED,
-                        currentProcessingStage = UploadStage.FAILED,
-                        stageText = "Upload pipeline failed",
-                        errorMessage = error.message ?: "Unable to process this video.",
-                        progressPercent = if (it.rawVideoStatus == RawPersistStatus.SUCCEEDED) 1f else 0f,
-                        canCancel = false,
-                        annotatedVideoStatus = AnnotatedExportStatus.ANNOTATED_FAILED,
-                        analysisPhaseLabel = "",
-                        analysisProcessedFrames = 0,
-                        analysisTotalFrames = 0,
-                        analysisPhasePercent = null,
-                    )
-                }
+        viewModelScope.launch {
+            val start = UploadProcessingOrchestrator.start(
+                context = appContext,
+                videoUri = uri,
+                trackingMode = trackingMode,
+                selectedDrillId = selectedDrillId,
+                selectedReferenceTemplateId = selectedReferenceTemplateId,
+                isReferenceUpload = isReferenceUpload,
+                createDrillFromReferenceUpload = createDrillFromReferenceUpload,
+                pendingDrillName = _state.value.pendingDrillName,
+            )
+            start.exceptionOrNull()?.let { error ->
+                _state.update { it.copy(stage = UploadStage.FAILED, currentProcessingStage = UploadStage.FAILED, stageText = "Upload pipeline failed", errorMessage = error.message) }
             }
         }
     }
@@ -1454,13 +1367,7 @@ class UploadVideoViewModel(
     }
 
     fun cancel() {
-        activeJob?.cancel()
-        _state.value.sessionId?.let { sessionId ->
-            viewModelScope.launch {
-                repository?.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-                repository?.updateAnnotatedExportFailureReason(sessionId, "EXPORT_CANCELLED")
-            }
-        }
+        viewModelScope.launch { UploadProcessingOrchestrator.cancel(appContext) }
         _state.update {
             it.copy(
                 stage = UploadStage.CANCELLED,
@@ -1529,11 +1436,7 @@ fun UploadVideoScreen(
     }
     val viewModel = remember(selectedDrillId, selectedReferenceTemplateId, isReferenceUpload, createDrillFromReferenceUpload) {
         UploadVideoViewModel(
-            DefaultUploadVideoAnalysisRunner(
-                context = context.applicationContext,
-                repository = repository,
-                runtimeBodyProfileResolver = ServiceLocator.runtimeBodyProfileResolver(context),
-            ),
+            context.applicationContext,
             repository,
             selectedDrillId,
             selectedReferenceTemplateId,

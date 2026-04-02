@@ -18,6 +18,7 @@ import com.inversioncoach.app.model.SessionComparisonRecord
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.UserProfileEntity
 import com.inversioncoach.app.model.UserProfileRecord
+import com.inversioncoach.app.model.UploadProcessingJobRecord
 import com.inversioncoach.app.model.UserSettings
 
 @Database(
@@ -37,8 +38,9 @@ import com.inversioncoach.app.model.UserSettings
         ReferenceAssetRecord::class,
         MovementProfileRecord::class,
         CalibrationConfigRecord::class,
+        UploadProcessingJobRecord::class,
     ],
-    version = 18,
+    version = 19,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -56,4 +58,5 @@ abstract class InversionCoachDatabase : RoomDatabase() {
     abstract fun referenceAssetDao(): ReferenceAssetDao
     abstract fun movementProfileDao(): MovementProfileDao
     abstract fun calibrationConfigDao(): CalibrationConfigDao
+    abstract fun uploadProcessingJobDao(): UploadProcessingJobDao
 }

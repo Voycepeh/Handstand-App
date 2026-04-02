@@ -285,6 +285,31 @@ object DatabaseMigrations {
         }
     }
 
+
+
+    val MIGRATION_18_19: Migration = object : Migration(18, 19) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `upload_processing_jobs` (
+                    `id` TEXT NOT NULL,
+                    `workId` TEXT,
+                    `sessionId` INTEGER,
+                    `stage` TEXT NOT NULL,
+                    `processedFrames` INTEGER NOT NULL,
+                    `totalFrames` INTEGER NOT NULL,
+                    `startedAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    `lastHeartbeatAt` INTEGER NOT NULL,
+                    `terminalStatus` TEXT NOT NULL,
+                    `reason` TEXT,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent(),
+            )
+        }
+    }
+
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_11_12,
         MIGRATION_12_13,
@@ -293,5 +318,6 @@ object DatabaseMigrations {
         MIGRATION_15_16,
         MIGRATION_16_17,
         MIGRATION_17_18,
+        MIGRATION_18_19,
     )
 }
