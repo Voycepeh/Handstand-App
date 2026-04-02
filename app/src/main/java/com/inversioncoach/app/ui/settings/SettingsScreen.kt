@@ -1,5 +1,7 @@
 package com.inversioncoach.app.ui.settings
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +16,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -30,10 +33,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.inversioncoach.app.model.AnnotatedExportQuality
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import kotlinx.coroutines.launch
+
+private const val MB_PER_GB = 1024
 
 @Composable
 fun SettingsScreen(
@@ -50,8 +56,9 @@ fun SettingsScreen(
     var cueFrequency by remember { mutableFloatStateOf(2f) }
     var debug by remember { mutableStateOf(false) }
     var localOnlyPrivacyMode by remember { mutableStateOf(true) }
-    var maxStorageMb by remember { mutableIntStateOf(1024) }
+    var maxStorageGb by remember { mutableIntStateOf(5) }
     var startupCountdownSeconds by remember { mutableIntStateOf(10) }
+    var exportQuality by remember { mutableStateOf(AnnotatedExportQuality.STABLE) }
     var showSaveConfirmation by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
@@ -61,8 +68,10 @@ fun SettingsScreen(
             cueFrequency = settings.cueFrequencySeconds
             debug = settings.debugOverlayEnabled
             localOnlyPrivacyMode = settings.localOnlyPrivacyMode
-            maxStorageMb = settings.maxStorageMb
+            maxStorageGb = (settings.maxStorageMb.toFloat() / MB_PER_GB).toInt().coerceIn(1, 100)
             startupCountdownSeconds = settings.startupCountdownSeconds
+            exportQuality = runCatching { AnnotatedExportQuality.valueOf(settings.annotatedExportQuality) }
+                .getOrDefault(AnnotatedExportQuality.STABLE)
         }
     }
 
@@ -72,6 +81,21 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Preferences", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+
+            QualitySettingsCard(
+                selected = exportQuality,
+                onSelected = { exportQuality = it },
+            )
+
+            CountdownSettingsCard(
+                selectedSeconds = startupCountdownSeconds,
+                onSelectedSeconds = { startupCountdownSeconds = it },
+            )
+
+            StorageSettingsCard(
+                storageLimitGb = maxStorageGb,
+                onStorageLimitGbChanged = { maxStorageGb = it.coerceIn(1, 100) },
+            )
 
             SettingsCard(title = "Voice cues") {
                 Text("Cue frequency: ${"%.1f".format(cueFrequency)}s")
@@ -85,15 +109,7 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsCard(title = "Session") {
-                Text("Startup countdown: ${startupCountdownSeconds}s")
-                Slider(value = startupCountdownSeconds.toFloat(), onValueChange = { startupCountdownSeconds = it.toInt().coerceIn(0, 30) }, valueRange = 0f..30f)
-                Text("Time before recording starts.")
-            }
-
             SettingsCard(title = "Storage & privacy") {
-                Text("Max video storage: ${maxStorageMb} MB")
-                Slider(value = maxStorageMb.toFloat(), onValueChange = { maxStorageMb = it.toInt().coerceIn(256, 4096) }, valueRange = 256f..4096f)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Local-only privacy mode")
                     Checkbox(checked = localOnlyPrivacyMode, onCheckedChange = { localOnlyPrivacyMode = it })
@@ -120,8 +136,9 @@ fun SettingsScreen(
                                     cueFrequencySeconds = cueFrequency,
                                     debugOverlayEnabled = debug,
                                     localOnlyPrivacyMode = localOnlyPrivacyMode,
-                                    maxStorageMb = maxStorageMb,
+                                    maxStorageMb = maxStorageGb * MB_PER_GB,
                                     startupCountdownSeconds = startupCountdownSeconds,
+                                    annotatedExportQuality = exportQuality.name,
                                 ),
                             )
                             onNavigateHome()
@@ -148,6 +165,101 @@ fun SettingsScreen(
                 },
                 dismissButton = { Button(onClick = { showDeleteConfirmation = false }) { Text("Cancel") } },
             )
+        }
+    }
+}
+
+@Composable
+private fun QualitySettingsCard(
+    selected: AnnotatedExportQuality,
+    onSelected: (AnnotatedExportQuality) -> Unit,
+) {
+    SettingsCard(title = "Annotated video export quality") {
+        Text(
+            "Choose how annotated videos are exported. Stable is faster and lighter to process with smaller files. High Quality gives you a sharper export, but processing takes longer and file size is larger.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text("Current: ${if (selected == AnnotatedExportQuality.STABLE) "Stable" else "High Quality"}")
+        QualityOptionCard(
+            title = "Stable",
+            description = "Recommended for most use. 720p export with faster processing, lower storage usage, and reliable results.",
+            selected = selected == AnnotatedExportQuality.STABLE,
+            onClick = { onSelected(AnnotatedExportQuality.STABLE) },
+        )
+        QualityOptionCard(
+            title = "High Quality",
+            description = "1080p export for sharper playback and sharing. Processing takes longer and file size is larger.",
+            selected = selected == AnnotatedExportQuality.HIGH_QUALITY,
+            onClick = { onSelected(AnnotatedExportQuality.HIGH_QUALITY) },
+        )
+    }
+}
+
+@Composable
+private fun CountdownSettingsCard(
+    selectedSeconds: Int,
+    onSelectedSeconds: (Int) -> Unit,
+) {
+    val options = listOf(3, 5, 10)
+    SettingsCard(title = "Countdown before recording") {
+        Text(
+            "Choose how long the app waits before recording starts. Use a longer countdown if you need more time to get into position.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text("Current: $selectedSeconds seconds")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            options.forEach { seconds ->
+                FilterChip(
+                    selected = selectedSeconds == seconds,
+                    onClick = { onSelectedSeconds(seconds) },
+                    label = { Text("$seconds seconds") },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StorageSettingsCard(
+    storageLimitGb: Int,
+    onStorageLimitGbChanged: (Int) -> Unit,
+) {
+    SettingsCard(title = "Storage space limit") {
+        Text(
+            "Choose how much storage the app can use before older media is cleaned up. Higher limits keep more videos, but use more device space.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text("Current: $storageLimitGb GB")
+        Slider(
+            value = storageLimitGb.toFloat(),
+            onValueChange = { onStorageLimitGbChanged(it.toInt()) },
+            valueRange = 1f..100f,
+        )
+        Text("$storageLimitGb GB")
+    }
+}
+
+@Composable
+private fun QualityOptionCard(
+    title: String,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        ),
+        border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (selected) {
+                Text("Currently selected", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }

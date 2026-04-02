@@ -35,8 +35,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -48,6 +50,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.model.SessionRecord
+import com.inversioncoach.app.model.UserSettings
+import com.inversioncoach.app.model.AnnotatedExportQuality
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.storage.repository.UserProfileStatus
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
@@ -58,6 +62,8 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 import kotlinx.coroutines.launch
+
+private const val MB_PER_GB = 1024
 
 @Composable
 fun HomeScreen(
@@ -75,6 +81,12 @@ fun HomeScreen(
 
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
     val profileStatuses by repository.observeProfileStatuses().collectAsState(initial = emptyList())
+    val settings by repository.observeSettings().collectAsState(initial = UserSettings())
+    var showPreferencesOnboarding by remember { mutableStateOf(false) }
+
+    LaunchedEffect(settings.hasCompletedPreferencesOnboarding) {
+        showPreferencesOnboarding = !settings.hasCompletedPreferencesOnboarding
+    }
 
     ScaffoldedScreen(title = "Inversion Coach") { padding ->
         Content(
@@ -104,7 +116,107 @@ fun HomeScreen(
                 scope.launch { repository.archiveProfile(profileId) }
             },
         )
+
+        if (showPreferencesOnboarding) {
+            PreferencesOnboardingDialog(
+                settings = settings,
+                onConfirm = { quality, countdownSeconds, storageGb ->
+                    scope.launch {
+                        repository.saveSettings(
+                            settings.copy(
+                                annotatedExportQuality = quality.name,
+                                startupCountdownSeconds = countdownSeconds,
+                                maxStorageMb = storageGb * MB_PER_GB,
+                                hasCompletedPreferencesOnboarding = true,
+                            ),
+                        )
+                        showPreferencesOnboarding = false
+                    }
+                },
+                onUseDefaults = {
+                    scope.launch {
+                        repository.saveSettings(
+                            settings.copy(
+                                annotatedExportQuality = AnnotatedExportQuality.STABLE.name,
+                                startupCountdownSeconds = 10,
+                                maxStorageMb = 5 * MB_PER_GB,
+                                hasCompletedPreferencesOnboarding = true,
+                            ),
+                        )
+                        showPreferencesOnboarding = false
+                    }
+                },
+            )
+        }
     }
+}
+
+@Composable
+private fun PreferencesOnboardingDialog(
+    settings: UserSettings,
+    onConfirm: (AnnotatedExportQuality, Int, Int) -> Unit,
+    onUseDefaults: () -> Unit,
+) {
+    var quality by remember(settings.annotatedExportQuality) {
+        mutableStateOf(
+            runCatching { AnnotatedExportQuality.valueOf(settings.annotatedExportQuality) }
+                .getOrDefault(AnnotatedExportQuality.STABLE),
+        )
+    }
+    var countdown by remember(settings.startupCountdownSeconds) {
+        mutableIntStateOf(settings.startupCountdownSeconds.takeIf { it in listOf(3, 5, 10) } ?: 10)
+    }
+    var storageGb by remember(settings.maxStorageMb) {
+        mutableIntStateOf((settings.maxStorageMb / MB_PER_GB).coerceIn(1, 100))
+    }
+
+    AlertDialog(
+        onDismissRequest = onUseDefaults,
+        title = { Text("Set up your recording preferences") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Choose your default video export quality, countdown, and storage limit. This only changes exported video output quality and file size. You can change these anytime later in Settings.")
+                Text("Annotated video export quality", fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { quality = AnnotatedExportQuality.STABLE }) { Text("Stable") }
+                    OutlinedButton(onClick = { quality = AnnotatedExportQuality.HIGH_QUALITY }) { Text("High Quality") }
+                }
+                Text("Current: ${if (quality == AnnotatedExportQuality.STABLE) "Stable" else "High Quality"}")
+                Text(
+                    if (quality == AnnotatedExportQuality.STABLE) {
+                        "Stable: 720p export, faster processing, and smaller files."
+                    } else {
+                        "High Quality: 1080p export, sharper output, and larger files."
+                    },
+                )
+                Text("Countdown before recording", fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(3, 5, 10).forEach { seconds ->
+                        OutlinedButton(onClick = { countdown = seconds }) { Text("$seconds seconds") }
+                    }
+                }
+                Text("Current: $countdown seconds")
+                Text("Storage space limit", fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(
+                    value = storageGb.toString(),
+                    onValueChange = { raw ->
+                        raw.toIntOrNull()?.let { storageGb = it.coerceIn(1, 100) }
+                    },
+                    label = { Text("GB") },
+                    singleLine = true,
+                )
+                Text("Current: $storageGb GB")
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(quality, countdown, storageGb.coerceIn(1, 100)) }) {
+                Text("Save preferences")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onUseDefaults) { Text("Use recommended settings") }
+        },
+    )
 }
 
 @Composable

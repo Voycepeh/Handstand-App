@@ -9,6 +9,7 @@ import com.inversioncoach.app.biomechanics.DrillConfigs
 import com.inversioncoach.app.coaching.CueEngine
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
+import com.inversioncoach.app.model.AnnotatedExportQuality
 import com.inversioncoach.app.model.CleanupStatus
 import com.inversioncoach.app.model.CompressionStatus
 import com.inversioncoach.app.model.AnnotatedExportFailureReason
@@ -28,6 +29,7 @@ import com.inversioncoach.app.model.RetainedAssetType
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.model.UserSettings
+import com.inversioncoach.app.model.toExportPreset
 import com.inversioncoach.app.drills.core.DrillRegistry
 import com.inversioncoach.app.motion.MotionAnalysisPipeline
 import com.inversioncoach.app.motion.UserCalibrationSettings
@@ -1354,9 +1356,13 @@ class LiveCoachingViewModel(
                 return
             }
             var exportSnapshot = preflight.snapshot
+            val exportQuality = runCatching { AnnotatedExportQuality.valueOf(activeSettings.annotatedExportQuality) }
+                .getOrDefault(AnnotatedExportQuality.STABLE)
+            val exportPreset = exportQuality.toExportPreset()
             val frozenExportSnapshot = annotatedExportPipeline.freezeSnapshotForExport(
                 overlayTimeline = exportSnapshot.overlayTimeline,
                 rawDurationMsHint = exportSnapshot.rawDurationMs,
+                preset = exportPreset,
             )
             if (frozenExportSnapshot.usableOverlayFrameCount != exportSnapshot.overlayFrameCount) {
                 exportSnapshot = exportSnapshot.copy(
@@ -1419,6 +1425,7 @@ class LiveCoachingViewModel(
                     drillCameraSide = options.drillCameraSide,
                     overlayTimeline = exportSnapshot.overlayTimeline,
                     rawDurationMsHint = exportSnapshot.rawDurationMs,
+                    preset = exportPreset,
                     onRenderProgress = { rendered, total ->
                         val pct = 30 + (((rendered.toFloat() / total.coerceAtLeast(1).toFloat()) * 55f).toInt())
                         val elapsed = (System.currentTimeMillis() - exportStartMs).coerceAtLeast(1L)

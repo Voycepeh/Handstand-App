@@ -9,12 +9,22 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class UploadVideoViewModelTest {
     private val dispatcher = StandardTestDispatcher()
+
+    @Test
+    fun genericUploadStartsWithoutSelectedMovementType() {
+        val viewModel = UploadVideoViewModel(runner = noOpRunner())
+
+        assertNull(viewModel.state.value.effectiveMovementType)
+        assertFalse(viewModel.state.value.isMovementTypeLocked)
+    }
 
     @Test
     fun successPathTransitionsToAnnotatedCompleteAndStoresResult() = runTest(dispatcher) {
@@ -339,6 +349,83 @@ class UploadVideoViewModelTest {
         assertTrue(viewModel.state.value.errorMessage?.contains("Enter a drill name") == true)
         assertTrue(!runnerCalled)
         kotlinx.coroutines.Dispatchers.resetMain()
+    }
+
+    @Test
+    fun drillScopedUploadInheritsHoldTypeAndLocksSelector() = runTest(dispatcher) {
+        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+        var capturedMode: UploadTrackingMode? = null
+        val viewModel = UploadVideoViewModel(
+            runner = object : UploadVideoAnalysisRunner {
+                override suspend fun run(
+                    uri: Uri,
+                    trackingMode: UploadTrackingMode,
+                    selectedDrillId: String?,
+                    selectedReferenceTemplateId: String?,
+                    isReferenceUpload: Boolean,
+                    createDrillFromReferenceUpload: Boolean,
+                    pendingDrillName: String?,
+                    onSessionCreated: (Long) -> Unit,
+                    onProgress: (UploadProgress) -> Unit,
+                    onLog: (String) -> Unit,
+                ): UploadFlowResult {
+                    capturedMode = trackingMode
+                    onSessionCreated(4L)
+                    return UploadFlowResult(4L, null, rawReady = true, annotatedReady = false, finalStage = UploadStage.COMPLETED_RAW_ONLY)
+                }
+            },
+            repository = null,
+            selectedDrillId = "front_plank",
+            selectedReferenceTemplateId = null,
+            isReferenceUpload = false,
+            createDrillFromReferenceUpload = false,
+            resolveDrillTrackingMode = { UploadTrackingMode.HOLD_BASED },
+        )
+        advanceUntilIdle()
+
+        assertEquals(UploadTrackingMode.HOLD_BASED, viewModel.state.value.effectiveMovementType)
+        assertTrue(viewModel.state.value.isMovementTypeLocked)
+        viewModel.onTrackingModeSelected(UploadTrackingMode.REP_BASED)
+        assertEquals(UploadTrackingMode.HOLD_BASED, viewModel.state.value.effectiveMovementType)
+
+        viewModel.analyze(Uri.parse("content://video"))
+        advanceUntilIdle()
+        assertEquals(UploadTrackingMode.HOLD_BASED, capturedMode)
+        kotlinx.coroutines.Dispatchers.resetMain()
+    }
+
+    @Test
+    fun drillScopedUploadInheritsRepTypeAndLocksSelector() = runTest(dispatcher) {
+        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+        val viewModel = UploadVideoViewModel(
+            runner = noOpRunner(),
+            repository = null,
+            selectedDrillId = "rep_drill",
+            selectedReferenceTemplateId = null,
+            isReferenceUpload = false,
+            createDrillFromReferenceUpload = false,
+            resolveDrillTrackingMode = { UploadTrackingMode.REP_BASED },
+        )
+        advanceUntilIdle()
+
+        assertEquals(UploadTrackingMode.REP_BASED, viewModel.state.value.effectiveMovementType)
+        assertTrue(viewModel.state.value.isMovementTypeLocked)
+        kotlinx.coroutines.Dispatchers.resetMain()
+    }
+
+    private fun noOpRunner() = object : UploadVideoAnalysisRunner {
+        override suspend fun run(
+            uri: Uri,
+            trackingMode: UploadTrackingMode,
+            selectedDrillId: String?,
+            selectedReferenceTemplateId: String?,
+            isReferenceUpload: Boolean,
+            createDrillFromReferenceUpload: Boolean,
+            pendingDrillName: String?,
+            onSessionCreated: (Long) -> Unit,
+            onProgress: (UploadProgress) -> Unit,
+            onLog: (String) -> Unit,
+        ): UploadFlowResult = UploadFlowResult(1L, null, rawReady = false, annotatedReady = false, finalStage = UploadStage.FAILED)
     }
 
 }

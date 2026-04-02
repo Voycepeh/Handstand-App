@@ -229,7 +229,7 @@ fun AppNavHost(modifier: Modifier = Modifier, openSessionId: Long? = null) {
                 onBack = { navController.popBackStack() },
                 onUploadAttempt = { id -> navController.navigate(Route.UploadVideoForDrill.create(id, null, false)) },
                 onCompareAttempts = { selectedDrillId -> navController.navigate(Route.SessionHistory.create(selectedDrillId, mode = "compare")) },
-                onViewHistory = { selectedDrillId -> navController.navigate(Route.SessionHistory.create(selectedDrillId, mode = "history")) },
+                onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
                 onStartLiveSession = { drillType ->
                     navController.navigate(Route.Live.create(drillType, LiveSessionOptions()))
                 },
