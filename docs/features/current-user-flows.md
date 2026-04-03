@@ -13,11 +13,11 @@ This document captures the current end-to-end app workflows and route surfaces.
 - `drill-studio?...` -> Drill Studio
 - `drill-workspace/{drillId}` -> Drill Workspace
 - `upload-video?...` -> Upload / Reference Training
-- `calibration` -> Calibration / Profiles
+- `profile` -> Profiles
 
 ## 1) Home / Drill Hub
 
-Home is the primary entry point. Users can start sessions, open drill workflows, open uploads, inspect history, and access calibration/settings.
+Home is the primary entry point. Users can start sessions, open drill workflows, open uploads, inspect history, and access profile/settings.
 
 ### First-launch recording preferences onboarding
 
@@ -67,11 +67,11 @@ For drill-specific context:
 - Session History: ongoing list/compare/reopen surface.
 - Replay uses resolver output (annotated preferred, raw fallback).
 
-## 7) Calibration / Profiles
+## 7) Profiles
 
 - Set/maintain active profile.
-- Calibration affects analysis interpretation in live and upload workflows.
-- Missing calibration falls back to defaults.
+- Profile affects analysis interpretation in live and upload workflows.
+- Missing profile falls back to defaults.
 
 ## Maintenance rule
 

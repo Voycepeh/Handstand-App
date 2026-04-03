@@ -23,7 +23,7 @@ Video Import supports offline review and reference-training preparation from upl
 
 ## Integration points
 
-- Shares calibration/profile runtime context.
+- Shares profile runtime context.
 - Shares replay resolution policy with live sessions.
 - Feeds Results / Session History and comparison workflows.
 - Adaptive thresholds are centralized in `AdaptiveSamplingConfig` (`app/src/main/java/com/inversioncoach/app/movementprofile/UploadedVideoAdaptiveSampling.kt`).

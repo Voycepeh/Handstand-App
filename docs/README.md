@@ -16,7 +16,7 @@ Use this index as the entry point for repo documentation.
 - [`architecture/session-lifecycle.md`](architecture/session-lifecycle.md)
 - [`architecture/video-pipeline.md`](architecture/video-pipeline.md)
 - [`architecture/replay-and-fallback.md`](architecture/replay-and-fallback.md)
-- [`architecture/calibration-and-scoring.md`](architecture/calibration-and-scoring.md)
+- [`architecture/profile-and-scoring.md`](architecture/profile-and-scoring.md)
 - [`architecture/overlay-rendering.md`](architecture/overlay-rendering.md)
 - [`architecture/movement-profile-architecture.md`](architecture/movement-profile-architecture.md)
 
@@ -28,7 +28,7 @@ Use this index as the entry point for repo documentation.
 - [`features/video-import.md`](features/video-import.md)
 - [`features/reference-training.md`](features/reference-training.md)
 - [`features/session-history.md`](features/session-history.md)
-- [`features/calibration.md`](features/calibration.md)
+- [`features/profile.md`](features/profile.md)
 
 ## Diagrams
 

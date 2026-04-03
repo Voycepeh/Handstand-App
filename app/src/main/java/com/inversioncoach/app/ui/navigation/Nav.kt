@@ -19,7 +19,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.LiveSessionOptions
-import com.inversioncoach.app.ui.calibration.CalibrationScreen
 import com.inversioncoach.app.ui.drilldetail.DrillDetailScreen
 import com.inversioncoach.app.ui.drills.ManageDrillsScreen
 import com.inversioncoach.app.ui.drillstudio.DrillStudioInitRequest
@@ -75,7 +74,6 @@ sealed class Route(val value: String) {
         fun create(drillId: String?, templateId: String?, isReference: Boolean, createNewDrillFromReference: Boolean = false): String =
             "upload-video?drillId=${Uri.encode(drillId ?: "")}&referenceTemplateId=${Uri.encode(templateId ?: "")}&isReference=$isReference&createNewDrillFromReference=$createNewDrillFromReference"
     }
-    data object Calibration : Route("calibration")
     data object DrillWorkspace : Route("drill-workspace/{drillId}") { fun create(drillId: String) = "drill-workspace/${Uri.encode(drillId)}" }
     data object ManageDrills : Route("manage-drills")
     data object DrillPackageDetail : Route("drill-package-detail/{drillId}") { fun create(drillId: String) = "drill-package-detail/${Uri.encode(drillId)}" }
@@ -96,7 +94,6 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
                 onDrills = { navController.navigate(Route.Start.create(StartDrillDestination.WORKSPACE)) },
                 onSettings = { navController.navigate(Route.Settings.value) },
                 onUploadVideo = { navController.navigate(Route.UploadVideo.value) },
-                onCalibration = { navController.navigate(Route.Calibration.value) },
             )
         }
         composable(Route.Start.value, arguments = listOf(navArgument("destination") { type = NavType.StringType; defaultValue = "live" })) {
@@ -181,7 +178,6 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
                 onDrillStudio = { navController.navigate(Route.DrillStudio.createNew()) },
             )
         }
-        composable(Route.Calibration.value) { CalibrationScreen(onBack = { navController.popBackStack() }) }
         composable(Route.DevTuning.value) { DeveloperTuningScreen(onBack = { navController.popBackStack() }) }
         composable(Route.UploadVideo.value) { UploadVideoScreen(onBack = { navController.popBackStack() }, onOpenResults = { sessionId -> navController.navigate(Route.Results.create(sessionId)) }) }
         composable(Route.UploadVideoForDrill.value, arguments = listOf(

@@ -10,13 +10,13 @@ This document is the top-level architecture map for the current CaliVision imple
 - **Live Session** (`Route.Live`)
 - **Upload / Reference Training** (`Route.UploadVideo`, `Route.UploadVideoForDrill`)
 - **Results / Session History** (`Route.Results`, `Route.SessionHistory`, `Route.ProgressOverview`)
-- **Calibration / Profiles** (`Route.Calibration`)
+- **Profiles** (`Route.Profile`)
 
 ## Runtime layers
 
 1. **UI and navigation**: `app/ui/**`
 2. **Workflow orchestration**: live/upload/drill studio view models and route args
-3. **Domain**: `drills/**`, `movementprofile/**`, `calibration/**`
+3. **Domain**: `drills/**`, `movementprofile/**`, `profile/**`
 4. **Analysis**: `pose/**`, `motion/**`, `biomechanics/**`
 5. **Media/replay/export**: `recording/**`, `media/**`, `camera/**`, `overlay/**`
 6. **Persistence**: `storage/db/**`, `storage/repository/**`, `SessionBlobStorage`
@@ -34,7 +34,7 @@ This document is the top-level architecture map for the current CaliVision imple
 - Keep drill-centric flow integrity intact.
 - Prefer one clear path for drill creation/editing outcomes.
 - Do not silently break drill metadata/catalog schema.
-- Do not silently break replay/export/upload/calibration flows.
+- Do not silently break replay/export/upload/profile flows.
 - Keep naming aligned with current UX terms.
 - Any PR that changes workflows, navigation, architecture, terminology, or media flow must update docs and diagrams in the same PR.
 
@@ -45,7 +45,7 @@ This document is the top-level architecture map for the current CaliVision imple
 - [`docs/architecture/session-lifecycle.md`](docs/architecture/session-lifecycle.md)
 - [`docs/architecture/video-pipeline.md`](docs/architecture/video-pipeline.md)
 - [`docs/architecture/replay-and-fallback.md`](docs/architecture/replay-and-fallback.md)
-- [`docs/architecture/calibration-and-scoring.md`](docs/architecture/calibration-and-scoring.md)
+- [`docs/architecture/profile-and-scoring.md`](docs/architecture/profile-and-scoring.md)
 - [`docs/architecture/overlay-rendering.md`](docs/architecture/overlay-rendering.md)
 - [`docs/architecture/movement-profile-architecture.md`](docs/architecture/movement-profile-architecture.md)
 

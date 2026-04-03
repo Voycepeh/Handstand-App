@@ -7,7 +7,7 @@ Session History is the persisted record of drill-linked outcomes from live and u
 - Session metadata, scores, and issue summaries.
 - Media state for raw/annotated assets.
 - Resolver-selected replay source.
-- Calibration/profile attribution metadata for traceability.
+- Profile/profile attribution metadata for traceability.
 
 ## User-facing behavior
 
