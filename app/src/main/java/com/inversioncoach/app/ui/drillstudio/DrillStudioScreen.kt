@@ -213,13 +213,21 @@ private fun DrillStudioEditor(
     }
     var detectionStatus by remember(selectedPhaseId) { mutableStateOf<String?>(null) }
     var workingImageUri by remember(selectedPhaseId) { mutableStateOf<Uri?>(null) }
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        workingImageUri = uri
-        onAttachReferenceImage(selectedPhaseId, uri.toString())
-    }
     val scope = rememberCoroutineScope()
     val detector = remember { DrillStudioImagePoseDetector() }
+    val imageStore = remember { DrillStudioImageStore(context.applicationContext) }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            runCatching { imageStore.persistPickedImage(uri) }
+                .onSuccess { stableUri ->
+                    workingImageUri = Uri.parse(stableUri)
+                    onAttachReferenceImage(selectedPhaseId, stableUri)
+                    detectionStatus = "Reference image attached"
+                }
+                .onFailure { detectionStatus = "Failed to persist image: ${it.message}" }
+        }
+    }
     val orderedPhases = draft.phases.sortedBy { it.order }
     val selectedPhaseTemplate = orderedPhases.firstOrNull { it.id == selectedPhaseId }
 
@@ -370,7 +378,7 @@ private fun DrillStudioEditor(
                     onJointMoved = { joint, point -> onUpdatePhasePoseJoint(currentPose.phaseId, joint, point) },
                 )
                 Text(
-                    "Image: ${if (currentPose.authoring?.sourceImageUri != null) "attached" else "none"} • " +
+                    "Image: ${if (imageUri != null && referenceImage != null) "attached" else "none"} • " +
                         "Detected: ${if (currentPose.authoring?.detectedJoints?.isNotEmpty() == true) "yes" else "no"} • " +
                         "Corrected joints: ${currentPose.authoring?.manualOffsets?.size ?: 0} • " +
                         "Quality: ${((currentPose.authoring?.qualityScore ?: 0f) * 100).toInt()}%",

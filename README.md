@@ -171,6 +171,7 @@ Drill Studio now includes a production path for **single-image phase seeding** i
 - apply small per-joint manual correction offsets
 - use optional frame/floor/wall/bar visual guides for alignment
 - persist authored phase pose + correction + guide metadata with the drill record
+- copy selected authoring images into app-managed storage for durable reopen behavior
 
 Manage Drills also supports **drill package export/import** for authored drills, so phase-seeded drills can be shared across devices and later promoted into app seed material with minimal transformation.
 

@@ -37,6 +37,7 @@ Drill Studio now supports **single-image phase seeding** directly inside phase e
 - View skeleton overlay directly on top of the image canvas.
 - Apply constrained per-joint correction offsets (drag and reset flows).
 - Save canonical normalized phase joints plus authoring metadata into drill persistence.
+- Selected authoring images are copied into app-managed storage so phase editing survives restart/provider URI churn.
 
 ### Boundary and environment guides
 
@@ -49,6 +50,8 @@ The phase authoring canvas includes lightweight optional visual guides:
 
 These are stored as authoring settings and are intended to be extendable in future phases.
 
+> Current phase-1 note: detection normalization is currently phase-image local (landmark bounding-box based). Cross-phase environment-anchor consistency tightening is planned in a follow-up iteration.
+
 ### Persistence and compatibility
 
 - Authored phase image metadata is persisted with the drill in DB-backed drill records (via Drill Studio payload in drill cue config).
@@ -60,4 +63,5 @@ These are stored as authoring settings and are intended to be extendable in futu
 Manage Drills now supports package sharing for authored drills:
 
 - Export includes drill metadata + cue payload (including phase poses, manual offsets, guide settings, and image-source authoring references).
+- Export sanitizes local image references so imported drills do not depend on inaccessible `content://` URIs from another device.
 - Import rehydrates the drill record so the drill is immediately editable and previewable.
