@@ -1,5 +1,6 @@
 package com.inversioncoach.app.media
 
+import android.util.Log
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.RawPersistStatus
@@ -8,6 +9,10 @@ import com.inversioncoach.app.model.SessionRecord
 class SessionMediaResolver(
     private val assetExists: (String?) -> Boolean,
 ) {
+    private companion object {
+        const val TAG = "ExportStateGuard"
+    }
+
     fun resolve(session: SessionRecord): ResolvedSessionMedia {
         val rawMarkedInvalid = SessionMediaOwnership.isRawReplayBlocked(session)
         val rawUri = SessionMediaOwnership.rawCandidates(session).firstOrNull(assetExists)
@@ -36,6 +41,10 @@ class SessionMediaResolver(
             raw is SessionArtifact.Available -> PreferredReplay(raw.uri, SessionMediaType.RAW)
             else -> null
         }
+        Log.d(
+            TAG,
+            "replay_source_resolution sessionId=${session.id} selected=${preferredReplay?.type ?: "NONE"} annotatedStatus=${session.annotatedExportStatus} rawStatus=${session.rawPersistStatus}",
+        )
 
         return ResolvedSessionMedia(
             raw = raw,

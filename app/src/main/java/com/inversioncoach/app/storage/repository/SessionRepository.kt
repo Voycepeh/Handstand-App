@@ -50,9 +50,9 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 
-private const val STALE_EXPORT_RECONCILIATION_MS = 2 * 60 * 1000L
 private const val STALE_UPLOAD_HEARTBEAT_MS = 45 * 1000L
 private const val UPLOAD_REPO_TAG = "UploadJobRepo"
+private const val EXPORT_STATE_TAG = "ExportStateGuard"
 private const val DEFAULT_PROFILE_NAME = "Profile 1"
 
 data class UserProfileStatus(
@@ -410,7 +410,18 @@ class SessionRepository(
 
     suspend fun updateAnnotatedExportStatus(sessionId: Long, status: AnnotatedExportStatus) {
         val session = sessionDao.getById(sessionId) ?: return
-        sessionDao.upsert(session.copy(annotatedExportStatus = status))
+        if (session.annotatedExportStatus != status) {
+            Log.i(
+                EXPORT_STATE_TAG,
+                "status_transition sessionId=$sessionId from=${session.annotatedExportStatus} to=$status",
+            )
+        }
+        sessionDao.upsert(
+            session.copy(
+                annotatedExportStatus = status,
+                annotatedExportLastUpdatedAt = System.currentTimeMillis(),
+            ),
+        )
     }
 
     suspend fun updateAnnotatedExportFailureReason(sessionId: Long, reason: String?) {
@@ -541,29 +552,67 @@ class SessionRepository(
     }
 
     suspend fun reconcileStaleProcessingState(sessionId: Long, hasActiveExportJob: Boolean): Boolean {
+        return recoverStaleAnnotatedExportState(
+            sessionId = sessionId,
+            hasActiveExportWork = hasActiveExportJob,
+            trigger = "legacy_reconcile_call",
+        )
+    }
+
+    suspend fun recoverStaleAnnotatedExportState(
+        sessionId: Long,
+        hasActiveExportWork: Boolean,
+        trigger: String,
+    ): Boolean {
         val session = sessionDao.getById(sessionId) ?: return false
-        val lastUpdatedAt = session.annotatedExportLastUpdatedAt ?: 0L
-        val ageMs = (System.currentTimeMillis() - lastUpdatedAt).coerceAtLeast(0L)
         val isStale =
-            (session.annotatedExportStatus == AnnotatedExportStatus.VALIDATING_INPUT ||
-                session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING ||
-                session.annotatedExportStatus == AnnotatedExportStatus.PROCESSING_SLOW) &&
+            session.annotatedExportStatus in setOf(
+                AnnotatedExportStatus.VALIDATING_INPUT,
+                AnnotatedExportStatus.PROCESSING,
+                AnnotatedExportStatus.PROCESSING_SLOW,
+            ) &&
                 session.annotatedVideoUri.isNullOrBlank() &&
-                !hasActiveExportJob &&
-                lastUpdatedAt > 0L &&
-                ageMs >= STALE_EXPORT_RECONCILIATION_MS
+                !hasActiveExportWork
         if (!isStale) return false
+        val reason = "EXPORT_INTERRUPTED_OR_STALE"
+        Log.w(
+            EXPORT_STATE_TAG,
+            "stale_recovery sessionId=$sessionId trigger=$trigger status=${session.annotatedExportStatus} reason=$reason rawReady=${session.rawPersistStatus == RawPersistStatus.SUCCEEDED}",
+        )
         sessionDao.upsert(
             session.copy(
                 annotatedExportStatus = AnnotatedExportStatus.ANNOTATED_FAILED,
-                annotatedExportFailureReason = "EXPORT_JOB_LOST",
-                annotatedExportFailureDetail = "Stale processing reconciled with no active export owner",
+                annotatedExportFailureReason = reason,
+                annotatedExportFailureDetail = "Recovered stale in-flight export ($trigger)",
                 annotatedExportStage = AnnotatedExportStage.FAILED,
                 annotatedExportPercent = 100,
                 annotatedExportLastUpdatedAt = System.currentTimeMillis(),
             ),
         )
         return true
+    }
+
+    suspend fun recoverStaleAnnotatedExports(
+        activeExportSessionIds: Set<Long>,
+        trigger: String,
+    ): Int {
+        val sessions = sessionDao.getAllOldestFirst()
+        var recovered = 0
+        sessions.forEach { session ->
+            val changed = recoverStaleAnnotatedExportState(
+                sessionId = session.id,
+                hasActiveExportWork = activeExportSessionIds.contains(session.id),
+                trigger = trigger,
+            )
+            if (changed) recovered += 1
+        }
+        if (recovered > 0) {
+            Log.i(
+                EXPORT_STATE_TAG,
+                "bulk_stale_recovery trigger=$trigger recovered=$recovered activeCount=${activeExportSessionIds.size}",
+            )
+        }
+        return recovered
     }
 
     suspend fun updateRawPersistStatus(sessionId: Long, status: RawPersistStatus) {

@@ -60,7 +60,9 @@ import com.inversioncoach.app.ui.components.DropdownOption
 import com.inversioncoach.app.ui.components.ReliableDropdownField
 import com.inversioncoach.app.ui.components.SessionMediaActionsCard
 import com.inversioncoach.app.ui.live.mediaAssetExists
+import com.inversioncoach.app.ui.live.AnnotatedExportJobTracker
 import com.inversioncoach.app.ui.live.SessionDiagnostics
+import com.inversioncoach.app.ui.upload.UploadJobCoordinator
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -98,10 +100,11 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val clipboardManager = LocalClipboardManager.current
 
     if (showPromotionDialog && session != null) {
+        val activeSession = requireNotNull(session)
         SaveSessionAsReferenceDialog(
-            session = session!!,
+            session = activeSession,
             drills = drills,
-            initialDrillId = session?.drillId ?: parseInlineMetrics(session?.metricsJson.orEmpty())["drillId"],
+            initialDrillId = activeSession.drillId ?: parseInlineMetrics(activeSession.metricsJson)["drillId"],
             onDismiss = {
                 showPromotionDialog = false
                 promotionError = null
@@ -155,6 +158,14 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
         notes = repository.readSessionNotes(sessionId).orEmpty()
         persistedDiagnostics = repository.readSessionDiagnostics(sessionId)
         repository.reconcileRawPersistState(sessionId)
+        val hasActiveExportWork =
+            AnnotatedExportJobTracker.isActive(sessionId) ||
+                (UploadJobCoordinator.isActive() && UploadJobCoordinator.currentSessionId() == sessionId)
+        repository.recoverStaleAnnotatedExportState(
+            sessionId = sessionId,
+            hasActiveExportWork = hasActiveExportWork,
+            trigger = "results_hydration",
+        )
         repository.reconcileActiveUploadJobs(
             hasActiveWorker = UploadJobCoordinator.isActive(),
             reason = "results_screen_load",
@@ -781,7 +792,7 @@ private fun collapseIssueTimeline(issueEvents: List<IssueEvent>, sessionStartMs:
             event.timestampMs - last.endMs <= maxGapMs
 
         if (shouldMerge) {
-            merged[merged.lastIndex] = last!!.copy(
+            merged[merged.lastIndex] = requireNotNull(last).copy(
                 endMs = event.timestampMs,
                 peakSeverity = maxOf(last.peakSeverity, event.severity),
             )
@@ -812,4 +823,3 @@ private fun formatElapsed(startedAtMs: Long?, timestampMs: Long?): String {
     val elapsedSeconds = ((timestampMs - startedAtMs) / 1000).toInt()
     return "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60)
 }
-

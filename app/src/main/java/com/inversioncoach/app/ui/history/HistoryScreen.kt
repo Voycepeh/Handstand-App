@@ -43,6 +43,7 @@ import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.SessionDiagnostics
+import com.inversioncoach.app.ui.upload.UploadJobCoordinator
 
 @Composable
 fun HistoryScreen(
@@ -65,6 +66,13 @@ fun HistoryScreen(
     var totalStorageBytes by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(sessions) {
+        val activeExportSessionIds = buildSet {
+            UploadJobCoordinator.currentSessionId()?.let { add(it) }
+        }
+        repository.recoverStaleAnnotatedExports(
+            activeExportSessionIds = activeExportSessionIds,
+            trigger = "history_hydration",
+        )
         val sizes = sessions.associate { it.id to repository.sessionStorageBytes(it.id) }
         sessionSizes.clear()
         sessionSizes.putAll(sizes)
