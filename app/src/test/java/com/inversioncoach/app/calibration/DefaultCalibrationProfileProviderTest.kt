@@ -13,7 +13,10 @@ class DefaultCalibrationProfileProviderTest {
         val expected = DefaultDrillMovementProfiles.forDrill(DrillType.FREE_HANDSTAND, nowMs = 111L)
         repo.save(expected)
 
-        val resolved = DefaultCalibrationProfileProvider(repo).resolve(DrillType.FREE_HANDSTAND)
+        val resolved = DefaultCalibrationProfileProvider(
+            repository = repo,
+            resolveRuntimeBodyProfile = { RuntimeBodyProfileResolution(null, null, null, null, true) },
+        ).resolve(DrillType.FREE_HANDSTAND)
 
         assertEquals(expected, resolved)
     }
@@ -22,7 +25,10 @@ class DefaultCalibrationProfileProviderTest {
     fun returnsDefaultProfileWhenMissing() = runTest {
         val repo = FakeDrillMovementProfileRepository()
 
-        val resolved = DefaultCalibrationProfileProvider(repo).resolve(DrillType.WALL_HANDSTAND_PUSH_UP)
+        val resolved = DefaultCalibrationProfileProvider(
+            repository = repo,
+            resolveRuntimeBodyProfile = { RuntimeBodyProfileResolution(null, null, null, null, true) },
+        ).resolve(DrillType.WALL_HANDSTAND_PUSH_UP)
 
         assertEquals(DrillType.WALL_HANDSTAND_PUSH_UP, resolved.drillType)
         assertEquals(1, resolved.profileVersion)

@@ -225,9 +225,6 @@ class LiveCoachingViewModel(
             overlayFrameCount = 0,
             failureReason = "analyzer=${metricsEngine::class.simpleName};movementPattern=$movementPattern",
         )
-        viewModelScope.launch {
-            activeBodyProfile = repository.getActiveProfileCalibration()
-        }
     }
 
     fun onCameraPermissionChanged(granted: Boolean) {
@@ -1016,9 +1013,11 @@ class LiveCoachingViewModel(
                 activeBodyProfileVersion = resolved.bodyProfileVersion
                 activeUsesDefaultBodyModel = resolved.usedDefaultBodyModel
                 legacyBodyProfileFallback = resolved.bodyProfile
+                activeBodyProfile = resolved.bodyProfile
             } ?: run {
                 activeUsesDefaultBodyModel = activeMovementProfile?.userBodyProfile == null
-                legacyBodyProfileFallback = null
+                legacyBodyProfileFallback = activeMovementProfile?.userBodyProfile
+                activeBodyProfile = activeMovementProfile?.userBodyProfile
             }
             motionPipeline.setRepTemplate(activeMovementProfile?.repTemplate)
             val now = System.currentTimeMillis()
