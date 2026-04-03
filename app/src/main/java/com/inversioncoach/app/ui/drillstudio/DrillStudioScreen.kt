@@ -1,6 +1,5 @@
 package com.inversioncoach.app.ui.drillstudio
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,10 +32,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -51,14 +45,15 @@ import com.inversioncoach.app.drills.catalog.DrillCatalogRepository
 import com.inversioncoach.app.drills.catalog.DrillTemplate
 import com.inversioncoach.app.drills.catalog.JointPoint
 import com.inversioncoach.app.drills.catalog.PhasePoseTemplate
-import com.inversioncoach.app.overlay.OverlaySkeletonSpec
-import com.inversioncoach.app.overlay.jointStyle
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.DropdownOption
 import com.inversioncoach.app.ui.components.MultiSelectChipsField
+import com.inversioncoach.app.ui.components.OverlaySkeletonPreview
+import com.inversioncoach.app.ui.components.OverlaySkeletonPreviewStyle
 import com.inversioncoach.app.ui.components.ReliableDropdownField
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.components.SeededSkeletonPreview
+import com.inversioncoach.app.ui.components.SeededSkeletonPreviewDefaults
 import kotlinx.coroutines.isActive
 import android.util.Log
 
@@ -430,11 +425,15 @@ private fun PoseCanvas(
     onJointMoved: (String, JointPoint) -> Unit,
 ) {
     var activeJoint by remember(phasePose.phaseId) { mutableStateOf<String?>(null) }
-    val baseJointColor = Color(0xFF7CF0A9)
-    Box(modifier = Modifier.fillMaxWidth().height(STUDIO_STAGE_HEIGHT).background(MaterialTheme.colorScheme.surface)) {
-        Canvas(
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface),
+    ) {
+        OverlaySkeletonPreview(
+            joints = phasePose.joints,
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .pointerInput(phasePose.phaseId, phasePose.joints) {
                     detectDragGestures(
                         onDragStart = { start ->
@@ -457,32 +456,18 @@ private fun PoseCanvas(
                             )
                             onJointMoved(joint, constrained)
                         },
+                        onDragEnd = { activeJoint = null },
+                        onDragCancel = { activeJoint = null },
                     )
                 },
-        ) {
-            canonicalStudioBones().forEach { (start, end) ->
-                val a = phasePose.joints[start]
-                val b = phasePose.joints[end]
-                if (a != null && b != null) {
-                    drawLine(
-                        color = baseJointColor,
-                        start = Offset(a.x * size.width, a.y * size.height),
-                        end = Offset(b.x * size.width, b.y * size.height),
-                        strokeWidth = 4f,
-                        cap = StrokeCap.Round,
-                    )
-                }
-            }
-            phasePose.joints.forEach { (name, point) ->
-                val style = jointStyle(name, baseJointColor, 6f)
-                drawCircle(
-                    color = style.color,
-                    radius = style.radius,
-                    center = Offset(point.x * size.width, point.y * size.height),
-                    style = Stroke(width = 3f),
-                )
-            }
-        }
+            style = OverlaySkeletonPreviewStyle(
+                aspectRatio = SeededSkeletonPreviewDefaults.PORTRAIT_ASPECT_RATIO,
+                contentPaddingFraction = 0f,
+                styleScaleMultiplier = 1f,
+            ),
+            highlightedJoint = activeJoint,
+            showBackground = false,
+        )
     }
 }
 
@@ -509,10 +494,3 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
 }
 
 private fun String.pretty(): String = lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
-
-private val STUDIO_STAGE_HEIGHT = 260.dp
-
-private fun canonicalStudioBones(): List<Pair<String, String>> =
-    OverlaySkeletonSpec.sideConnections("left") +
-        OverlaySkeletonSpec.sideConnections("right") +
-        OverlaySkeletonSpec.bilateralConnectors
