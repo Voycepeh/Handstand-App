@@ -3,6 +3,7 @@ package com.inversioncoach.app.ui.drillstudio
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.inversioncoach.app.drills.DrillCameraView
+import com.inversioncoach.app.drills.DrillCueConfigCodec
 import com.inversioncoach.app.drills.DrillMovementMode
 import com.inversioncoach.app.drills.DrillSourceType
 import com.inversioncoach.app.drills.DrillStatus
@@ -559,9 +560,9 @@ internal fun DrillTemplate.toDrillDefinitionRecord(
         phaseSchemaJson = phases.sortedBy { it.order }.joinToString("|") { phase -> phase.label.ifBlank { phase.id } },
         keyJointsJson = keyJoints.joinToString("|"),
         normalizationBasisJson = normalizationBasis.name,
-        cueConfigJson = mergeCueConfig(
+        cueConfigJson = DrillCueConfigCodec.merge(
             existingCueConfig = existing?.cueConfigJson,
-            comparisonMode = comparisonMode,
+            comparisonMode = comparisonMode.name,
             studioPayload = studioPayload,
         ),
         sourceType = existing?.sourceType ?: DrillSourceType.USER_CREATED,
@@ -570,28 +571,6 @@ internal fun DrillTemplate.toDrillDefinitionRecord(
         createdAtMs = existing?.createdAtMs ?: now,
         updatedAtMs = now,
     )
-}
-
-private fun mergeCueConfig(
-    existingCueConfig: String?,
-    comparisonMode: ComparisonMode,
-    studioPayload: String,
-): String {
-    val existingTokens = existingCueConfig
-        .orEmpty()
-        .split('|')
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-    val filtered = existingTokens.filterNot { token ->
-        token.startsWith("comparisonMode:") || token.startsWith("studioPayload:")
-    }
-    val withLegacy = if (filtered.none { it.startsWith("legacyDrillType:") }) {
-        filtered + "legacyDrillType:FREE_HANDSTAND"
-    } else {
-        filtered
-    }
-    return (withLegacy + listOf("comparisonMode:${comparisonMode.name}", "studioPayload:$studioPayload"))
-        .joinToString("|")
 }
 
 internal fun DrillDefinitionRecord.toDrillTemplate(seed: DrillTemplate?): DrillTemplate {
@@ -630,7 +609,7 @@ internal fun DrillDefinitionRecord.toDrillTemplate(seed: DrillTemplate?): DrillT
         movementType = if (movementMode == DrillMovementMode.REP) CatalogMovementType.REP else CatalogMovementType.HOLD,
         cameraView = payload?.cameraView ?: cameraView.toCatalogCameraView(),
         supportedViews = payload?.supportedViews ?: listOf(cameraView.toCatalogCameraView()),
-        comparisonMode = payload?.comparisonMode ?: cueConfigJson.comparisonModeFromCueConfig(),
+        comparisonMode = payload?.comparisonMode ?: cueConfigJson.comparisonModeFromCueConfigTokens(),
         keyJoints = payload?.keyJoints ?: keyJointsJson.split('|').filter { it.isNotBlank() },
         normalizationBasis = payload?.normalizationBasis ?: normalizationBasisJson.toCatalogNormalizationBasis(),
         phases = phases,
@@ -802,8 +781,7 @@ internal fun DrillTemplate.encodeStudioPayload(): String {
 }
 
 internal fun decodeStudioPayload(cueConfigJson: String): PersistedStudioPayload? = runCatching {
-    val payloadToken = cueConfigJson.split('|').firstOrNull { it.startsWith("studioPayload:") } ?: return null
-    val encoded = payloadToken.substringAfter("studioPayload:")
+    val encoded = DrillCueConfigCodec.parse(cueConfigJson).studioPayload ?: return null
     if (encoded.isBlank()) return null
     val decoded = String(Base64.getUrlDecoder().decode(encoded))
     val json = JSONObject(decoded)
@@ -874,12 +852,10 @@ internal fun decodeStudioPayload(cueConfigJson: String): PersistedStudioPayload?
     )
 }.getOrNull()
 
-private fun String.comparisonModeFromCueConfig(): ComparisonMode =
-    split('|')
-        .firstOrNull { it.startsWith("comparisonMode:") }
-        ?.substringAfter(':')
-        ?.let { value -> ComparisonMode.entries.firstOrNull { it.name == value } }
-        ?: ComparisonMode.POSE_TIMELINE
+private fun String.comparisonModeFromCueConfigTokens(): ComparisonMode =
+    ComparisonMode.entries.firstOrNull { entry ->
+        entry.name == DrillCueConfigCodec.parse(this).comparisonMode
+    } ?: ComparisonMode.POSE_TIMELINE
 
 private fun String.toCatalogNormalizationBasis(): CatalogNormalizationBasis =
     CatalogNormalizationBasis.entries.firstOrNull { it.name == this } ?: CatalogNormalizationBasis.HIPS

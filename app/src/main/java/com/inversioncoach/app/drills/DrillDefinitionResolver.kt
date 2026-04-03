@@ -5,10 +5,6 @@ import com.inversioncoach.app.model.DrillType
 
 object DrillDefinitionResolver {
     fun resolveLegacyDrillType(drill: DrillDefinitionRecord?): DrillType {
-        val cue = drill?.cueConfigJson.orEmpty()
-        val token = cue.split('|').firstOrNull { it.startsWith("legacyDrillType:") }
-            ?.substringAfter(':')
-            ?.trim()
-        return token?.let { DrillType.fromStoredName(it) } ?: DrillType.FREE_HANDSTAND
+        return DrillCueConfigCodec.parse(drill?.cueConfigJson).legacyDrillType
     }
 }

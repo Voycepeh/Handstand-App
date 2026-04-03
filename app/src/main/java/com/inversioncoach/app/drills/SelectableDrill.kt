@@ -28,7 +28,7 @@ fun DrillDefinitionRecord.toSelectableDrill(): SelectableDrill {
         description = description,
         movementMode = movementMode,
         cameraView = cameraView,
-        comparisonMode = cueConfigJson.comparisonModeOrDefault(),
+        comparisonMode = DrillCueConfigCodec.parse(cueConfigJson).comparisonMode,
         status = status,
         source = sourceType,
         isArchived = isArchived,
@@ -39,9 +39,3 @@ fun DrillDefinitionRecord.toSelectableDrill(): SelectableDrill {
     )
 }
 
-private fun String.comparisonModeOrDefault(): String =
-    split('|')
-        .firstOrNull { token -> token.startsWith("comparisonMode:") }
-        ?.substringAfter(':')
-        ?.ifBlank { null }
-        ?: "POSE_TIMELINE"

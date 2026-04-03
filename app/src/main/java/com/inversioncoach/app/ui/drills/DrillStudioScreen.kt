@@ -29,11 +29,13 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -57,37 +59,30 @@ import kotlin.math.min
 @Composable
 fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
     val context = LocalContext.current
-    val store = remember { DrillCatalogDraftStore(context) }
-    val importExport = remember { DrillCatalogImportExportManager(context, store) }
+    val appContext = context.applicationContext
+    val store = remember(appContext) { DrillCatalogDraftStore(appContext) }
+    val importExport = remember(appContext, store) { DrillCatalogImportExportManager(appContext, store) }
+    val vm: DrillStudioEditorViewModel = viewModel { DrillStudioEditorViewModel(store, importExport) }
+    val editorState by vm.state.collectAsState()
+    val drills = editorState.drills
+    val selectedDrillId = editorState.selectedDrillId
+    val document = editorState.working
+    val hasUnsavedChanges = editorState.hasUnsavedChanges
+    val selectedMeta = editorState.selectedMeta
 
-    var drills by remember { mutableStateOf(store.listDrills()) }
-    var selectedDrillId by remember { mutableStateOf(initialDrillId ?: drills.firstOrNull()?.id.orEmpty()) }
-    var baseline by remember(selectedDrillId, drills.size) { mutableStateOf(if (selectedDrillId.isBlank()) null else store.loadForEditor(selectedDrillId)) }
-    var working by remember(selectedDrillId, drills.size) { mutableStateOf(baseline) }
     var selectedPhaseId by remember { mutableStateOf("") }
     var selectedJoint by remember { mutableStateOf(BodyJoint.HEAD) }
     var mirroredPreview by remember { mutableStateOf(false) }
     var showAdvancedMetadata by remember(selectedDrillId) { mutableStateOf(false) }
-    var status by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(initialDrillId) {
+        vm.initialize(initialDrillId)
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        runCatching {
-            val imported = importExport.importDraft(uri)
-            drills = store.listDrills()
-            selectedDrillId = imported.id
-            baseline = store.loadForEditor(imported.id)
-            working = baseline
-            status = "Imported ${imported.displayName}"
-        }.onFailure {
-            status = "Import failed: ${it.message}"
-        }
+        vm.importDraft(uri)
     }
-
-    val document = working
-    val persisted = baseline
-    val hasUnsavedChanges = document != null && persisted != null && document != persisted
-    val selectedMeta = drills.firstOrNull { it.id == selectedDrillId }
 
     ScaffoldedScreen(title = "Drill Studio", onBack = onBack) { padding ->
         Column(
@@ -98,7 +93,7 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            status?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+            editorState.status?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             Text(
                 buildString {
                     append(if (selectedMeta?.seeded == true) "Seeded drill" else "Local drill")
@@ -114,11 +109,8 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                 selected = selectedDrillId,
                 options = drills.associate { it.id to it.name },
             ) { newId ->
-                selectedDrillId = newId
-                baseline = store.loadForEditor(newId)
-                working = baseline
+                vm.selectDrill(newId)
                 selectedPhaseId = ""
-                status = null
             }
 
             document?.let { draft ->
@@ -162,7 +154,7 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                                             existing
                                         }
                                     }
-                                    working = draft.copy(phases = updatedPhases)
+                                    vm.updateWorking(draft.copy(phases = updatedPhases))
                                 },
                                 valueRange = 0f..1f,
                             )
@@ -176,7 +168,7 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                                             existing
                                         }
                                     }
-                                    working = draft.copy(phases = updatedPhases)
+                                    vm.updateWorking(draft.copy(phases = updatedPhases))
                                 },
                                 valueRange = 0f..1f,
                             )
@@ -191,7 +183,7 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                     Text(if (showAdvancedMetadata) "Hide Advanced Metadata" else "Show Advanced Metadata")
                 }
                 if (showAdvancedMetadata) {
-                    OutlinedTextField(draft.displayName, { value -> working = draft.copy(displayName = value) }, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(draft.displayName, { value -> vm.updateWorking(draft.copy(displayName = value)) }, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
                     DrillDropdown(
                         label = "Camera view",
                         selected = draft.cameraView.name,
@@ -199,7 +191,7 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                     ) { value ->
                         val view = CatalogCameraView.valueOf(value)
                         val updatedSupported = if (draft.supportedViews.contains(view)) draft.supportedViews else (draft.supportedViews + view)
-                        working = draft.copy(cameraView = view, supportedViews = updatedSupported)
+                        vm.updateWorking(draft.copy(cameraView = view, supportedViews = updatedSupported))
                     }
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -215,7 +207,7 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                                         }
                                         if (next.isNotEmpty()) {
                                             val nextCamera = if (next.contains(draft.cameraView)) draft.cameraView else next.first()
-                                            working = draft.copy(supportedViews = next, cameraView = nextCamera)
+                                            vm.updateWorking(draft.copy(supportedViews = next, cameraView = nextCamera))
                                         }
                                     })
                                     Text(view.name)
@@ -227,64 +219,44 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                         label = "Analysis plane",
                         selected = draft.analysisPlane.name,
                         options = CatalogAnalysisPlane.entries.associate { it.name to it.name },
-                    ) { value -> working = draft.copy(analysisPlane = CatalogAnalysisPlane.valueOf(value)) }
+                    ) { value -> vm.updateWorking(draft.copy(analysisPlane = CatalogAnalysisPlane.valueOf(value))) }
                     DrillDropdown(
                         label = "Comparison mode",
                         selected = draft.comparisonMode.name,
                         options = CatalogComparisonMode.entries.associate { it.name to it.name },
-                    ) { value -> working = draft.copy(comparisonMode = CatalogComparisonMode.valueOf(value)) }
-                    ThresholdEditor(draft = draft) { updated -> working = updated }
+                    ) { value -> vm.updateWorking(draft.copy(comparisonMode = CatalogComparisonMode.valueOf(value))) }
+                    ThresholdEditor(draft = draft) { updated -> vm.updateWorking(updated) }
                 }
                 JointEditor(
                     draft = draft,
                     selectedPhaseId = selectedPhaseId,
                     selectedJoint = selectedJoint,
                     onJointSelected = { selectedJoint = it },
-                    onUpdated = { updated -> working = updated },
+                    onUpdated = { updated -> vm.updateWorking(updated) },
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = {
-                        store.saveDraft(draft)
-                        drills = store.listDrills()
-                        baseline = store.loadForEditor(draft.id)
-                        working = baseline
-                        status = "Draft saved"
-                    }) { Text("Save draft") }
+                    Button(onClick = vm::saveDraft) { Text("Save draft") }
 
-                    Button(onClick = {
-                        store.resetDraft(draft.id)
-                        drills = store.listDrills()
-                        val fallback = drills.firstOrNull()?.id.orEmpty()
-                        selectedDrillId = if (drills.any { it.id == draft.id }) draft.id else fallback
-                        baseline = if (selectedDrillId.isBlank()) null else store.loadForEditor(selectedDrillId)
-                        working = baseline
-                        status = "Draft reset"
-                    }) { Text("Reset") }
+                    Button(onClick = vm::resetDraft) { Text("Reset") }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = {
-                        val duplicate = store.duplicate(draft.id)
-                        drills = store.listDrills()
-                        selectedDrillId = duplicate.id
-                        baseline = store.loadForEditor(duplicate.id)
-                        working = baseline
-                        status = "Duplicated to ${duplicate.displayName}"
-                    }) { Text("Duplicate") }
+                    Button(onClick = vm::duplicateSelected) { Text("Duplicate") }
                     Button(onClick = { picker.launch(arrayOf("application/json")) }) { Text("Import JSON") }
                 }
 
                 Button(onClick = {
-                    val exported = importExport.exportDraft(draft)
-                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", exported)
-                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "application/json"
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    vm.exportDraft { exported ->
+                        if (exported == null) return@exportDraft
+                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", exported)
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/json"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Share drill draft"))
                     }
-                    context.startActivity(Intent.createChooser(shareIntent, "Share drill draft"))
-                    status = "Exported ${exported.name}"
                 }, modifier = Modifier.fillMaxWidth()) {
                     Text("Export & Share JSON")
                 }

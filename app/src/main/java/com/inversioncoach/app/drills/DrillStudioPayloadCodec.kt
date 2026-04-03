@@ -8,8 +8,7 @@ import java.util.Base64
 
 internal object DrillStudioPayloadCodec {
     fun decodePreviewSkeleton(drillId: String, cueConfigJson: String): SkeletonTemplate? = runCatching {
-        val payloadToken = cueConfigJson.split('|').firstOrNull { it.startsWith("studioPayload:") } ?: return null
-        val encoded = payloadToken.substringAfter("studioPayload:")
+        val encoded = DrillCueConfigCodec.parse(cueConfigJson).studioPayload ?: return null
         if (encoded.isBlank()) return null
         val decoded = String(Base64.getUrlDecoder().decode(encoded))
         val json = JSONObject(decoded)
