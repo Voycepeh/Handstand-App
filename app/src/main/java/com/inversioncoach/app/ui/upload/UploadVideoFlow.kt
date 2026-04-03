@@ -61,6 +61,8 @@ import com.inversioncoach.app.movementprofile.MovementComparisonEngine
 import com.inversioncoach.app.movementprofile.MovementProfileExtractor
 import com.inversioncoach.app.movementprofile.UploadedVideoAnalyzer
 import com.inversioncoach.app.movementprofile.VideoPoseFrameSource
+import com.inversioncoach.app.movementprofile.ReferenceTemplateDefinition
+import com.inversioncoach.app.movementprofile.ReferenceTemplateRecordCodec
 import com.inversioncoach.app.movementprofile.MovementProfile
 import com.inversioncoach.app.movementprofile.MovementType
 import com.inversioncoach.app.movementprofile.CameraViewConstraint
@@ -716,6 +718,7 @@ class DefaultUploadVideoAnalysisRunner(
             } else {
                 val selectedTemplateRecord = selectedReferenceTemplateId?.let { repository.getReferenceTemplate(it) }
                 if (selectedTemplateRecord != null) {
+                    val referenceProfileId = ReferenceTemplateRecordCodec.sourceProfileIds(selectedTemplateRecord).firstOrNull().orEmpty()
                     val referenceProfileId = repository.getReferenceProfileIds(selectedTemplateRecord).firstOrNull().orEmpty()
                     val referenceProfile = repository.getMovementProfile(referenceProfileId)
                     if (referenceProfile != null) {
@@ -1223,6 +1226,12 @@ class DefaultUploadVideoAnalysisRunner(
         DrillCameraView.RIGHT -> DrillCameraSide.RIGHT
         else -> DrillCameraSide.LEFT
     }
+
+    private fun templateDefinitionFromRecord(record: com.inversioncoach.app.model.ReferenceTemplateRecord): ReferenceTemplateDefinition? =
+        ReferenceTemplateRecordCodec.toDefinition(record)
+
+    private suspend fun templatesAreEmptyForDrill(repository: SessionRepository, drillId: String): Boolean =
+        repository.listTemplatesForDrill(drillId).first().isEmpty()
 
     private suspend fun templatesAreEmptyForDrill(repository: SessionRepository, drillId: String): Boolean =
         repository.listTemplatesForDrill(drillId).first().isEmpty()

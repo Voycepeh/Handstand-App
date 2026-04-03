@@ -110,12 +110,7 @@ class SessionRepository(
         val existing = referenceTemplateDao.getById(templateId) ?: return null
         val now = System.currentTimeMillis()
         val updated = buildUpdatedTemplateRecord(existing, draft, displayName, setAsBaseline, now)
-        return if (updated.isBaseline) {
-            setBaselineTemplateForDrill(drillId = existing.drillId, template = updated)
-        } else {
-            referenceTemplateDao.upsert(updated)
-            updated
-        }
+        return persistTemplateWithBaselinePolicy(drillId = existing.drillId, template = updated)
     }
 
     suspend fun createTemplateFromDraft(
@@ -135,13 +130,7 @@ class SessionRepository(
             setAsBaseline = setAsBaseline,
             now = now,
         )
-        return if (setAsBaseline) {
-            setBaselineTemplateForDrill(drillId = drillId, template = created)
-            created.copy(isBaseline = true)
-        } else {
-            referenceTemplateDao.upsert(created)
-            created
-        }
+        return persistTemplateWithBaselinePolicy(drillId = drillId, template = created)
     }
     fun listTemplatesForDrill(drillId: String): Flow<List<ReferenceTemplateRecord>> = referenceTemplateDao.observeByDrillId(drillId)
     fun getSessionsForDrill(drillId: String): Flow<List<SessionRecord>> = sessionDao.observeByDrillId(drillId)
@@ -165,13 +154,7 @@ class SessionRepository(
             sourceSessionId = sourceSessionId,
             isBaseline = isBaseline,
         )
-        return if (isBaseline) {
-            setBaselineTemplateForDrill(drillId = drillId, template = template)
-            template.copy(isBaseline = true)
-        } else {
-            referenceTemplateDao.upsert(template)
-            template
-        }
+        return persistTemplateWithBaselinePolicy(drillId = drillId, template = template)
     }
 
     suspend fun createDrillFromReferenceUpload(
@@ -237,11 +220,7 @@ class SessionRepository(
             else -> session.copy(referenceTemplateId = template.id)
         }
         sessionDao.upsert(updatedSession)
-        return if (setAsBaseline) {
-            setBaselineTemplateForDrill(targetDrillId, template = template)
-        } else {
-            template
-        }
+        return if (setAsBaseline) setBaselineTemplateForDrill(targetDrillId, template = template) else template
     }
 
     @Deprecated("Use promoteSessionToReference with explicit targetDrillId.")
@@ -267,6 +246,18 @@ class SessionRepository(
         val updated = resolved.copy(isBaseline = true, updatedAtMs = System.currentTimeMillis())
         referenceTemplateDao.setBaselineForDrill(drillId, updated)
         return updated
+    }
+
+    private suspend fun persistTemplateWithBaselinePolicy(
+        drillId: String,
+        template: ReferenceTemplateRecord,
+    ): ReferenceTemplateRecord {
+        return if (template.isBaseline) {
+            setBaselineTemplateForDrill(drillId = drillId, template = template) ?: template
+        } else {
+            referenceTemplateDao.upsert(template)
+            template
+        }
     }
 
     suspend fun saveSessionComparison(record: SessionComparisonRecord): Long = sessionComparisonDao.insert(record)
@@ -306,8 +297,7 @@ class SessionRepository(
         return drills.firstOrNull { DrillDefinitionResolver.resolveLegacyDrillType(it) == drillType }?.id
     }
     suspend fun getActiveTemplateForDrill(drillId: String): ReferenceTemplateRecord? =
-        referenceTemplateDao.observeByDrillId(drillId).firstOrNull().orEmpty().firstOrNull { it.isBaseline }
-            ?: referenceTemplateDao.observeByDrillId(drillId).firstOrNull().orEmpty().firstOrNull()
+        DrillCurrentReferenceResolver.resolve(referenceTemplateDao.observeByDrillId(drillId).firstOrNull().orEmpty())
     suspend fun createDrill(record: DrillDefinitionRecord) = drillDefinitionDao.upsert(record)
     suspend fun updateDrill(record: DrillDefinitionRecord) = drillDefinitionDao.upsert(record)
     suspend fun validateAndMarkDrillReady(drillId: String): List<String> {
@@ -337,11 +327,7 @@ class SessionRepository(
     fun getComparisonsForDrill(drillId: String): Flow<List<SessionComparisonRecord>> = sessionComparisonDao.observeByDrill(drillId)
     fun getTemplatesForDrill(drillId: String): Flow<List<ReferenceTemplateRecord>> = referenceTemplateDao.observeByDrillId(drillId)
     fun getCurrentReferenceForDrill(drillId: String): Flow<ReferenceTemplateRecord?> =
-        referenceTemplateDao.observeByDrillId(drillId).map { templates ->
-            templates
-                .sortedWith(compareByDescending<ReferenceTemplateRecord> { it.isBaseline }.thenByDescending { it.updatedAtMs })
-                .firstOrNull()
-        }
+        referenceTemplateDao.observeByDrillId(drillId).map(DrillCurrentReferenceResolver::resolve)
     fun getReferenceTemplatesForDrill(drillId: String): Flow<List<ReferenceTemplateRecord>> = referenceTemplateDao.observeByDrillId(drillId)
     fun getRecentSessionsForDrill(drillId: String): Flow<List<SessionRecord>> = sessionDao.observeByDrillId(drillId)
 
