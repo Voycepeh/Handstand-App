@@ -114,16 +114,35 @@ Detailed diagrams live in [`docs/diagrams/`](docs/diagrams).
 - Kotlin + Jetpack Compose
 - AndroidX Navigation + ViewModel state flows
 - Room database + blob/media storage
-- ML Kit pose detection
-- On-device motion/biomechanics scoring modules
+- ML Kit on-device pose detection (landmark extraction)
+- Custom on-device motion analysis, biomechanics, calibration, and drill scoring modules
 - WorkManager-backed upload queue processing
+
+## ML + movement analysis (current state)
+
+CaliVision already uses **on-device machine-learning pose detection** to extract body landmarks from both:
+
+- **Live camera sessions**
+- **Uploaded videos**
+
+Those landmarks then flow through CaliVision’s own analysis stack:
+
+- motion analysis + phase detection
+- biomechanics metrics
+- calibration-aware interpretation
+- timeline overlays and structured feedback
+- drill scoring + reference comparison outputs
+
+Today’s seeded drill baselines and v1 movement templates are **authored rules and movement-analysis heuristics** built in the app’s domain layer. They are not a fully self-learning end-to-end model.
+
+The reference-template and movement-profile workflow is being structured so scoring and comparison can become more adaptive and data-informed over time as more drill data is captured, while remaining product-guided and technically explicit about what is rule-authored vs learned.
 
 ## How the system works
 
 1. UI routes in `ui/navigation/Nav.kt` coordinate screen transitions.
 2. Workflow view models (`ui/live`, `ui/upload`, `ui/drillstudio`) orchestrate user flows.
 3. Domain modules (`drills`, `movementprofile`, `calibration`) provide drill and profile behavior.
-4. Analysis modules (`pose`, `motion`, `biomechanics`) score and classify movement.
+4. Analysis modules (`pose`, `motion`, `biomechanics`) combine ML landmark extraction with CaliVision-authored scoring/classification logic.
 5. Recording/export modules (`recording`, `media`) generate replay outputs with fallback.
 6. `storage/repository/SessionRepository` persists sessions, drill metadata, media status, and references.
 

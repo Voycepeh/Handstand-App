@@ -9,7 +9,8 @@ flowchart LR
     DRILLS[drills/* domain]
     MOVE[movementprofile/* domain]
     CAL[calibration/* domain]
-    ANALYSIS[pose + motion + biomechanics]
+    POSEML[On-device Pose ML + landmarks]
+    ANALYSIS[motion + biomechanics + drill scoring]
     RECORD[recording/* export pipeline]
     MEDIA[SessionMediaResolver]
     REPO[SessionRepository]
@@ -20,12 +21,12 @@ flowchart LR
     UI --> UPLOAD
     UI --> STUDIO
 
-    LIVE --> ANALYSIS
+    LIVE --> POSEML --> ANALYSIS
     LIVE --> CAL
     LIVE --> RECORD
 
     UPLOAD --> MOVE
-    UPLOAD --> ANALYSIS
+    UPLOAD --> POSEML --> ANALYSIS
     UPLOAD --> RECORD
     UPLOAD --> CAL
 
