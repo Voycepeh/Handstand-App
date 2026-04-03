@@ -100,7 +100,7 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
             )
         }
         composable(Route.Start.value, arguments = listOf(navArgument("destination") { type = NavType.StringType; defaultValue = "live" })) {
-            val destination = if (it.arguments?.getString("destination") == "workspace") StartDrillDestination.WORKSPACE else StartDrillDestination.LIVE
+            val destination = RouteArguments.parseStartDestination(it.arguments)
             StartDrillScreen(
                 onBack = { navController.popBackStack() },
                 onStart = { drillType, options -> navController.navigate(Route.Live.create(drillType, options)) },
@@ -155,6 +155,7 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
             navArgument("drillId") { type = NavType.StringType; defaultValue = "" },
             navArgument("templateId") { type = NavType.StringType; defaultValue = "" },
         )) {
+            val args = RouteArguments.parseDrillStudio(it.arguments)
             DrillStudioScreen(
                 onBack = { navController.popBackStack() },
                 onSaveSuccess = {
@@ -163,9 +164,9 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
                     }
                 },
                 initRequest = DrillStudioInitRequest(
-                    mode = it.arguments?.getString("mode") ?: "drill",
-                    drillId = it.arguments?.getString("drillId")?.takeIf { id -> id.isNotBlank() },
-                    templateId = it.arguments?.getString("templateId")?.takeIf { id -> id.isNotBlank() },
+                    mode = args.mode,
+                    drillId = args.drillId,
+                    templateId = args.templateId,
                 ),
             )
         }
@@ -189,10 +190,7 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
             navArgument("isReference") { type = NavType.BoolType; defaultValue = false },
             navArgument("createNewDrillFromReference") { type = NavType.BoolType; defaultValue = false },
         )) {
-            val drillId = it.arguments?.getString("drillId").orEmpty().ifBlank { null }
-            val templateId = it.arguments?.getString("referenceTemplateId").orEmpty().ifBlank { null }
-            val isReference = it.arguments?.getBoolean("isReference") ?: false
-            val createNewDrillFromReference = it.arguments?.getBoolean("createNewDrillFromReference") ?: false
+            val args = RouteArguments.parseUploadVideo(it.arguments)
             UploadVideoScreen(
                 onBack = { navController.popBackStack() },
                 onOpenResults = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
@@ -202,10 +200,10 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
                         else Route.DrillStudio.createForTemplate(drillId, templateId),
                     )
                 },
-                selectedDrillId = drillId,
-                selectedReferenceTemplateId = templateId,
-                isReferenceUpload = isReference,
-                createDrillFromReferenceUpload = createNewDrillFromReference,
+                selectedDrillId = args.drillId,
+                selectedReferenceTemplateId = args.templateId,
+                isReferenceUpload = args.isReferenceUpload,
+                createDrillFromReferenceUpload = args.createNewDrillFromReference,
             )
         }
         composable(Route.DrillWorkspace.value, arguments = listOf(navArgument("drillId") { type = NavType.StringType })) {

@@ -88,8 +88,6 @@ import com.inversioncoach.app.ui.live.SessionDiagnostics
 import com.inversioncoach.app.pose.PoseScaleMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
@@ -1320,9 +1318,6 @@ class UploadVideoViewModel(
             runtimeBodyProfileResolver = ServiceLocator.runtimeBodyProfileResolver(requireNotNull(appContext).applicationContext),
         )
     }
-    companion object {
-        private val uploadScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    }
 
     constructor(runner: UploadVideoAnalysisRunner) : this(
         appContext = null,
@@ -1509,7 +1504,7 @@ class UploadVideoViewModel(
             }
             return
         }
-        runningJob = uploadScope.launch {
+        runningJob = viewModelScope.launch(Dispatchers.Default) {
             _state.update {
                 it.copy(
                     selectedVideoUri = uri,
@@ -1677,6 +1672,11 @@ class UploadVideoViewModel(
             )
         }
     }
+
+    override fun onCleared() {
+        runningJob?.cancel()
+        super.onCleared()
+    }
 }
 
 private fun String.toUploadTrackingMode(): UploadTrackingMode? = when (this) {
@@ -1738,6 +1738,20 @@ private fun UploadTrackingMode.displayLabel(): String = when (this) {
     UploadTrackingMode.REP_BASED -> "Rep-based"
 }
 
+internal fun shouldPersistReadPermission(uri: Uri): Boolean = uri.scheme == "content"
+
+private fun persistReadPermissionIfSupported(context: Context, uri: Uri) {
+    if (!shouldPersistReadPermission(uri)) return
+    runCatching {
+        context.contentResolver.takePersistableUriPermission(
+            uri,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+        )
+    }.onFailure { error ->
+        Log.w(TAG, "picker_permission_persist_failed uri=$uri", error)
+    }
+}
+
 @Composable
 fun UploadVideoScreen(
     onBack: () -> Unit,
@@ -1783,14 +1797,7 @@ fun UploadVideoScreen(
             viewModel.onInvalidSelection("The selected file is not a readable video.")
             return@rememberLauncherForActivityResult
         }
-        runCatching {
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION,
-            )
-        }.onFailure { error ->
-            Log.w(TAG, "picker_permission_persist_failed uri=$uri", error)
-        }
+        persistReadPermissionIfSupported(context, uri)
         viewModel.analyze(uri)
     }
 

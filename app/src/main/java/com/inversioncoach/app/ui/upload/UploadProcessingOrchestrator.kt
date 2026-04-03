@@ -34,6 +34,10 @@ private const val COMPLETION_NOTIFICATION_ID = 3302
 private const val FAILURE_NOTIFICATION_ID = 3303
 
 object UploadProcessingOrchestrator {
+    private fun parseWorkIdOrNull(raw: String?): UUID? = raw?.let {
+        runCatching { UUID.fromString(it) }.getOrNull()
+    }
+
     suspend fun start(
         context: Context,
         videoUri: Uri,
@@ -89,8 +93,8 @@ object UploadProcessingOrchestrator {
         val dao = ServiceLocator.db(appContext).uploadProcessingJobDao()
         val job = dao.getById() ?: return
         if (job.terminalStatus != UploadJobTerminalStatus.NONE) return
-        val isAlive = job.workId?.let { workId ->
-            val info = WorkManager.getInstance(appContext).getWorkInfoById(UUID.fromString(workId)).get()
+        val isAlive = parseWorkIdOrNull(job.workId)?.let { workId ->
+            val info = WorkManager.getInstance(appContext).getWorkInfoById(workId).get()
             info != null && !info.state.isFinished
         } ?: false
         if (isAlive) return
@@ -103,7 +107,7 @@ object UploadProcessingOrchestrator {
         val appContext = context.applicationContext
         val dao = ServiceLocator.db(appContext).uploadProcessingJobDao()
         val job = dao.getById() ?: return
-        job.workId?.let { WorkManager.getInstance(appContext).cancelWorkById(UUID.fromString(it)) }
+        parseWorkIdOrNull(job.workId)?.let { WorkManager.getInstance(appContext).cancelWorkById(it) }
         val now = System.currentTimeMillis()
         dao.upsert(job.copy(stage = UploadJobStage.CANCELLED, terminalStatus = UploadJobTerminalStatus.CANCELLED, updatedAt = now, lastHeartbeatAt = now, reason = "Cancelled by user"))
     }
