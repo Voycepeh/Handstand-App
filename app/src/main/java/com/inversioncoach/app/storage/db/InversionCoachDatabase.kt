@@ -40,7 +40,7 @@ import com.inversioncoach.app.model.UserSettings
         CalibrationConfigRecord::class,
         UploadProcessingJob::class,
     ],
-    version = 20,
+    version = 21,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)

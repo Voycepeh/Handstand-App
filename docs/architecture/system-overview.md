@@ -36,4 +36,6 @@ CaliVision is a drill-centric coaching system with connected live, upload, repla
 3. Session truth persists even if annotated export fails.
 4. Replay prefers verified annotated output, then verified raw fallback.
 5. Profile/profile context is consistently applied to live and upload analysis.
-6. Workflow/architecture naming changes require docs and diagrams updates in the same PR.
+6. Annotated export writes are attempt-owned; stale writers and superseded retries cannot overwrite newer session terminal state.
+7. Stale ACTIVE export states without a verifiable owner are recovered to a safe terminal failed/skipped path.
+8. Workflow/architecture naming changes require docs and diagrams updates in the same PR.

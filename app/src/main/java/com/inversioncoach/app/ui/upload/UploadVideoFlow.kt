@@ -321,6 +321,7 @@ class DefaultUploadVideoAnalysisRunner(
         var persistedRawUri: String? = null
         var sourceDurationMs: Long = 0L
         var currentStage = UploadStage.IMPORTING_RAW_VIDEO
+        var processingAttemptId: String? = null
 
         fun log(message: String) {
             val line = "${System.currentTimeMillis()} | session=$sessionId | stage=${currentStage.name} | $message"
@@ -407,13 +408,28 @@ class DefaultUploadVideoAnalysisRunner(
                 },
             )
             currentStage = UploadStage.PREPARING_ANALYSIS
-            repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.VALIDATING_INPUT)
+            processingAttemptId = repository.claimProcessingAttempt(
+                sessionId = sessionId,
+                ownerType = "UPLOAD_PIPELINE",
+                ownerId = ownerToken,
+                supersedeReason = "EXPORT_RETRY_SUPERSEDED",
+            )
+            repository.updateAnnotatedExportStatus(
+                sessionId,
+                AnnotatedExportStatus.VALIDATING_INPUT,
+                attemptId = processingAttemptId,
+                ownerType = "UPLOAD_PIPELINE",
+                ownerId = ownerToken,
+            )
             repository.updateAnnotatedExportProgress(
                 sessionId = sessionId,
                 stage = AnnotatedExportStage.PREPARING,
                 percent = 20,
                 etaSeconds = null,
                 elapsedMs = System.currentTimeMillis() - startedAt,
+                attemptId = processingAttemptId,
+                ownerType = "UPLOAD_PIPELINE",
+                ownerId = ownerToken,
             )
             repository.updateUploadPipelineProgress(
                 sessionId = sessionId,
@@ -558,6 +574,9 @@ class DefaultUploadVideoAnalysisRunner(
                                     percent = percent,
                                     etaSeconds = null,
                                     elapsedMs = System.currentTimeMillis() - startedAt,
+                                    attemptId = processingAttemptId,
+                                    ownerType = "UPLOAD_PIPELINE",
+                                    ownerId = ownerToken,
                                 )
                             }
                         }
@@ -844,13 +863,22 @@ class DefaultUploadVideoAnalysisRunner(
             }
             log("repo_write overlay timeline uri=$overlayTimelineUri frames=${overlayFrames.size}")
 
-            repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.PROCESSING)
+            repository.updateAnnotatedExportStatus(
+                sessionId,
+                AnnotatedExportStatus.PROCESSING,
+                attemptId = processingAttemptId,
+                ownerType = "UPLOAD_PIPELINE",
+                ownerId = ownerToken,
+            )
             repository.updateAnnotatedExportProgress(
                 sessionId = sessionId,
                 stage = AnnotatedExportStage.LOADING_OVERLAYS,
                 percent = 65,
                 etaSeconds = null,
                 elapsedMs = System.currentTimeMillis() - startedAt,
+                attemptId = processingAttemptId,
+                ownerType = "UPLOAD_PIPELINE",
+                ownerId = ownerToken,
             )
             repository.updateUploadPipelineProgress(
                 sessionId = sessionId,
@@ -878,6 +906,9 @@ class DefaultUploadVideoAnalysisRunner(
                 percent = 72,
                 etaSeconds = null,
                 elapsedMs = System.currentTimeMillis() - startedAt,
+                attemptId = processingAttemptId,
+                ownerType = "UPLOAD_PIPELINE",
+                ownerId = ownerToken,
             )
 
             SessionDiagnostics.record(
@@ -919,6 +950,9 @@ class DefaultUploadVideoAnalysisRunner(
                 percent = 93,
                 etaSeconds = null,
                 elapsedMs = System.currentTimeMillis() - startedAt,
+                attemptId = processingAttemptId,
+                ownerType = "UPLOAD_PIPELINE",
+                ownerId = ownerToken,
             )
             logStage("VERIFYING_OUTPUT", "annotatedUri=${export.persistedUri.orEmpty()} verified=${!export.persistedUri.isNullOrBlank()}")
 
@@ -992,15 +1026,31 @@ class DefaultUploadVideoAnalysisRunner(
             log("repo_write final replayUri=$replayUri annotatedReady=$isAnnotatedReady")
 
             if (isAnnotatedReady) {
-                repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_READY)
-                repository.updateAnnotatedExportFailureReason(sessionId, null)
+                repository.updateAnnotatedExportStatus(
+                    sessionId,
+                    AnnotatedExportStatus.ANNOTATED_READY,
+                    attemptId = processingAttemptId,
+                    ownerType = "UPLOAD_PIPELINE",
+                    ownerId = ownerToken,
+                )
+                repository.updateAnnotatedExportFailureReason(
+                    sessionId,
+                    null,
+                    attemptId = processingAttemptId,
+                    ownerType = "UPLOAD_PIPELINE",
+                    ownerId = ownerToken,
+                )
                 repository.updateAnnotatedExportProgress(
                     sessionId = sessionId,
                     stage = AnnotatedExportStage.COMPLETED,
                     percent = 100,
                     etaSeconds = 0,
                     elapsedMs = now - startedAt,
+                    attemptId = processingAttemptId,
+                    ownerType = "UPLOAD_PIPELINE",
+                    ownerId = ownerToken,
                 )
+                repository.releaseProcessingAttempt(sessionId, processingAttemptId)
                 repository.updateUploadPipelineProgress(
                     sessionId = sessionId,
                     stageLabel = "Completed",
@@ -1030,8 +1080,20 @@ class DefaultUploadVideoAnalysisRunner(
             }
 
             val failureReason = export.failureReason ?: AnnotatedExportFailureReason.EXPORT_NOT_STARTED.name
-            repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-            repository.updateAnnotatedExportFailureReason(sessionId, failureReason)
+            repository.updateAnnotatedExportStatus(
+                sessionId,
+                AnnotatedExportStatus.ANNOTATED_FAILED,
+                attemptId = processingAttemptId,
+                ownerType = "UPLOAD_PIPELINE",
+                ownerId = ownerToken,
+            )
+            repository.updateAnnotatedExportFailureReason(
+                sessionId,
+                failureReason,
+                attemptId = processingAttemptId,
+                ownerType = "UPLOAD_PIPELINE",
+                ownerId = ownerToken,
+            )
             repository.updateAnnotatedExportProgress(
                 sessionId = sessionId,
                 stage = AnnotatedExportStage.FAILED,
@@ -1040,7 +1102,11 @@ class DefaultUploadVideoAnalysisRunner(
                 elapsedMs = now - startedAt,
                 failureReason = failureReason,
                 failureDetail = "Raw ready, annotated export failed during ${currentStage.name}",
+                attemptId = processingAttemptId,
+                ownerType = "UPLOAD_PIPELINE",
+                ownerId = ownerToken,
             )
+            repository.releaseProcessingAttempt(sessionId, processingAttemptId)
             repository.updateUploadPipelineProgress(
                 sessionId = sessionId,
                 stageLabel = "Completed",
@@ -1079,13 +1145,25 @@ class DefaultUploadVideoAnalysisRunner(
                 throwable = error,
             )
             repository.updateRawPersistStatus(sessionId, if (persistedRawUri.isNullOrBlank()) RawPersistStatus.FAILED else RawPersistStatus.SUCCEEDED)
-            repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
+            repository.updateAnnotatedExportStatus(
+                sessionId,
+                AnnotatedExportStatus.ANNOTATED_FAILED,
+                attemptId = processingAttemptId,
+                ownerType = "UPLOAD_PIPELINE",
+                ownerId = ownerToken,
+            )
             val mappedFailure = when {
                 error.message?.contains("No enum constant", ignoreCase = true) == true -> "INPUT_SCHEMA_MISMATCH"
                 error.message?.contains("LEFT_EYE_INNER", ignoreCase = true) == true -> "UNSUPPORTED_LANDMARK_ID"
                 else -> "UPLOAD_OVERLAY_GENERATION_FAILED"
             }
-            repository.updateAnnotatedExportFailureReason(sessionId, mappedFailure)
+            repository.updateAnnotatedExportFailureReason(
+                sessionId,
+                mappedFailure,
+                attemptId = processingAttemptId,
+                ownerType = "UPLOAD_PIPELINE",
+                ownerId = ownerToken,
+            )
             repository.updateAnnotatedExportProgress(
                 sessionId = sessionId,
                 stage = AnnotatedExportStage.FAILED,
@@ -1094,7 +1172,11 @@ class DefaultUploadVideoAnalysisRunner(
                 elapsedMs = System.currentTimeMillis() - startedAt,
                 failureReason = mappedFailure,
                 failureDetail = "Upload workflow failed during ${currentStage.name}",
+                attemptId = processingAttemptId,
+                ownerType = "UPLOAD_PIPELINE",
+                ownerId = ownerToken,
             )
+            repository.releaseProcessingAttempt(sessionId, processingAttemptId)
             repository.updateUploadPipelineProgress(
                 sessionId = sessionId,
                 stageLabel = "Failed",
