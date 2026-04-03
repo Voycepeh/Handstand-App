@@ -103,6 +103,24 @@ class UploadedVideoAnalysisTest {
     }
 
     @Test
+    fun analyzeCorrectsNonMonotonicTimestamps() {
+        val profile = ExistingDrillToProfileAdapter().fromDrill(DrillType.FREESTYLE)
+        val source = object : VideoPoseFrameSource {
+            override fun decode(videoUri: Uri): Sequence<PoseFrame> = sequence {
+                yield(frame(100, 0.9f))
+                yield(frame(100, 0.9f))
+                yield(frame(99, 0.9f))
+            }
+        }
+
+        val result = UploadedVideoAnalyzer(source).analyze(Uri.parse("file:///tmp/timestamps.mp4"), profile)
+        val timestamps = result.overlayTimeline.map { it.timestampMs }
+
+        assertTrue(timestamps.zipWithNext().all { (a, b) -> b > a })
+        assertEquals(2L, result.telemetry["timestamp_corrections"])
+    }
+
+    @Test
     fun compatibilityAdapterPreservesDrillIdentity() {
         val adapter = ExistingDrillToProfileAdapter()
         val profile = adapter.fromDrill(DrillType.FREESTYLE)

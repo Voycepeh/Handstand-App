@@ -207,8 +207,12 @@ class MlKitVideoPoseFrameSource(
                         var timestampMs = 0L
                         var selectedIndex = 0
                         var candidateIndex = 0
+                        var lastTimestampMs = -1L
                         while (timestampMs <= durationMs) {
                             try {
+                                if (lastTimestampMs >= 0L && timestampMs <= lastTimestampMs) {
+                                    timestampMs = lastTimestampMs + candidateIntervalMs
+                                }
                                 val frameTimeUs = timestampMs * 1000L
                                 var bitmap: Bitmap? = null
                                 val decodeNanos = measureNanoTime {
@@ -289,11 +293,20 @@ class MlKitVideoPoseFrameSource(
                                     Log.w(TAG, "decode_frame_missing timestampMs=$timestampMs index=$candidateIndex decodeMs=$decodeMs")
                                 }
                             } catch (e: Exception) {
-                                Log.e(TAG, "decode_exception frameIndex=$candidateIndex timestampMs=$timestampMs message=${e.message}", e)
-                                throw e
+                                Log.w(TAG, "decode_exception_continue frameIndex=$candidateIndex timestampMs=$timestampMs message=${e.message}", e)
+                                observer.onProgress(
+                                    AnalysisProgressEvent(
+                                        stage = "decode_frame_error",
+                                        processedFrames = candidateIndex + 1,
+                                        estimatedTotalFrames = estimatedTotalFrames,
+                                        timestampMs = timestampMs,
+                                        detail = e.message ?: "frame_decode_failed",
+                                    ),
+                                )
                             }
                             candidateFramesDecoded += 1
                             candidateIndex += 1
+                            lastTimestampMs = timestampMs
                             timestampMs += candidateIntervalMs
                         }
                         frameQueue.close()
@@ -339,12 +352,32 @@ class MlKitVideoPoseFrameSource(
                         stage = "decode_complete",
                         processedFrames = frames.size,
                         estimatedTotalFrames = frames.size,
-                        detail = "Decoded frames are ready for analysis",
+                        detail = if (frames.isEmpty()) "Decoded zero frames" else "Decoded frames are ready for analysis",
                     ),
                 )
+                if (frames.isEmpty()) {
+                    observer.onProgress(
+                        AnalysisProgressEvent(
+                            stage = "decode_failed",
+                            processedFrames = 0,
+                            estimatedTotalFrames = estimatedTotalFrames.coerceAtLeast(1),
+                            detail = "zero_decoded_frames",
+                        ),
+                    )
+                }
                 Log.i(
                     TAG,
                     "decode_pipeline_complete sampled=${frames.size} workers=$boundedWorkerCount maxBacklog=$maxBacklog avgActive=${"%.2f".format(lastDecodeTelemetry.averageWorkerActive)} avgDecodeMs=${"%.2f".format(lastDecodeTelemetry.averageDecodeMs)} maxDecodeMs=${lastDecodeTelemetry.maxDecodeMs} avgInferenceMs=${"%.2f".format(lastDecodeTelemetry.averageInferenceMs)} maxInferenceMs=${lastDecodeTelemetry.maxInferenceMs}",
+                )
+            } catch (error: Exception) {
+                Log.e(TAG, "decode_pipeline_failed uri=$videoUri message=${error.message}", error)
+                observer.onProgress(
+                    AnalysisProgressEvent(
+                        stage = "decode_failed",
+                        processedFrames = 0,
+                        estimatedTotalFrames = null,
+                        detail = error.message ?: "decode_pipeline_failed",
+                    ),
                 )
             }
             finally {

@@ -232,6 +232,35 @@ class UploadVideoViewModelTest {
     }
 
     @Test
+    fun zeroDecodedFramesFailureIsContainedInFailedState() = runTest(dispatcher) {
+        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+        val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
+            override suspend fun run(
+                uri: Uri,
+                ownerToken: String,
+                trackingMode: UploadTrackingMode,
+                selectedDrillId: String?,
+                selectedReferenceTemplateId: String?,
+                isReferenceUpload: Boolean,
+                createDrillFromReferenceUpload: Boolean,
+                pendingDrillName: String?,
+                onSessionCreated: (Long) -> Unit,
+                onProgress: (UploadProgress) -> Unit,
+                onLog: (String) -> Unit,
+            ): UploadFlowResult = throw IllegalStateException("zero_decoded_frames")
+        })
+        viewModel.onTrackingModeSelected(UploadTrackingMode.HOLD_BASED)
+
+        viewModel.analyze(Uri.parse("content://broken"))
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertEquals(UploadStage.FAILED, state.stage)
+        assertTrue(state.errorMessage?.contains("zero_decoded_frames", ignoreCase = true) == true)
+        kotlinx.coroutines.Dispatchers.resetMain()
+    }
+
+    @Test
     fun pickerInvalidSelectionMovesToFailure() {
         val viewModel = UploadVideoViewModel(object : UploadVideoAnalysisRunner {
             override suspend fun run(

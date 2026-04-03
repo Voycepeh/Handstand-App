@@ -133,6 +133,8 @@ class UploadedVideoAnalyzer(
             val phaseTimeline = mutableListOf<Pair<Long, String>>()
             var dropped = 0
             var edgeFramesSkipped = 0
+            var timestampCorrections = 0
+            var lastAcceptedTimestampMs = -1L
             progressObserver?.onProgress(
                 AnalysisProgressEvent(
                     stage = "analysis_started",
@@ -181,15 +183,22 @@ class UploadedVideoAnalyzer(
                 } else {
                     val postProcessMs: Long
                     val alignment: Float
+                    val sanitizedTimestampMs = if (frame.timestampMs <= lastAcceptedTimestampMs) {
+                        timestampCorrections += 1
+                        lastAcceptedTimestampMs + 1L
+                    } else {
+                        frame.timestampMs
+                    }
+                    lastAcceptedTimestampMs = sanitizedTimestampMs
                     val normalized = poseFrameNormalizer.normalize(frame)
                     val angleFrame = angleEngine.compute(normalized)
                     val postStart = System.nanoTime()
                     alignment = alignmentScorer.score(normalized, profile.alignmentRules)
                     val phase = phaseDetector.update(angleFrame, alignment >= 0.65f)
                     postProcessMs = ((System.nanoTime() - postStart) / 1_000_000.0).roundToLong()
-                    phaseTimeline += frame.timestampMs to phase.name
+                    phaseTimeline += sanitizedTimestampMs to phase.name
                     timeline += OverlayTimelinePoint(
-                        timestampMs = frame.timestampMs,
+                        timestampMs = sanitizedTimestampMs,
                         // Overlay rendering must stay in canonical source-frame normalized space.
                         // The normalized pose frame is only for movement metrics/phase scoring.
                         landmarks = frame.joints.map { it.name to (it.x to it.y) },
@@ -254,6 +263,7 @@ class UploadedVideoAnalyzer(
                     "total_frames_processed" to processedFrames.toLong(),
                     "frames_dropped" to dropped.toLong(),
                     "edge_frames_skipped" to edgeFramesSkipped.toLong(),
+                    "timestamp_corrections" to timestampCorrections.toLong(),
                     "candidate_phase_count" to phaseTimeline.map { it.second }.distinct().size.toLong(),
                     "calibration_profile_version" to (calibrationProfileVersion?.toLong() ?: -1L),
                 ) + (frameSource as? UploadSamplingTelemetryProvider)?.samplingTelemetry().orEmpty(),

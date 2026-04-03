@@ -97,6 +97,32 @@ class UploadVideoInputNormalizerTest {
         assertEquals(sourceUri, result.workingUri)
     }
 
+    @Test
+    fun missingAudioTrackIsTreatedAsOptional() = runTest {
+        val sourceUri = Uri.parse("content://video/no-audio")
+        val normalizer = normalizerFor(
+            UploadVideoFormatDetails(
+                containerMime = "video/mp4",
+                videoMime = "video/avc",
+                width = 1080,
+                height = 1920,
+                rotationDegrees = 0,
+                frameRate = 30,
+                bitDepth = 8,
+                colorTransfer = null,
+                hdrStaticInfoPresent = false,
+                videoTrackCount = 1,
+                audioTrackCount = 0,
+                metadataTrackCount = 0,
+            ),
+        )
+
+        val result = normalizer.normalize(sourceUri)
+
+        assertFalse(result.normalizationRequired)
+        assertTrue(result.normalizationSucceeded)
+    }
+
     private fun normalizerFor(source: UploadVideoFormatDetails): DefaultUploadVideoInputNormalizer {
         val inspector = object : UploadVideoFormatInspector {
             override fun inspect(sourceUri: Uri): UploadVideoFormatDetails = source

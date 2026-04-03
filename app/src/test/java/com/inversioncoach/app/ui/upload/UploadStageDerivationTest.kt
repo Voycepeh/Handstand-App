@@ -34,6 +34,19 @@ class UploadStageDerivationTest {
         assertEquals(UploadStage.COMPLETED_RAW_ONLY, stage)
     }
 
+    @Test
+    fun incompleteUploadedSessionHydratesToSafeIdleState() {
+        val stage = deriveUploadStage(
+            base.copy(
+                rawPersistStatus = RawPersistStatus.SUCCEEDED,
+                rawVideoUri = null,
+                bestPlayableUri = null,
+                annotatedExportStatus = AnnotatedExportStatus.NOT_STARTED,
+            ),
+        )
+        assertEquals(UploadStage.IDLE, stage)
+    }
+
     private val base = SessionRecord(
         id = 15L,
         title = "Uploaded Video Analysis",

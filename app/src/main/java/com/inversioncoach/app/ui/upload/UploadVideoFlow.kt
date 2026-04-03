@@ -107,6 +107,7 @@ private const val ANALYSIS_PROGRESS_UPDATE_FRAME_INTERVAL = 1
 private const val ANALYSIS_PROGRESS_UPDATE_MS = 100L
 private const val UPLOADED_ANALYSIS_SAMPLE_FPS = 6
 private const val ENABLE_ADAPTIVE_UPLOAD_SAMPLING = true
+private const val DEFAULT_UPLOAD_FRAME_RATE = 30
 
 enum class UploadStage(val label: String) {
     IDLE("Idle"),
@@ -226,6 +227,7 @@ class DefaultUploadVideoAnalysisRunner(
         val width: Int,
         val height: Int,
         val rotationDegrees: Int,
+        val frameRate: Int,
     )
 
     private data class AnalysisStagePresentation(
@@ -398,6 +400,7 @@ class DefaultUploadVideoAnalysisRunner(
                             "sourceDurationMs" to sourceDurationMs.toString(),
                             "sourceWidth" to metadata.width.toString(),
                             "sourceHeight" to metadata.height.toString(),
+                            "sourceFrameRate" to metadata.frameRate.toString(),
                             "sourceRotationDegrees" to metadata.rotationDegrees.toString(),
                             "sourceVideoNormalizationRequired" to normalization.normalizationRequired.toString(),
                             "sourceVideoNormalizationAttempted" to normalization.normalizationAttempted.toString(),
@@ -423,6 +426,7 @@ class DefaultUploadVideoAnalysisRunner(
                     "durationMs" to metadata.durationMs.toString(),
                     "width" to metadata.width.toString(),
                     "height" to metadata.height.toString(),
+                    "frameRate" to metadata.frameRate.toString(),
                     "rotationDegrees" to metadata.rotationDegrees.toString(),
                     "normalizationRequired" to normalization.normalizationRequired.toString(),
                     "normalizationAttempted" to normalization.normalizationAttempted.toString(),
@@ -436,6 +440,7 @@ class DefaultUploadVideoAnalysisRunner(
             )
             log(
                 "metadata durationMs=${metadata.durationMs} width=${metadata.width} height=${metadata.height} rotation=${metadata.rotationDegrees} " +
+                    "fps=${metadata.frameRate} " +
                     "normalizationRequired=${normalization.normalizationRequired} attempted=${normalization.normalizationAttempted} " +
                     "succeeded=${normalization.normalizationSucceeded} reasons=${normalization.reasons.sorted().joinToString(",")}",
             )
@@ -677,7 +682,7 @@ class DefaultUploadVideoAnalysisRunner(
                     message = "No overlay samples detected in uploaded video",
                     errorCode = AnnotatedExportFailureReason.OVERLAY_CAPTURE_EMPTY.name,
                 )
-                error("No body landmarks detected. Try another video with full-body side view.")
+                error("ZERO_POSE_OUTPUT: No body landmarks detected. Try another video with full-body side view.")
             }
             log("analysis_complete overlayFrames=${analysis.overlayTimeline.size} dropped=${analysis.droppedFrames} elapsedMs=$analysisDurationMs")
             SessionDiagnostics.record(
@@ -1133,6 +1138,9 @@ class DefaultUploadVideoAnalysisRunner(
             repository.updateRawPersistStatus(sessionId, if (persistedRawUri.isNullOrBlank()) RawPersistStatus.FAILED else RawPersistStatus.SUCCEEDED)
             repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
             val mappedFailure = when {
+                error.message?.contains("ZERO_POSE_OUTPUT", ignoreCase = true) == true -> "ZERO_POSE_OUTPUT"
+                error.message?.contains("zero_decoded_frames", ignoreCase = true) == true -> "ZERO_DECODED_FRAMES"
+                error.message?.contains("missing_duration", ignoreCase = true) == true -> "SOURCE_METADATA_INVALID"
                 error.message?.contains("No enum constant", ignoreCase = true) == true -> "INPUT_SCHEMA_MISMATCH"
                 error.message?.contains("LEFT_EYE_INNER", ignoreCase = true) == true -> "UNSUPPORTED_LANDMARK_ID"
                 else -> "UPLOAD_OVERLAY_GENERATION_FAILED"
@@ -1177,15 +1185,33 @@ class DefaultUploadVideoAnalysisRunner(
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(context, uri)
-            UploadSourceMetadata(
-                durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L,
-                width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0,
-                height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0,
-                rotationDegrees = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0,
+            sanitizeUploadSourceMetadata(
+                UploadSourceMetadata(
+                    durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L,
+                    width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0,
+                    height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0,
+                    rotationDegrees = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0,
+                    frameRate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toFloatOrNull()?.toInt() ?: 0,
+                ),
             )
         } finally {
             runCatching { retriever.release() }
         }
+    }
+
+    private fun sanitizeUploadSourceMetadata(raw: UploadSourceMetadata): UploadSourceMetadata {
+        val safeDurationMs = raw.durationMs.coerceAtLeast(1L)
+        val safeWidth = raw.width.coerceAtLeast(1)
+        val safeHeight = raw.height.coerceAtLeast(1)
+        val safeRotation = ((raw.rotationDegrees % 360) + 360) % 360
+        val safeFps = sanitizeUploadFrameRate(raw.frameRate)
+        return UploadSourceMetadata(
+            durationMs = safeDurationMs,
+            width = safeWidth,
+            height = safeHeight,
+            rotationDegrees = safeRotation,
+            frameRate = safeFps,
+        )
     }
 
     private fun mergeMetricsJson(base: String, updates: Map<String, String>): String {
@@ -1710,6 +1736,8 @@ internal fun estimateTimelineSampleIntervalMs(
     return (deltas.sum() / deltas.size).coerceAtLeast(1L)
 }
 
+internal fun sanitizeUploadFrameRate(rawFps: Int): Int = rawFps.takeIf { it in 1..120 } ?: DEFAULT_UPLOAD_FRAME_RATE
+
 internal fun deriveUploadStage(session: SessionRecord): UploadStage = when {
     session.uploadJobStatus == UploadJobStatus.STALLED -> UploadStage.FAILED
     session.uploadJobStatus == UploadJobStatus.CANCELLED -> UploadStage.CANCELLED
@@ -1747,6 +1775,7 @@ private fun UploadTrackingMode.displayLabel(): String = when (this) {
 }
 
 internal fun shouldPersistReadPermission(uri: Uri): Boolean = uri.scheme == "content"
+internal fun isSupportedUploadUri(uri: Uri): Boolean = uri.scheme in setOf("content", "file")
 
 private fun persistReadPermissionIfSupported(context: Context, uri: Uri) {
     if (!shouldPersistReadPermission(uri)) return
@@ -1799,6 +1828,11 @@ fun UploadVideoScreen(
             Log.w(TAG, "picker_failure reason=no_selection")
             return@rememberLauncherForActivityResult
         }
+        if (!isSupportedUploadUri(uri)) {
+            Log.w(TAG, "picker_failure reason=unsupported_scheme uri=$uri")
+            viewModel.onInvalidSelection("The selected URI is not supported.")
+            return@rememberLauncherForActivityResult
+        }
         val type = context.contentResolver.getType(uri).orEmpty()
         if (!type.startsWith("video/")) {
             Log.w(TAG, "picker_failure reason=invalid_mime uri=$uri mime=$type")
@@ -1811,6 +1845,7 @@ fun UploadVideoScreen(
 
     val inFlightStages = setOf(
         UploadStage.IMPORTING_RAW_VIDEO,
+        UploadStage.NORMALIZING_INPUT,
         UploadStage.PREPARING_ANALYSIS,
         UploadStage.ANALYZING_VIDEO,
         UploadStage.RENDERING_OVERLAY,

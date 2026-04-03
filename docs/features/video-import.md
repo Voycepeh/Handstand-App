@@ -24,6 +24,8 @@ Video Import supports offline review and reference-training preparation from upl
   - Safety fallback: if adaptive signals are unavailable, the pipeline falls back to legacy fixed cadence.
 - Output persists to session/replay/history surfaces.
 - Edge-frame bootstrap tolerates brief start/end occlusion; low-confidence boundary frames are skipped so short occlusions do not invalidate an otherwise usable upload.
+- Picker intake is `content://`-safe: read permission is persisted when available and source media is copied into app-owned storage before metadata/decode/analyze.
+- Failures in intake/decode/analyze/export are contained into terminal failed states with explicit diagnostics/failure reasons so hydration/history/results remain safe for incomplete uploads.
 - Reference-template creation is optional, drill-linked, and comparison-oriented.
 
 ## Integration points

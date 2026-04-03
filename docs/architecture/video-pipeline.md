@@ -26,6 +26,7 @@ The media pipeline is shared by live-session finalization and upload/reference a
 - Raw media remains the safety path when annotated output is missing/invalid.
 - Upload sessions keep raw archival media even when ingest-normalized working media is used for analysis/export.
 - Session truth must not depend on annotated export success.
+- Upload stage failures are terminalized with explicit failure codes so later hydration (home/history/results) can render safely without assuming complete artifacts.
 
 ## Why this matters
 

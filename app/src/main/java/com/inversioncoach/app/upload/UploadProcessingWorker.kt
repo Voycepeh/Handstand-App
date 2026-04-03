@@ -148,6 +148,7 @@ class UploadProcessingWorker(
 
 private fun UploadStage.toJobStage(): UploadJobStage = when (this) {
     UploadStage.IMPORTING_RAW_VIDEO -> UploadJobStage.IMPORTING_RAW_VIDEO
+    UploadStage.NORMALIZING_INPUT -> UploadJobStage.VALIDATING_INPUT
     UploadStage.PREPARING_ANALYSIS,
     UploadStage.ANALYZING_VIDEO,
     -> UploadJobStage.ANALYZING_VIDEO
