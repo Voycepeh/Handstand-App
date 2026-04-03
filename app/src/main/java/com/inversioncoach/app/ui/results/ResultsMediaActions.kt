@@ -112,7 +112,15 @@ class ResultsMediaActions(
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             clipData = ClipData.newUri(context.contentResolver, "session-video", preferredShareUri)
         }
-        context.startActivity(Intent.createChooser(intent, "Share session video"))
+        runCatching {
+            context.startActivity(Intent.createChooser(intent, "Share session video"))
+        }.onFailure { error ->
+            if (error is ActivityNotFoundException) {
+                Toast.makeText(context, "No app available to share this video.", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Unable to share video.", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun handleSaveResult(result: SaveVideoResult, isAnnotated: Boolean) {
