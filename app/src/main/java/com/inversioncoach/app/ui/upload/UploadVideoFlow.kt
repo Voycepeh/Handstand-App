@@ -54,7 +54,6 @@ import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SessionSource
 import com.inversioncoach.app.model.UploadJobPipelineType
 import com.inversioncoach.app.model.UploadJobStatus
-import com.inversioncoach.app.calibration.RuntimeBodyProfileResolver
 import com.inversioncoach.app.movementprofile.ExistingDrillToProfileAdapter
 import com.inversioncoach.app.movementprofile.AnalysisProgressObserver
 import com.inversioncoach.app.movementprofile.MlKitVideoPoseFrameSource
@@ -201,7 +200,6 @@ interface UploadVideoAnalysisRunner {
 class DefaultUploadVideoAnalysisRunner(
     private val context: Context,
     private val repository: SessionRepository,
-    private val runtimeBodyProfileResolver: RuntimeBodyProfileResolver? = null,
     private val frameSourceFactory: (Context, Int) -> VideoPoseFrameSource = { appContext, fps ->
         MlKitVideoPoseFrameSource(
             context = appContext,
@@ -245,7 +243,6 @@ class DefaultUploadVideoAnalysisRunner(
         val preset = repository.observeSettings().first().effectiveExportQuality().toExportPreset()
         val startedAt = System.currentTimeMillis()
         val drillDefinition = selectedDrillId?.let { repository.getDrill(it) }
-        val activeProfileContext = runtimeBodyProfileResolver?.resolve()
         validateSelectedDrillForUpload(selectedDrillId, drillDefinition)?.let { error(it) }
         val drillType = DrillType.FREESTYLE
         val resolvedCalibrationProfile: com.inversioncoach.app.calibration.DrillMovementProfile? = null
@@ -280,10 +277,7 @@ class DefaultUploadVideoAnalysisRunner(
                 rawVideoUri = null,
                 calibrationProfileVersion = null,
                 calibrationUpdatedAtMs = null,
-                userProfileId = activeProfileContext?.userProfileId,
-                bodyProfileId = activeProfileContext?.bodyProfileId,
-                bodyProfileVersion = activeProfileContext?.bodyProfileVersion,
-                usedDefaultBodyModel = activeProfileContext?.usedDefaultBodyModel ?: true,
+                usedDefaultBodyModel = true,
                 drillId = selectedDrillId,
                 referenceTemplateId = selectedReferenceTemplateId,
                 notesUri = null,
@@ -1357,7 +1351,6 @@ class UploadVideoViewModel(
         customRunner ?: DefaultUploadVideoAnalysisRunner(
             context = requireNotNull(appContext) { "Application context is required when no custom upload runner is provided." }.applicationContext,
             repository = requireNotNull(repository) { "SessionRepository is required when no custom upload runner is provided." },
-            runtimeBodyProfileResolver = ServiceLocator.runtimeBodyProfileResolver(requireNotNull(appContext).applicationContext),
         )
     }
 

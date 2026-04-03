@@ -20,6 +20,5 @@ Live Coaching is the drill-centric real-time practice workflow.
 
 ## Cross-feature integration
 
-- Uses active drill-profile context where available.
 - Produces drill-linked outcomes for Results / Session History.
 - Supports downstream reference/comparison usage.

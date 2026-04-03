@@ -5,7 +5,6 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.inversioncoach.app.calibration.storage.CalibrationDao
 import com.inversioncoach.app.calibration.storage.CalibrationEntity
-import com.inversioncoach.app.model.BodyProfileRecord
 import com.inversioncoach.app.model.CalibrationConfigRecord
 import com.inversioncoach.app.model.DrillDefinitionRecord
 import com.inversioncoach.app.model.FrameMetricRecord
@@ -31,7 +30,6 @@ import com.inversioncoach.app.model.UserSettings
         UserProfileEntity::class,
         ProfileCalibrationEntity::class,
         UserProfileRecord::class,
-        BodyProfileRecord::class,
         ReferenceTemplateRecord::class,
         SessionComparisonRecord::class,
         DrillDefinitionRecord::class,
@@ -51,7 +49,6 @@ abstract class InversionCoachDatabase : RoomDatabase() {
     abstract fun calibrationDao(): CalibrationDao
     abstract fun profileDao(): ProfileDao
     abstract fun userProfileDao(): UserProfileDao
-    abstract fun bodyProfileDao(): BodyProfileDao
     abstract fun referenceTemplateDao(): ReferenceTemplateDao
     abstract fun sessionComparisonDao(): SessionComparisonDao
     abstract fun drillDefinitionDao(): DrillDefinitionDao

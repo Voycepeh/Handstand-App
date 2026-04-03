@@ -433,16 +433,6 @@ data class UserProfileRecord(
     val isArchived: Boolean = false,
 )
 
-@Entity(tableName = "body_profile_records")
-data class BodyProfileRecord(
-    @PrimaryKey val id: String,
-    val userProfileId: String,
-    val version: Int,
-    val payloadJson: String,
-    val createdAtMs: Long,
-    val updatedAtMs: Long,
-)
-
 @Entity(tableName = "frame_metric_records")
 data class FrameMetricRecord(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

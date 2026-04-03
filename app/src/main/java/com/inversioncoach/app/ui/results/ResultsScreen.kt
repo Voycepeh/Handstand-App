@@ -332,12 +332,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     }
                     Text("Started: ${formatSessionDateTime(session?.startedAtMs ?: 0L)}")
                     Text("Duration: ${formatSessionDuration(displayDurationMs)}")
-                    session?.let {
-                        Text(
-                            "Profile: ${it.userProfileId ?: "unknown"} • Body v${it.bodyProfileVersion ?: 0}" +
-                                if (it.usedDefaultBodyModel) " (default model)" else "",
-                        )
-                    }
+                    session?.let { Text("Body model: ${if (it.usedDefaultBodyModel) "default" else "custom"}") }
                     session?.let { Text(formatPrimaryPerformance(it)) }
                     session?.let {
                         val metrics = parseSessionMetrics(it.metricsJson)

@@ -42,7 +42,6 @@ class UploadProcessingWorker(
         val runner = DefaultUploadVideoAnalysisRunner(
             context = applicationContext,
             repository = sessionRepo,
-            runtimeBodyProfileResolver = ServiceLocator.runtimeBodyProfileResolver(applicationContext),
         )
         val orchestrator = UploadAnalysisOrchestrator(runner)
         val tracking = runCatching { UploadTrackingMode.valueOf(job.trackingMode) }.getOrDefault(UploadTrackingMode.HOLD_BASED)
