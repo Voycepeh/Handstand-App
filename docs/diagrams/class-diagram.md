@@ -5,6 +5,9 @@ classDiagram
     class LiveCoachingViewModel
     class UploadVideoViewModel
     class DrillStudioViewModel
+    class OverlayFrameRenderer
+    class OverlaySkeletonPreview
+    class SeededSkeletonPreview
     class UploadedVideoAnalyzer
     class UploadedVideoAnalysisCoordinator
     class AnnotatedExportPipeline
@@ -23,6 +26,8 @@ classDiagram
     UploadVideoViewModel --> SessionRepository
 
     DrillStudioViewModel --> SessionRepository
+    OverlaySkeletonPreview --> OverlayFrameRenderer
+    SeededSkeletonPreview --> OverlaySkeletonPreview
     UploadedVideoAnalysisCoordinator --> SessionRepository
     SessionRepository --> SessionBlobStorage
 ```
