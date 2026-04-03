@@ -1,6 +1,6 @@
 # System Overview
 
-CaliVision is a drill-centric coaching system with connected live, upload, replay/history, and calibration workflows.
+CaliVision is a drill-centric coaching system with connected live, upload, replay/history, and profile workflows.
 
 ## Workflow surfaces
 
@@ -10,15 +10,15 @@ CaliVision is a drill-centric coaching system with connected live, upload, repla
 - **Live Session**: countdown-gated real-time coaching.
 - **Upload / Reference Training**: imported clip analysis and optional drill-linked reference creation.
 - **Results / Session History**: persisted outcomes and replay access.
-- **Calibration / Profiles**: active body profile context for analysis.
+- **Profiles**: active training preference context for analysis.
 
 ## Runtime subsystems
 
 - **Navigation/UI**: `ui/navigation`, feature screens in `ui/**`.
 - **Workflow orchestrators**: `LiveCoachingViewModel`, `UploadVideoViewModel`, drill studio view models.
-- **Domain**: `drills`, `movementprofile`, `calibration`.
+- **Domain**: `drills`, `movementprofile`, `profile`.
 - **Pose extraction (ML)**: on-device pose detection + landmark extraction in `pose`.
-- **Analysis (authored logic)**: `motion`, `biomechanics`, calibration-aware scoring, coaching cues.
+- **Analysis (authored logic)**: `motion`, `biomechanics`, profile-agnostic scoring, coaching cues.
 - **Media**: recording, overlay timeline, annotated export, replay resolver.
 - **Persistence**: Room + repository + blob storage.
 
@@ -35,5 +35,5 @@ CaliVision is a drill-centric coaching system with connected live, upload, repla
 2. Countdown/start gating prevents premature active-session state.
 3. Session truth persists even if annotated export fails.
 4. Replay prefers verified annotated output, then verified raw fallback.
-5. Calibration/profile context is consistently applied to live and upload analysis.
+5. Profile/profile context is consistently applied to live and upload analysis.
 6. Workflow/architecture naming changes require docs and diagrams updates in the same PR.

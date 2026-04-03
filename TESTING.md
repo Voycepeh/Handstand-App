@@ -25,7 +25,7 @@ gradle :app:assembleDebug
    - Live Session start/countdown/stop/results flow
    - Upload / Reference Training analysis and results handoff
    - Results / Session History replay selection
-   - Calibration / Profiles activation and persistence
+   - Profiles activation and persistence
 
 ## Manual regression checklist
 
@@ -33,7 +33,7 @@ gradle :app:assembleDebug
 - Drill context is preserved through live/upload/history workflows.
 - Replay fallback remains truthful (annotated preferred, raw fallback).
 - Upload/reference drill linkage still works (no silent template/drill association regressions).
-- Calibration/profile context still resolves in both live and upload analysis.
+- Profile/profile context still resolves in both live and upload analysis.
 
 ## Documentation requirement
 

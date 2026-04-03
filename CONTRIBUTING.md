@@ -29,7 +29,7 @@ Use current product terminology consistently:
 - Live Session
 - Upload / Reference Training
 - Results / Session History
-- Calibration / Profiles
+- Profiles
 
 ## Documentation and diagram update rule (required)
 
@@ -49,4 +49,4 @@ At minimum review:
 - Preserve drill-centric flow integrity.
 - Prefer deterministic, non-overlapping actions.
 - Keep drill edit/save behavior predictable and reload-safe.
-- Do not silently break drill metadata/catalog schema or replay/export/upload/calibration workflows.
+- Do not silently break drill metadata/catalog schema or replay/export/upload/profile workflows.

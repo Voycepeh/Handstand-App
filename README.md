@@ -1,6 +1,6 @@
 # CaliVision
 
-CaliVision is a drill-centric Android training app for calisthenics practice. It connects live coaching, upload analysis, drill authoring, replay review, and calibration/profile context in one workflow.
+CaliVision is a drill-centric Android training app for calisthenics practice. It connects live coaching, upload analysis, drill authoring, replay review, and drill-profile context in one workflow.
 
 ## Why I built CaliVision
 
@@ -62,7 +62,7 @@ CaliVision keeps users in drill context from start to review:
 - **Live Session**: countdown-gated real-time coaching with overlays.
 - **Upload / Reference Training**: analyze imported clips and optionally produce drill-linked references.
 - **Results / Session History**: inspect outcomes and replay assets.
-- **Calibration / Profiles**: manage active body profile inputs used by analysis.
+- **Profiles**: manage training preferences used by analysis.
 
 ## Core workflows
 
@@ -77,7 +77,7 @@ flowchart TD
     MANAGE[Manage Drills]
     STUDIO[Drill Studio]
     UPLOAD[Upload / Reference Training]
-    CAL[Calibration / Profiles]
+    CAL[Profiles]
 
     HOME --> START --> LIVE --> FINALIZE --> RESULTS
     RESULTS --> HISTORY
@@ -115,7 +115,7 @@ Detailed diagrams live in [`docs/diagrams/`](docs/diagrams).
 - AndroidX Navigation + ViewModel state flows
 - Room database + blob/media storage
 - ML Kit on-device pose detection (landmark extraction)
-- Custom on-device motion analysis, biomechanics, calibration, and drill scoring modules
+- Custom on-device motion analysis, biomechanics, profile, and drill scoring modules
 - WorkManager-backed upload queue processing
 
 ## ML + movement analysis (current state)
@@ -129,7 +129,7 @@ Those landmarks then flow through CaliVision’s own analysis stack:
 
 - motion analysis + phase detection
 - biomechanics metrics
-- calibration-aware interpretation
+- profile-agnostic interpretation
 - timeline overlays and structured feedback
 - drill scoring + reference comparison outputs
 
@@ -141,7 +141,7 @@ The reference-template and movement-profile workflow is being structured so scor
 
 1. UI routes in `ui/navigation/Nav.kt` coordinate screen transitions.
 2. Workflow view models (`ui/live`, `ui/upload`, `ui/drillstudio`) orchestrate user flows.
-3. Domain modules (`drills`, `movementprofile`, `calibration`) provide drill and profile behavior.
+3. Domain modules (`drills`, `movementprofile`) provide drill behavior and reference-profile analysis behavior.
 4. Analysis modules (`pose`, `motion`, `biomechanics`) combine ML landmark extraction with CaliVision-authored scoring/classification logic.
 5. Recording/export modules (`recording`, `media`) generate replay outputs with fallback.
 6. `storage/repository/SessionRepository` persists sessions, drill metadata, media status, and references.
@@ -175,7 +175,7 @@ gradle :app:assembleDebug
 
 ## Documentation
 
-If you change workflow names, routes, navigation behavior, architecture boundaries, replay/export/media behavior, upload/reference behavior, or calibration/profile behavior, **update docs and diagrams in the same PR**.
+If you change workflow names, routes, navigation behavior, architecture boundaries, replay/export/media behavior, upload/reference behavior, or profile behavior, **update docs and diagrams in the same PR**.
 
 Start here:
 

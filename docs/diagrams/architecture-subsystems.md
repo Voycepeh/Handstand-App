@@ -8,7 +8,7 @@ flowchart LR
     STUDIO[DrillStudioViewModel]
     DRILLS[drills/* domain]
     MOVE[movementprofile/* domain]
-    CAL[calibration/* domain]
+    CAL[profile/* domain]
     POSEML[On-device Pose ML + landmarks]
     ANALYSIS[motion + biomechanics + drill scoring]
     RECORD[recording/* export pipeline]

@@ -15,7 +15,6 @@ flowchart TD
     WORKSPACE[Drill Workspace]
 
     UPLOAD[Upload / Reference Training]
-    CAL[Calibration / Profiles]
     SETTINGS[Settings]
 
     HOME --> WELCOME
@@ -36,6 +35,5 @@ flowchart TD
     HOME --> HISTORY
     HISTORY --> RESULTS
 
-    HOME --> CAL --> HOME
     HOME --> SETTINGS --> HOME
 ```

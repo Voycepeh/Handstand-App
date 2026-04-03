@@ -10,13 +10,13 @@ This file maps current package boundaries to responsibilities.
 - `ui/live`: live coaching screen + view model.
 - `ui/upload`: upload/reference analysis flow.
 - `ui/results`, `ui/history`, `ui/progress`: result and session history experiences.
-- `ui/calibration`, `ui/settings`: profile/calibration/settings surfaces.
+- `ui/profile`, `ui/settings`: profile/profile/settings surfaces.
 
 ## Domain and analysis
 
 - `drills/**`: drill definitions/catalog/studio models.
 - `movementprofile/**`: upload analysis, template candidates, movement-profile engines.
-- `calibration/**`: active profile resolution and calibration data.
+- `profile/**`: active profile resolution and profile data.
 - `pose/**`, `motion/**`, `biomechanics/**`: frame extraction, movement analysis, scoring.
 
 ## Media and replay

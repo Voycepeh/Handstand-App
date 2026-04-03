@@ -45,4 +45,4 @@ When changing workflow behavior:
 
 - Update feature docs and architecture docs in the same PR.
 - Update Mermaid diagrams for affected user journeys.
-- Use current terminology consistently (Drill Hub, Manage Drills, Drill Studio, Upload / Reference Training, Results / Session History, Calibration / Profiles).
+- Use current terminology consistently (Drill Hub, Manage Drills, Drill Studio, Upload / Reference Training, Results / Session History).
