@@ -129,6 +129,28 @@ class UploadedVideoAnalysisTest {
     }
 
     @Test
+    fun progressObserverUsesDecodedFrameCountWhenDecodeEstimateMissing() {
+        val profile = ExistingDrillToProfileAdapter().fromDrill(DrillType.FREESTYLE)
+        val source = object : VideoPoseFrameSource {
+            override fun decode(videoUri: Uri): Sequence<PoseFrame> = sequence {
+                yield(frame(0, 0.9f))
+                yield(frame(100, 0.8f))
+                yield(frame(200, 0.7f))
+            }
+        }
+        val events = mutableListOf<AnalysisProgressEvent>()
+
+        UploadedVideoAnalyzer(source).analyze(
+            videoUri = Uri.parse("file:///tmp/decode-count-fallback.mp4"),
+            profile = profile,
+            progressObserver = AnalysisProgressObserver { events += it },
+        )
+
+        val analysisStarted = events.first { it.stage == "analysis_started" }
+        assertEquals(3, analysisStarted.estimatedTotalFrames)
+    }
+
+    @Test
     fun analyzerMergesSamplingTelemetryFromFrameSource() {
         val profile = ExistingDrillToProfileAdapter().fromDrill(DrillType.FREESTYLE)
         val source = object : VideoPoseFrameSource, UploadSamplingTelemetryProvider {

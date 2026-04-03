@@ -80,6 +80,7 @@ import com.inversioncoach.app.recording.toTimelineFrame
 import com.inversioncoach.app.model.toExportPreset
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.upload.EnqueueResult
+import com.inversioncoach.app.upload.UploadAnalysisOrchestrator
 import com.inversioncoach.app.upload.UploadQueueCoordinator
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
@@ -808,15 +809,17 @@ class DefaultUploadVideoAnalysisRunner(
                 )
             }
 
+            val overlayMetricsByTimestamp = analysis.overlayTimeline.associateBy { it.timestampMs }
             overlayFrames.forEach { frame ->
+                val matchingOverlay = overlayMetricsByTimestamp[frame.timestampMs]
                 repository.saveFrameMetric(
                     FrameMetricRecord(
                         sessionId = sessionId,
                         timestampMs = frame.timestampMs,
                         confidence = frame.confidence,
-                        overallScore = (analysis.overlayTimeline.firstOrNull { it.timestampMs == frame.timestampMs }?.metrics?.get("alignment_score")?.times(100f)
+                        overallScore = (matchingOverlay?.metrics?.get("alignment_score")?.times(100f)
                             ?: 0f).toInt().coerceIn(0, 100),
-                        limitingFactor = analysis.overlayTimeline.firstOrNull { it.timestampMs == frame.timestampMs }?.phaseId ?: "tracking",
+                        limitingFactor = matchingOverlay?.phaseId ?: "tracking",
                         metricScoresJson = "{}",
                         anglesJson = "{}",
                         activeIssue = null,
@@ -824,9 +827,13 @@ class DefaultUploadVideoAnalysisRunner(
                 )
             }
 
+            val overlaySampleIntervalMs = estimateTimelineSampleIntervalMs(
+                timestampsMs = analysis.overlayTimeline.map { it.timestampMs },
+                fallbackFps = UPLOADED_ANALYSIS_SAMPLE_FPS,
+            )
             val overlayTimeline = OverlayTimeline(
                 startedAtMs = 0L,
-                sampleIntervalMs = 80L,
+                sampleIntervalMs = overlaySampleIntervalMs,
                 frames = overlayFrames.map { it.toTimelineFrame(sessionId = sessionId, sessionStartedAtMs = 0L) },
             )
             val overlayTimelineUri = repository.saveOverlayTimeline(sessionId, OverlayTimelineJson.encode(overlayTimeline))
@@ -1284,7 +1291,7 @@ internal fun validateSelectedDrillForUpload(
 }
 
 class UploadVideoViewModel(
-    private val appContext: Context,
+    private val appContext: Context?,
     private val repository: SessionRepository?,
     private val selectedDrillId: String?,
     private val selectedReferenceTemplateId: String?,
@@ -1292,6 +1299,7 @@ class UploadVideoViewModel(
     private val createDrillFromReferenceUpload: Boolean,
     private val pendingDrillName: String? = null,
     private val queueCoordinator: UploadQueueCoordinator? = null,
+    private val customRunner: UploadVideoAnalysisRunner? = null,
     private val resolveDrillTrackingMode: suspend (String) -> UploadTrackingMode? = { drillId ->
         repository?.getDrill(drillId)?.movementMode?.toUploadTrackingMode()
     },
@@ -1308,11 +1316,28 @@ class UploadVideoViewModel(
     val state: StateFlow<UploadVideoUiState> = _state.asStateFlow()
     private var runningJob: Job? = null
     private var observedSessionId: Long? = null
+    private val runner: UploadVideoAnalysisRunner by lazy {
+        customRunner ?: DefaultUploadVideoAnalysisRunner(
+            context = requireNotNull(appContext) { "Application context is required when no custom upload runner is provided." }.applicationContext,
+            repository = requireNotNull(repository) { "SessionRepository is required when no custom upload runner is provided." },
+            runtimeBodyProfileResolver = ServiceLocator.runtimeBodyProfileResolver(requireNotNull(appContext).applicationContext),
+        )
+    }
     companion object {
         private val uploadScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     }
 
-    constructor(runner: UploadVideoAnalysisRunner) : this(runner, null, null, null, false, false, null, null)
+    constructor(runner: UploadVideoAnalysisRunner) : this(
+        appContext = null,
+        repository = null,
+        selectedDrillId = null,
+        selectedReferenceTemplateId = null,
+        isReferenceUpload = false,
+        createDrillFromReferenceUpload = false,
+        pendingDrillName = null,
+        queueCoordinator = null,
+        customRunner = runner,
+    )
 
     init {
         if (selectedDrillId != null) {
@@ -1342,7 +1367,7 @@ class UploadVideoViewModel(
         val repo = repository
         if (repo != null) {
             viewModelScope.launch {
-                if (activeSessionId == null) {
+                if (observedSessionId == null) {
                     val restored = repo.observeSessions().first().firstOrNull { session ->
                         session.sessionSource == SessionSource.UPLOADED_VIDEO &&
                             session.annotatedExportStatus in setOf(
@@ -1351,7 +1376,7 @@ class UploadVideoViewModel(
                                 AnnotatedExportStatus.PROCESSING_SLOW,
                             )
                     }
-                    if (restored != null) activeSessionId = restored.id
+                    if (restored != null) observedSessionId = restored.id
                 }
                 repo.observeSessions().collectLatest { sessions ->
                     val sessionId = observedSessionId ?: return@collectLatest
@@ -1487,7 +1512,7 @@ class UploadVideoViewModel(
             }
             return
         }
-        activeJob = uploadScope.launch {
+        runningJob = uploadScope.launch {
             _state.update {
                 it.copy(
                     selectedVideoUri = uri,
@@ -1509,7 +1534,7 @@ class UploadVideoViewModel(
             }
             runCatching {
                 val ownerToken = UUID.randomUUID().toString()
-                runner.run(
+                UploadAnalysisOrchestrator(runner).execute(
                     uri = uri,
                     ownerToken = ownerToken,
                     trackingMode = trackingMode,
@@ -1661,6 +1686,19 @@ private fun String.toUploadTrackingMode(): UploadTrackingMode? = when (this) {
     DrillMovementMode.HOLD -> UploadTrackingMode.HOLD_BASED
     DrillMovementMode.REP -> UploadTrackingMode.REP_BASED
     else -> null
+}
+
+internal fun estimateTimelineSampleIntervalMs(
+    timestampsMs: List<Long>,
+    fallbackFps: Int,
+): Long {
+    if (timestampsMs.size < 2) {
+        return (1000L / fallbackFps.coerceAtLeast(1)).coerceAtLeast(1L)
+    }
+    val deltas = timestampsMs
+        .zipWithNext()
+        .map { (prev, next) -> (next - prev).coerceAtLeast(1L) }
+    return (deltas.sum() / deltas.size).coerceAtLeast(1L)
 }
 
 internal fun deriveUploadStage(session: SessionRecord): UploadStage = when {
