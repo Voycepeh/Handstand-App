@@ -4,13 +4,10 @@ import com.inversioncoach.app.model.DrillType
 
 class DefaultCalibrationProfileProvider(
     private val repository: DrillMovementProfileRepository,
-    private val resolveRuntimeBodyProfile: suspend () -> RuntimeBodyProfileResolution,
 ) : CalibrationProfileProvider {
 
     override suspend fun resolve(drillType: DrillType): DrillMovementProfile {
-        val baseProfile = repository.get(drillType) ?: DefaultDrillMovementProfiles.forDrill(drillType)
-        val activeBodyProfile = resolveRuntimeBodyProfile().bodyProfile
-        return baseProfile.copy(userBodyProfile = activeBodyProfile)
+        return repository.get(drillType) ?: DefaultDrillMovementProfiles.forDrill(drillType)
     }
 
     override suspend fun save(profile: DrillMovementProfile) {

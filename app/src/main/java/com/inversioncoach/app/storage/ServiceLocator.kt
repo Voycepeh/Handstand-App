@@ -6,7 +6,6 @@ import com.inversioncoach.app.biomechanics.AlignmentMetricsEngine
 import com.inversioncoach.app.calibration.CalibrationProfileProvider
 import com.inversioncoach.app.calibration.DefaultCalibrationProfileProvider
 import com.inversioncoach.app.calibration.DrillMovementProfileRepository
-import com.inversioncoach.app.calibration.RuntimeBodyProfileResolver
 import com.inversioncoach.app.coaching.CueEngine
 import com.inversioncoach.app.calibration.storage.DrillMovementProfileJson
 import com.inversioncoach.app.calibration.storage.RoomDrillMovementProfileRepository
@@ -24,8 +23,6 @@ object ServiceLocator {
     private var calibrationProvider: CalibrationProfileProvider? = null
     @Volatile
     private var drillMovementProfileRepository: DrillMovementProfileRepository? = null
-    @Volatile
-    private var runtimeBodyProfileResolver: RuntimeBodyProfileResolver? = null
     @Volatile
     private var uploadProcessingQueueRepository: UploadProcessingQueueRepository? = null
 
@@ -50,7 +47,6 @@ object ServiceLocator {
                     db.sessionDao(),
                     db.userSettingsDao(),
                     db.frameMetricDao(),
-                    db.profileDao(),
                     db.referenceTemplateDao(),
                     db.sessionComparisonDao(),
                     db.drillDefinitionDao(),
@@ -71,7 +67,6 @@ object ServiceLocator {
         return calibrationProvider ?: synchronized(this) {
             calibrationProvider ?: DefaultCalibrationProfileProvider(
                 drillMovementProfileRepository(context),
-                runtimeBodyProfileResolver(context)::resolve,
             ).also { calibrationProvider = it }
         }
     }
@@ -92,11 +87,4 @@ object ServiceLocator {
         }
     }
 
-    fun runtimeBodyProfileResolver(context: Context): RuntimeBodyProfileResolver {
-        return runtimeBodyProfileResolver ?: synchronized(this) {
-            runtimeBodyProfileResolver ?: RuntimeBodyProfileResolver(
-                sessionRepository = repository(context),
-            ).also { runtimeBodyProfileResolver = it }
-        }
-    }
 }

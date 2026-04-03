@@ -54,7 +54,6 @@ import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.summary.SummaryGenerator
 import com.inversioncoach.app.calibration.CalibrationProfileProvider
 import com.inversioncoach.app.calibration.DrillMovementProfile
-import com.inversioncoach.app.calibration.RuntimeBodyProfileResolver
 import com.inversioncoach.app.calibration.UserBodyProfile
 import com.inversioncoach.app.calibration.rep.SessionRepTemplateUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -88,7 +87,6 @@ class LiveCoachingViewModel(
     private val cueEngine: CueEngine,
     private val repository: SessionRepository,
     private val calibrationProfileProvider: CalibrationProfileProvider,
-    private val runtimeBodyProfileResolver: RuntimeBodyProfileResolver? = null,
     private val options: LiveSessionOptions,
     private val summaryGenerator: SummaryGenerator = SummaryGenerator(com.inversioncoach.app.summary.RecommendationEngine()),
     private val smoother: PoseSmoothingEngine = PoseSmoothingEngine(),
@@ -184,13 +182,9 @@ class LiveCoachingViewModel(
     private var activeSettings: UserSettings = UserSettings()
     private var sessionHadAnyVideo = false
     private var activeMovementProfile: DrillMovementProfile? = null
-    private var activeUserProfileId: String? = null
-    private var activeBodyProfileId: String? = null
-    private var activeBodyProfileVersion: Int? = null
     private var activeUsesDefaultBodyModel: Boolean = true
     private var activeDrillId: String? = null
     private var activeReferenceTemplateId: String? = null
-    private var legacyBodyProfileFallback: UserBodyProfile? = null
     private var startupCancelled = false
     private val drillConfig = DrillConfigs.byTypeOrNull(drillType)
     private val readinessEngine = drillConfig?.let { SharedReadinessEngine(drillType, it, sessionOptions.drillCameraSide) }
@@ -932,9 +926,6 @@ class LiveCoachingViewModel(
                         overlayTimelineUri = overlayTimelineUri,
                         calibrationProfileVersion = calibrationProfileForSession?.profileVersion,
                         calibrationUpdatedAtMs = calibrationProfileForSession?.updatedAtMs,
-                        userProfileId = activeUserProfileId,
-                        bodyProfileId = activeBodyProfileId,
-                        bodyProfileVersion = activeBodyProfileVersion,
                         usedDefaultBodyModel = activeUsesDefaultBodyModel,
                         drillId = activeDrillId,
                         referenceTemplateId = activeReferenceTemplateId,
@@ -1021,18 +1012,8 @@ class LiveCoachingViewModel(
             activeMovementProfile = calibrationProfileProvider.resolve(drillType)
             activeDrillId = options.selectedDrillId ?: repository.resolveDrillIdForLegacyType(drillType)
             activeReferenceTemplateId = activeDrillId?.let { repository.getActiveTemplateForDrill(it)?.id }
-            runtimeBodyProfileResolver?.resolve()?.let { resolved ->
-                activeUserProfileId = resolved.userProfileId
-                activeBodyProfileId = resolved.bodyProfileId
-                activeBodyProfileVersion = resolved.bodyProfileVersion
-                activeUsesDefaultBodyModel = resolved.usedDefaultBodyModel
-                legacyBodyProfileFallback = resolved.bodyProfile
-                activeBodyProfile = resolved.bodyProfile
-            } ?: run {
-                activeUsesDefaultBodyModel = activeMovementProfile?.userBodyProfile == null
-                legacyBodyProfileFallback = activeMovementProfile?.userBodyProfile
-                activeBodyProfile = activeMovementProfile?.userBodyProfile
-            }
+            activeUsesDefaultBodyModel = activeMovementProfile?.userBodyProfile == null
+            activeBodyProfile = activeMovementProfile?.userBodyProfile
             motionPipeline.setRepTemplate(activeMovementProfile?.repTemplate)
             val now = System.currentTimeMillis()
             val startedAtMs = resolveSessionStartedAtMs(sessionActivatedAtMs, now)
@@ -1071,9 +1052,6 @@ class LiveCoachingViewModel(
                     overlayTimelineUri = null,
                     calibrationProfileVersion = activeMovementProfile?.profileVersion,
                     calibrationUpdatedAtMs = activeMovementProfile?.updatedAtMs,
-                    userProfileId = activeUserProfileId,
-                    bodyProfileId = activeBodyProfileId,
-                    bodyProfileVersion = activeBodyProfileVersion,
                     usedDefaultBodyModel = activeUsesDefaultBodyModel,
                     drillId = activeDrillId,
                     referenceTemplateId = activeReferenceTemplateId,

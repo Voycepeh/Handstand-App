@@ -14,7 +14,6 @@ import com.inversioncoach.app.model.RetainedAssetType
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.IssueEvent
-import com.inversioncoach.app.model.ProfileCalibrationEntity
 import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SessionSource
@@ -23,7 +22,6 @@ import com.inversioncoach.app.model.UploadJobPipelineType
 import com.inversioncoach.app.model.UploadJobStatus
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.model.normalized
-import com.inversioncoach.app.calibration.UserBodyProfile
 import com.inversioncoach.app.drills.DrillCameraView
 import com.inversioncoach.app.drills.DrillMovementMode
 import com.inversioncoach.app.drills.DrillSourceType
@@ -41,7 +39,6 @@ import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.storage.SessionBlobStorage
 import com.inversioncoach.app.media.SessionMediaOwnership
 import com.inversioncoach.app.storage.db.FrameMetricDao
-import com.inversioncoach.app.storage.db.ProfileDao
 import com.inversioncoach.app.storage.db.SessionDao
 import com.inversioncoach.app.storage.db.SessionComparisonDao
 import com.inversioncoach.app.storage.db.UserSettingsDao
@@ -53,16 +50,6 @@ import java.util.UUID
 private const val STALE_UPLOAD_HEARTBEAT_MS = 45 * 1000L
 private const val UPLOAD_REPO_TAG = "UploadJobRepo"
 private const val EXPORT_STATE_TAG = "ExportStateGuard"
-private const val DEFAULT_PROFILE_NAME = "Profile 1"
-
-data class UserProfileStatus(
-    val id: Long,
-    val name: String,
-    val isActive: Boolean,
-    val isCalibrated: Boolean,
-)
-
-
 internal fun projectSelectableDrills(drills: List<DrillDefinitionRecord>): List<SelectableDrill> =
     drills
         .associateBy { it.id }
@@ -74,7 +61,6 @@ class SessionRepository(
     private val sessionDao: SessionDao,
     private val userSettingsDao: UserSettingsDao,
     private val frameMetricDao: FrameMetricDao,
-    private val profileDao: ProfileDao,
     private val referenceTemplateDao: com.inversioncoach.app.storage.db.ReferenceTemplateDao,
     private val sessionComparisonDao: SessionComparisonDao,
     private val drillDefinitionDao: com.inversioncoach.app.storage.db.DrillDefinitionDao,
@@ -764,162 +750,6 @@ class SessionRepository(
         }
         userSettingsDao.upsert(settings.copy(drillCameraSideSelections = encodeDrillSides(updated)))
     }
-
-    /**
-     * Legacy compatibility only: `userBodyProfileJson` predates profile-based calibration storage.
-     * New code should use getActiveProfileCalibration()/saveCalibrationForActiveProfile().
-     */
-    suspend fun saveUserBodyProfile(profile: UserBodyProfile?) {
-        val activeProfile = getActiveProfile() ?: return
-        saveCalibration(activeProfile.id, profile)
-    }
-
-    /**
-     * Legacy compatibility only: prefer getActiveProfileCalibration() for canonical profile-based lookup.
-     */
-    suspend fun getUserBodyProfile(): UserBodyProfile? = getActiveProfileCalibration()
-
-    fun observeProfiles(): Flow<List<UserProfileStatus>> =
-        profileDao.observeProfiles().map { profiles ->
-            profiles.map { it.toStatus() }
-        }
-
-    fun observeProfileStatuses(): Flow<List<UserProfileStatus>> = observeProfiles()
-
-    fun observeActiveProfile(): Flow<UserProfileStatus?> =
-        profileDao.observeActiveProfile().map { it?.toStatus() }
-
-    suspend fun listProfiles(): List<UserProfileStatus> =
-        profileDao.observeProfiles().map { profiles -> profiles.map { it.toStatus() } }
-            .firstOrNull()
-            .orEmpty()
-
-    suspend fun getActiveProfile(): UserProfileStatus? {
-        val existing = profileDao.getActiveProfile()?.toStatus()
-        if (existing != null) return existing
-
-        val fallback = profileDao.getOldestUnarchivedProfile()
-        if (fallback != null) {
-            profileDao.setActiveProfile(fallback.id, System.currentTimeMillis())
-            return profileDao.getActiveProfile()?.toStatus()
-        }
-
-        ensureDefaultProfileExists()
-        return profileDao.getActiveProfile()?.toStatus()
-    }
-
-    suspend fun setActiveProfile(profileId: Long): Boolean {
-        val updatedAtMs = System.currentTimeMillis()
-        return profileDao.setActiveProfile(profileId = profileId, updatedAtMs = updatedAtMs)
-    }
-
-    suspend fun createProfile(displayName: String): Long? {
-        val normalizedName = displayName.trim()
-        if (normalizedName.isBlank()) return null
-        val now = System.currentTimeMillis()
-        val shouldActivate = getActiveProfile() == null
-        val insertedId = runCatching {
-            profileDao.insertProfile(
-                com.inversioncoach.app.model.UserProfileEntity(
-                    displayName = normalizedName,
-                    isActive = shouldActivate,
-                    isArchived = false,
-                    createdAtMs = now,
-                    updatedAtMs = now,
-                ),
-            )
-        }.getOrNull() ?: return null
-        return insertedId
-    }
-
-    suspend fun renameProfile(profileId: Long, displayName: String): Boolean {
-        val normalizedName = displayName.trim()
-        if (normalizedName.isBlank()) return false
-        return runCatching {
-            profileDao.renameProfile(profileId, normalizedName, System.currentTimeMillis()) > 0
-        }.getOrDefault(false)
-    }
-
-    suspend fun archiveProfile(profileId: Long): Boolean {
-        val profile = profileDao.getProfile(profileId) ?: return false
-        val updatedAtMs = System.currentTimeMillis()
-        val archived = profileDao.archiveProfile(profileId, updatedAtMs) > 0
-        if (!archived) return false
-        if (profile.isActive) {
-            val fallback = profileDao.getOldestUnarchivedProfile()
-            if (fallback != null) {
-                profileDao.setActiveProfile(fallback.id, updatedAtMs)
-            } else {
-                createProfile(DEFAULT_PROFILE_NAME)
-            }
-        }
-        return true
-    }
-
-    fun observeCalibration(profileId: Long): Flow<UserBodyProfile?> =
-        profileDao.observeCalibration(profileId).map { calibration ->
-            UserBodyProfile.decode(calibration?.calibrationPayloadJson)
-        }
-
-    suspend fun getCalibration(profileId: Long): UserBodyProfile? =
-        UserBodyProfile.decode(profileDao.getCalibration(profileId)?.calibrationPayloadJson)
-
-    suspend fun getActiveProfileCalibration(): UserBodyProfile? {
-        val activeProfile = getActiveProfile() ?: return null
-        return getCalibration(activeProfile.id)
-    }
-
-    suspend fun getActiveProfileCalibrationVersion(): Int? {
-        val activeProfile = getActiveProfile() ?: return null
-        return profileDao.getCalibration(activeProfile.id)?.profileVersion
-    }
-
-    suspend fun saveCalibration(profileId: Long, profile: UserBodyProfile?) {
-        if (profile == null) {
-            profileDao.deleteCalibration(profileId)
-            return
-        }
-        val updatedAtMs = System.currentTimeMillis()
-        val existingVersion = profileDao.getCalibration(profileId)?.profileVersion ?: 0
-        profileDao.upsertCalibration(
-            ProfileCalibrationEntity(
-                profileId = profileId,
-                profileVersion = existingVersion + 1,
-                updatedAtMs = updatedAtMs,
-                calibrationPayloadJson = profile.encode(),
-                calibrationMethod = "structural_calibration",
-            ),
-        )
-    }
-
-    suspend fun saveCalibrationForActiveProfile(profile: UserBodyProfile?) {
-        val activeProfile = getActiveProfile() ?: return
-        saveCalibration(activeProfile.id, profile)
-    }
-
-    suspend fun hasCalibration(profileId: Long): Boolean = profileDao.hasCalibration(profileId)
-
-    private suspend fun ensureDefaultProfileExists() {
-        if (profileDao.countActiveProfiles() > 0) return
-        val now = System.currentTimeMillis()
-        profileDao.insertProfile(
-            com.inversioncoach.app.model.UserProfileEntity(
-                displayName = DEFAULT_PROFILE_NAME,
-                isActive = true,
-                isArchived = false,
-                createdAtMs = now,
-                updatedAtMs = now,
-            ),
-        )
-    }
-
-    private fun com.inversioncoach.app.storage.db.UserProfileWithCalibration.toStatus(): UserProfileStatus =
-        UserProfileStatus(
-            id = id,
-            name = displayName,
-            isActive = isActive,
-            isCalibrated = hasCalibration,
-        )
 
     private suspend fun enforceConfiguredStorageLimit() {
         val settings = (userSettingsDao.getSettings() ?: UserSettings()).normalized()

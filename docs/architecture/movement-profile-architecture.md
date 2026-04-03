@@ -15,7 +15,6 @@ Key model types include:
 - `HoldRule`
 - `RepRule`
 - `ReadinessRule`
-- `CalibrationProfile`
 - `MovementTemplateCandidate`
 
 ## Core engines and adapters

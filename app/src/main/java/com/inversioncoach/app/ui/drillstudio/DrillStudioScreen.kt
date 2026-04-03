@@ -75,16 +75,11 @@ fun DrillStudioScreen(
             sessionRepository = ServiceLocator.repository(context),
         )
     }
-    var bodyProfile by remember { mutableStateOf<UserBodyProfile?>(null) }
     val uiState by vm.uiState.collectAsState()
 
     LaunchedEffect(initRequest.mode, initRequest.drillId, initRequest.templateId) {
         vm.initialize(initRequest)
     }
-    LaunchedEffect(Unit) {
-        bodyProfile = runCatching { ServiceLocator.repository(context).getUserBodyProfile() }.getOrNull()
-    }
-
     ScaffoldedScreen(title = "Drill Studio", onBack = onBack) { padding ->
         when (val state = uiState) {
             DrillStudioUiState.Loading -> DrillStudioLoading(padding)
@@ -114,7 +109,7 @@ fun DrillStudioScreen(
                 onUpdatePhasePoseJoint = vm::updatePhasePoseJoint,
                 onSave = { onComplete -> vm.save(onComplete) },
                 onSaveSuccess = onSaveSuccess,
-                bodyProfile = bodyProfile,
+                bodyProfile = null,
             )
         }
     }

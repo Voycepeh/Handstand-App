@@ -233,11 +233,7 @@ fun DrillSessionsSection(
                         }
                         Text(historyCardDurationText(session), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Time: ${formatSessionDateTime(session.startedAtMs)}", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            "Profile: ${session.userProfileId ?: "unknown"} • Body v${session.bodyProfileVersion ?: 0}" +
-                                if (session.usedDefaultBodyModel) " (default model)" else "",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Text("Body model: ${if (session.usedDefaultBodyModel) "default" else "custom"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                         Text(status, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (comparedSessionIds.contains(session.id)) {
