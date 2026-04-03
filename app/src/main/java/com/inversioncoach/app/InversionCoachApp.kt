@@ -4,7 +4,7 @@ import android.app.Application
 import androidx.work.Configuration
 import com.inversioncoach.app.drills.DrillSeeder
 import com.inversioncoach.app.drills.catalog.DrillCatalogRepository
-import com.inversioncoach.app.movementprofile.ReferenceTemplateLoader
+import com.inversioncoach.app.movementprofile.SeededReferenceTemplateSeeder
 import com.inversioncoach.app.movementprofile.toRecord
 import com.inversioncoach.app.history.RetentionCleanupWorker
 import com.inversioncoach.app.storage.ServiceLocator
@@ -36,10 +36,12 @@ class InversionCoachApp : Application(), Configuration.Provider {
             DrillSeeder.seedCalibration(now).forEach { calibration ->
                 repo.saveCalibrationConfig(calibration)
             }
-            val loader = ReferenceTemplateLoader(this@InversionCoachApp)
-            loader.loadBuiltInTemplates().forEach { template ->
-                if (repo.getReferenceTemplate(template.id) == null) {
-                    repo.saveReferenceTemplate(template.toRecord(now))
+            catalog?.let { drillCatalog ->
+                val templateSeeder = SeededReferenceTemplateSeeder()
+                templateSeeder.seedFromCatalog(drillCatalog).forEach { template ->
+                    if (repo.getReferenceTemplate(template.id) == null) {
+                        repo.saveReferenceTemplate(template.toRecord(now))
+                    }
                 }
             }
             val coordinator = UploadQueueCoordinator.get(this@InversionCoachApp)

@@ -19,5 +19,6 @@ Reference Training turns strong attempts into drill-linked comparison baselines.
 ## Persistence expectations
 
 - Persist source/media state and derived reference metadata.
+- Seeded baseline/reference templates are catalog-derived from `drill_catalog_v1.json`, which is the canonical seeded source.
 - Keep reference creation optional; analysis should still be useful without saving a template.
 - Maintain compatibility with replay/export resolution and history surfaces.
