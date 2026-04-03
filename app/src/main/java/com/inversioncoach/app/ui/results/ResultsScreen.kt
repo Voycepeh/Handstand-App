@@ -1,8 +1,5 @@
 package com.inversioncoach.app.ui.results
 
-import android.content.Intent
-import android.content.ActivityNotFoundException
-import android.content.ClipData
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
@@ -43,8 +40,6 @@ import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.model.SessionSource
-import com.inversioncoach.app.media.SaveVideoError
-import com.inversioncoach.app.media.SaveVideoResult
 import com.inversioncoach.app.media.SessionArtifact
 import com.inversioncoach.app.media.SessionMediaResolver
 import com.inversioncoach.app.media.SessionMediaSourceOpener
@@ -81,6 +76,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
     val sourceOpener = remember(context) { SessionMediaSourceOpener(context) }
     val mediaResolver = remember(sourceOpener) { SessionMediaResolver(assetExists = sourceOpener::isReadable) }
     val videoSaver = remember(context, sourceOpener) { SessionVideoSaver(context, sourceOpener) }
+    val mediaActions = remember(context, sourceOpener, videoSaver) { ResultsMediaActions(context, sourceOpener, videoSaver) }
     val resolvedMedia = remember(session) { session?.let(mediaResolver::resolve) }
     val preferredReplay = resolvedMedia?.preferredReplay
     val replayUri = preferredReplay?.uri
@@ -429,23 +425,21 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             resolvedMedia?.let { media ->
                 SessionMediaActionsCard(
                     media = media,
-                    onPlayRaw = { uri -> openVideo(context, sourceOpener, uri, sessionId) },
+                    onPlayRaw = { uri -> mediaActions.openVideo(uri, sessionId) },
                     onSaveRaw = { uri ->
-                        val saveResult = videoSaver.saveRawVideo(
+                        mediaActions.saveRaw(
                             sourceUri = uri,
                             sessionName = session?.title.orEmpty(),
                             sessionTimestampMs = session?.completedAtMs ?: session?.startedAtMs ?: 0L,
                         )
-                        handleSaveResult(context, saveResult, isAnnotated = false)
                     },
-                    onPlayAnnotated = { uri -> openVideo(context, sourceOpener, uri, sessionId) },
+                    onPlayAnnotated = { uri -> mediaActions.openVideo(uri, sessionId) },
                     onSaveAnnotated = { uri ->
-                        val saveResult = videoSaver.saveAnnotatedVideo(
+                        mediaActions.saveAnnotated(
                             sourceUri = uri,
                             sessionName = session?.title.orEmpty(),
                             sessionTimestampMs = session?.completedAtMs ?: session?.startedAtMs ?: 0L,
                         )
-                        handleSaveResult(context, saveResult, isAnnotated = true)
                     },
                 )
             }
@@ -460,7 +454,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             }
             Text(replayAvailabilityBadge(replayLabel), color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (showRawVideoButton) {
-                Button(onClick = { openVideo(context, sourceOpener, rawUri) }, enabled = !rawUri.isNullOrBlank(), modifier = Modifier.fillMaxWidth()) { Text("Raw replay") }
+                Button(onClick = { mediaActions.openVideo(rawUri) }, enabled = !rawUri.isNullOrBlank(), modifier = Modifier.fillMaxWidth()) { Text("Raw replay") }
             }
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -523,14 +517,10 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             ) { Text("Use for Drill Reference") }
             Button(
                 onClick = {
-                    shareVideoOnly(
-                        context = context,
-                        sourceOpener = sourceOpener,
-                        media = resolvedMedia,
-                    )
+                    mediaActions.sharePreferred(resolvedMedia)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = hasReplay || !rawUri.isNullOrBlank(),
+                enabled = hasReplay,
             ) { Text("Share video (.mp4)") }
             Button(
                 onClick = {
@@ -540,7 +530,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = hasReplay || !rawUri.isNullOrBlank(),
+                enabled = hasReplay,
             ) {
                 Text("Delete videos only (keep session)")
             }
@@ -823,110 +813,3 @@ private fun formatElapsed(startedAtMs: Long?, timestampMs: Long?): String {
     return "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60)
 }
 
-private fun openVideo(context: android.content.Context, sourceOpener: SessionMediaSourceOpener, videoUri: String?) {
-    openVideo(context, sourceOpener, videoUri, null)
-}
-
-private fun openVideo(context: android.content.Context, sourceOpener: SessionMediaSourceOpener, videoUri: String?, sessionId: Long?) {
-    if (videoUri.isNullOrBlank()) return
-    SessionDiagnostics.record(
-        sessionId = sessionId,
-        stage = SessionDiagnostics.Stage.REPLAY_SOURCE_SELECT,
-        status = SessionDiagnostics.Status.PROGRESS,
-        message = "player preparing",
-        metrics = mapOf("uri" to videoUri),
-    )
-    val resolvedUri = sourceOpener.toSharableUri(videoUri) ?: run {
-        Toast.makeText(context, "Unable to open video file.", Toast.LENGTH_SHORT).show()
-        SessionDiagnostics.record(
-            sessionId = sessionId,
-            stage = SessionDiagnostics.Stage.REPLAY_SOURCE_SELECT,
-            status = SessionDiagnostics.Status.FAILED,
-            message = "onPlayerError: unresolved sharable URI",
-            errorCode = "PLAYER_URI_RESOLUTION_FAILED",
-            metrics = mapOf("uri" to videoUri),
-        )
-        return
-    }
-    val mimeType = context.contentResolver.getType(resolvedUri) ?: "video/*"
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(resolvedUri, mimeType)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    runCatching {
-        val chooser = Intent.createChooser(intent, "Open video")
-        chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        context.startActivity(chooser)
-        SessionDiagnostics.record(
-            sessionId = sessionId,
-            stage = SessionDiagnostics.Stage.REPLAY_SOURCE_SELECT,
-            status = SessionDiagnostics.Status.SUCCEEDED,
-            message = "player ready",
-            metrics = mapOf("uri" to videoUri),
-        )
-    }.onFailure { error ->
-        if (error is ActivityNotFoundException) {
-            Toast.makeText(context, "No video player available to open this file.", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(context, "Unable to open video file.", Toast.LENGTH_SHORT).show()
-        }
-        SessionDiagnostics.record(
-            sessionId = sessionId,
-            stage = SessionDiagnostics.Stage.REPLAY_SOURCE_SELECT,
-            status = SessionDiagnostics.Status.FAILED,
-            message = "onPlayerError: ${error::class.java.name}",
-            errorCode = error.message,
-            throwable = error,
-            metrics = mapOf("uri" to videoUri),
-        )
-    }
-}
-
-private fun handleSaveResult(
-    context: android.content.Context,
-    result: SaveVideoResult,
-    isAnnotated: Boolean,
-) {
-    when (result) {
-        is SaveVideoResult.Success -> {
-            val message = if (isAnnotated) "Saved annotated video to device" else "Saved raw video to device"
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-        }
-
-        is SaveVideoResult.Failure -> {
-            val message = when (result.error) {
-                SaveVideoError.MISSING_FILE -> "Source video file is missing"
-                SaveVideoError.SAVE_FAILED -> "Save failed"
-                SaveVideoError.NO_ANNOTATED_OUTPUT -> "No annotated output yet"
-            }
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-        }
-    }
-}
-
-private fun shareVideoOnly(
-    context: android.content.Context,
-    sourceOpener: SessionMediaSourceOpener,
-    media: com.inversioncoach.app.media.ResolvedSessionMedia?,
-) {
-    val source = media?.preferredReplay?.uri
-        ?: (media?.raw as? SessionArtifact.Available)?.uri
-        ?: (media?.annotated as? SessionArtifact.Available)?.uri
-    if (source.isNullOrBlank() || !sourceOpener.isReadable(source)) {
-        Toast.makeText(context, "No video file available to share.", Toast.LENGTH_SHORT).show()
-        return
-    }
-    val preferredShareUri = sourceOpener.toSharableUri(source)
-    if (preferredShareUri == null) {
-        Toast.makeText(context, "No video file available to share.", Toast.LENGTH_SHORT).show()
-        return
-    }
-
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "video/mp4"
-        putExtra(Intent.EXTRA_STREAM, preferredShareUri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        clipData = ClipData.newUri(context.contentResolver, "session-video", preferredShareUri)
-    }
-    context.startActivity(Intent.createChooser(intent, "Share session video"))
-}

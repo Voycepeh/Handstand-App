@@ -3,6 +3,10 @@ package com.inversioncoach.app.ui.live
 import android.net.Uri
 import android.util.Log
 import com.inversioncoach.app.biomechanics.DrillModeConfig
+import com.inversioncoach.app.media.SessionArtifact
+import com.inversioncoach.app.media.SessionArtifactError
+import com.inversioncoach.app.media.SessionMediaResolver
+import com.inversioncoach.app.media.SessionMediaType
 import com.inversioncoach.app.model.AnnotatedExportFailureReason
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
@@ -356,38 +360,25 @@ fun resolveReplaySourceState(
     isReadable: (String?) -> Boolean = ::mediaAssetExists,
 ): ReplayResolution {
     if (session == null) return ReplayResolution(ReplaySourceState.UNAVAILABLE, null, "SESSION_NULL")
-    val annotatedUri = session.annotatedFinalUri ?: session.annotatedVideoUri
-    val rawUri = session.rawFinalUri ?: session.rawVideoUri ?: session.rawMasterUri
-    val annotatedReadable = isReadable(annotatedUri)
-    val rawReadable = isReadable(rawUri)
-    val bestPlayableUri = session.bestPlayableUri
-    val bestPlayableReadable = isReadable(bestPlayableUri)
-    val rawPlayable = rawReadable && (
-        bestPlayableUri.isNullOrBlank() ||
-            bestPlayableUri == rawUri ||
-            !bestPlayableReadable
-        )
-    val rawMarkedInvalid = session.rawPersistFailureReason in setOf(
-        AnnotatedExportFailureReason.RAW_REPLAY_INVALID.name,
-        AnnotatedExportFailureReason.RAW_MEDIA_CORRUPT.name,
-        AnnotatedExportFailureReason.SOURCE_VIDEO_UNREADABLE.name,
-    )
+    val resolvedMedia = SessionMediaResolver(assetExists = isReadable).resolve(session)
     val decisionPending = session.annotatedExportStatus in setOf(
         AnnotatedExportStatus.VALIDATING_INPUT,
         AnnotatedExportStatus.PROCESSING,
         AnnotatedExportStatus.PROCESSING_SLOW,
     )
-    if (session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY && annotatedReadable) {
-        return ReplayResolution(ReplaySourceState.ANNOTATED_READY, annotatedUri, "ANNOTATED_READY")
+    val preferredReplay = resolvedMedia.canonicalActionSource()
+    if (preferredReplay != null) {
+        return when (preferredReplay.type) {
+            SessionMediaType.ANNOTATED -> ReplayResolution(ReplaySourceState.ANNOTATED_READY, preferredReplay.uri, "ANNOTATED_READY")
+            SessionMediaType.RAW -> ReplayResolution(ReplaySourceState.RAW_READY, preferredReplay.uri, "RAW_FALLBACK_${session.annotatedExportStatus.name}")
+        }
     }
     if (decisionPending) {
         return ReplayResolution(ReplaySourceState.UNRESOLVED, null, "ANNOTATED_DECISION_PENDING")
     }
-    if (rawMarkedInvalid) {
-        return ReplayResolution(ReplaySourceState.UNAVAILABLE, null, session.rawPersistFailureReason.orEmpty())
-    }
-    if (rawPlayable) {
-        return ReplayResolution(ReplaySourceState.RAW_READY, rawUri, "RAW_FALLBACK_${session.annotatedExportStatus.name}")
+    val rawError = (resolvedMedia.raw as? SessionArtifact.Unavailable)?.error
+    if (rawError == SessionArtifactError.RAW_INVALID) {
+        return ReplayResolution(ReplaySourceState.UNAVAILABLE, null, session.rawPersistFailureReason.orEmpty().ifBlank { "RAW_INVALID" })
     }
     return ReplayResolution(ReplaySourceState.UNAVAILABLE, null, "NO_READABLE_REPLAY")
 }

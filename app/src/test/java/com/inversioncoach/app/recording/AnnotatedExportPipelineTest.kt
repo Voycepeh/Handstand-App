@@ -92,6 +92,30 @@ class AnnotatedExportPipelineTest {
     }
 
     @Test
+    fun persistedOutputMissing_marksExportFailedWithOwnershipReason() {
+        val statuses = mutableListOf<AnnotatedExportStatus>()
+        val pipeline = AnnotatedExportPipeline(
+            persistAnnotatedVideo = { _, _ -> null },
+            updateExportStatus = { _, status -> statuses += status },
+            renderAnnotatedVideo = { _, _, _, _, _, _, _ -> ComposerResult("file:///rendered_annotated.mp4", null) },
+        )
+
+        val exported = runBlocking {
+            pipeline.export(
+                sessionId = 7L,
+                rawVideoUri = "file:///raw.mp4",
+                drillType = DrillType.WALL_HANDSTAND,
+                drillCameraSide = DrillCameraSide.LEFT,
+                overlayTimeline = testTimeline(listOf(testFrame(1000L))),
+            )
+        }
+
+        assertEquals(AnnotatedExportFailureReason.ANNOTATED_URI_NOT_PERSISTED.name, exported.failureReason)
+        assertNull(exported.persistedUri)
+        assertEquals(listOf(AnnotatedExportStatus.VALIDATING_INPUT, AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.ANNOTATED_FAILED), statuses)
+    }
+
+    @Test
     fun timeoutMapsToExportTimedOutReasonAfterWorkStarts() {
         val pipeline = AnnotatedExportPipeline(
             persistAnnotatedVideo = { _, _ -> "file:///persisted_annotated.mp4" },

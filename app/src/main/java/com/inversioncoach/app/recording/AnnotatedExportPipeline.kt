@@ -299,21 +299,34 @@ class AnnotatedExportPipeline(
         preset: ExportPreset = ExportPreset.BALANCED,
         onRenderProgress: (Int, Int) -> Unit = { _, _ -> },
     ): ExportResult {
+        suspend fun failExport(
+            reason: String,
+            started: Boolean,
+            telemetry: AnnotatedExportTelemetry?,
+        ): ExportResult {
+            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
+            Log.w(TAG, "export_failure sessionId=$sessionId reason=$reason")
+            return ExportResult(
+                failureReason = reason,
+                verificationStatus = VerificationStatus.FAILED,
+                started = started,
+                telemetry = telemetry,
+            )
+        }
+
         updateExportStatus(sessionId, AnnotatedExportStatus.VALIDATING_INPUT)
         if (rawVideoUri.isBlank()) {
-            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-            Log.w(TAG, "export_failure sessionId=$sessionId reason=raw_video_missing_pre_export")
-            return ExportResult(
-                failureReason = AnnotatedExportFailureReason.EXPORT_NOT_STARTED.name,
-                verificationStatus = VerificationStatus.FAILED,
+            return failExport(
+                reason = AnnotatedExportFailureReason.EXPORT_NOT_STARTED.name,
+                started = false,
+                telemetry = null,
             )
         }
         if (overlayTimeline.frames.isEmpty()) {
-            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-            Log.w(TAG, "export_failure sessionId=$sessionId reason=overlay_frames_empty")
-            return ExportResult(
-                failureReason = AnnotatedExportFailureReason.OVERLAY_TIMELINE_EMPTY.name,
-                verificationStatus = VerificationStatus.FAILED,
+            return failExport(
+                reason = AnnotatedExportFailureReason.OVERLAY_TIMELINE_EMPTY.name,
+                started = false,
+                telemetry = null,
             )
         }
         val frozenSnapshot = freezeSnapshotForExport(
@@ -322,11 +335,10 @@ class AnnotatedExportPipeline(
             preset = preset,
         )
         if (frozenSnapshot.overlayTimeline.frames.isEmpty()) {
-            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-            Log.w(TAG, "export_failure sessionId=$sessionId reason=frozen_overlay_frames_empty")
-            return ExportResult(
-                failureReason = AnnotatedExportFailureReason.OVERLAY_TIMELINE_EMPTY.name,
-                verificationStatus = VerificationStatus.FAILED,
+            return failExport(
+                reason = AnnotatedExportFailureReason.OVERLAY_TIMELINE_EMPTY.name,
+                started = false,
+                telemetry = null,
             )
         }
         val dynamicTimeoutMs = computeDynamicTimeoutMs(
@@ -412,59 +424,51 @@ class AnnotatedExportPipeline(
                 if (timedOut) null else renderJob.await()
             }
         } catch (_: CancellationException) {
-            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-            Log.w(TAG, "export_failure sessionId=$sessionId reason=cancelled")
-            return ExportResult(
-                failureReason = AnnotatedExportFailureReason.EXPORT_CANCELLED.name,
-                verificationStatus = VerificationStatus.FAILED,
+            return failExport(
+                reason = AnnotatedExportFailureReason.EXPORT_CANCELLED.name,
                 started = telemetry?.decoderInitializedAtMs != null,
                 telemetry = telemetry,
             )
         } catch (t: Throwable) {
-            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
             Log.e(TAG, "export_failure sessionId=$sessionId reason=exception_${t::class.simpleName}", t)
-            return ExportResult(
-                failureReason = AnnotatedExportFailureReason.RENDER_PIPELINE_EXCEPTION.name,
-                verificationStatus = VerificationStatus.FAILED,
+            return failExport(
+                reason = AnnotatedExportFailureReason.RENDER_PIPELINE_EXCEPTION.name,
                 started = telemetry?.decoderInitializedAtMs != null,
                 telemetry = telemetry,
             )
         }
         if (composeResult == null) {
-            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-            Log.w(TAG, "export_failure sessionId=$sessionId reason=timeout_without_progress dynamicTimeoutMs=$dynamicTimeoutMs stallWindowMs=$stallWindowMs")
-            return ExportResult(
-                failureReason = AnnotatedExportFailureReason.EXPORT_TIMEOUT.name,
-                verificationStatus = VerificationStatus.FAILED,
+            return failExport(
+                reason = AnnotatedExportFailureReason.EXPORT_TIMEOUT.name,
                 started = telemetry?.decoderInitializedAtMs != null,
                 telemetry = telemetry,
             )
         }
         if (composeResult.uri.isNullOrBlank()) {
-            updateExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-            val reason = composeResult.failureReason ?: AnnotatedExportFailureReason.EXPORT_RETURNED_EMPTY.name
-            Log.w(TAG, "export_failure sessionId=$sessionId reason=$reason")
-            return ExportResult(
-                failureReason = reason,
-                verificationStatus = VerificationStatus.FAILED,
+            return failExport(
+                reason = composeResult.failureReason ?: AnnotatedExportFailureReason.EXPORT_RETURNED_EMPTY.name,
                 started = telemetry?.decoderInitializedAtMs != null,
                 telemetry = telemetry,
             )
         }
 
         val persisted = persistAnnotatedVideo(sessionId, composeResult.uri)
+        if (persisted.isNullOrBlank()) {
+            return failExport(
+                reason = AnnotatedExportFailureReason.ANNOTATED_URI_NOT_PERSISTED.name,
+                started = telemetry?.decoderInitializedAtMs != null,
+                telemetry = telemetry,
+            )
+        }
         val verification = verifyMedia(persisted)
         val status = if (verification.isValid) AnnotatedExportStatus.ANNOTATED_READY else AnnotatedExportStatus.ANNOTATED_FAILED
         updateExportStatus(sessionId, status)
         if (!verification.isValid) {
-            val failure = verification.failureReason?.name ?: AnnotatedExportFailureReason.VERIFICATION_FAILED.name
-            Log.w(TAG, "export_failure sessionId=$sessionId reason=$failure")
-            return ExportResult(
-                failureReason = failure,
-                verificationStatus = VerificationStatus.FAILED,
+            return failExport(
+                reason = verification.failureReason?.name ?: AnnotatedExportFailureReason.VERIFICATION_FAILED.name,
                 started = telemetry?.decoderInitializedAtMs != null,
                 telemetry = telemetry,
-            )
+            ).copy(verificationStatus = VerificationStatus.FAILED)
         } else {
             Log.d(TAG, "export_complete sessionId=$sessionId persistedUri=$persisted")
             return ExportResult(

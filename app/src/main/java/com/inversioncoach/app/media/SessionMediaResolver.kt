@@ -9,10 +9,12 @@ class SessionMediaResolver(
     private val assetExists: (String?) -> Boolean,
 ) {
     fun resolve(session: SessionRecord): ResolvedSessionMedia {
+        val rawMarkedInvalid = session.rawPersistFailureReason in RAW_INVALID_FAILURE_REASONS
         val rawUri = rawCandidates(session).firstOrNull(assetExists)
         val annotatedUri = annotatedCandidates(session).firstOrNull(assetExists)
 
         val raw = when {
+            rawMarkedInvalid -> SessionArtifact.Unavailable(SessionArtifactError.RAW_INVALID)
             rawUri != null -> SessionArtifact.Available(rawUri)
             session.rawPersistStatus == RawPersistStatus.PROCESSING -> SessionArtifact.Processing("Raw video is still being prepared")
             else -> SessionArtifact.Unavailable(SessionArtifactError.MISSING_FILE)
@@ -56,6 +58,14 @@ class SessionMediaResolver(
         }
         return "$base ${session.annotatedExportPercent.coerceIn(0, 100)}%"
     }
+
+    companion object {
+        private val RAW_INVALID_FAILURE_REASONS = setOf(
+            "RAW_REPLAY_INVALID",
+            "RAW_MEDIA_CORRUPT",
+            "SOURCE_VIDEO_UNREADABLE",
+        )
+    }
 }
 
 fun rawCandidates(session: SessionRecord): List<String> = listOfNotNull(
@@ -74,7 +84,9 @@ data class ResolvedSessionMedia(
     val raw: SessionArtifact,
     val annotated: SessionArtifact,
     val preferredReplay: PreferredReplay?,
-)
+) {
+    fun canonicalActionSource(): PreferredReplay? = preferredReplay
+}
 
 data class PreferredReplay(
     val uri: String,
@@ -93,4 +105,5 @@ enum class SessionArtifactError {
     EXPORT_FAILED,
     MISSING_FILE,
     NO_ANNOTATED_OUTPUT,
+    RAW_INVALID,
 }

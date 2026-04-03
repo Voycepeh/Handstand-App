@@ -85,6 +85,19 @@ class SessionMediaResolverTest {
         assertEquals(SessionArtifact.Available("annotated_final.mp4"), result.annotated)
     }
 
+    @Test
+    fun resolve_rawMarkedInvalid_doesNotReturnRawReplay() {
+        val session = sessionForTest(rawUri = "raw.mp4", annotatedUri = null).copy(
+            rawPersistFailureReason = "RAW_MEDIA_CORRUPT",
+        )
+        val resolver = SessionMediaResolver(assetExists = { true })
+
+        val result = resolver.resolve(session)
+
+        assertEquals(SessionArtifact.Unavailable(SessionArtifactError.RAW_INVALID), result.raw)
+        assertEquals(null, result.canonicalActionSource())
+    }
+
     companion object {
         fun sessionForTest(
             rawUri: String?,
