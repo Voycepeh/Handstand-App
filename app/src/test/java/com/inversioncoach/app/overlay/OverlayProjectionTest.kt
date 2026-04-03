@@ -54,6 +54,7 @@ class OverlayProjectionTest {
                 mirrored = true,
                 previewContentRect = rect,
                 scaleMode = PoseScaleMode.FILL,
+                coordinateSpace = OverlayCoordinateSpace.UPRIGHT_NORMALIZED,
             ),
             renderWidth = 1080,
             renderHeight = 1920,

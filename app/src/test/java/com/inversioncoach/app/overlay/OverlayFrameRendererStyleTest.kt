@@ -16,6 +16,7 @@ class OverlayFrameRendererStyleTest {
                 drawIdealLine = true,
                 scaleMode = PoseScaleMode.FILL,
                 renderTarget = OverlayRenderTarget.LIVE_PREVIEW,
+                coordinateSpace = OverlayCoordinateSpace.UPRIGHT_NORMALIZED,
             ),
         )
         val exportStyle = OverlayFrameRenderer.styleForFrame(
@@ -26,6 +27,7 @@ class OverlayFrameRendererStyleTest {
                 drawIdealLine = true,
                 scaleMode = PoseScaleMode.FIT,
                 renderTarget = OverlayRenderTarget.ANNOTATED_EXPORT,
+                coordinateSpace = OverlayCoordinateSpace.UPRIGHT_NORMALIZED,
             ),
         )
 
@@ -44,6 +46,7 @@ class OverlayFrameRendererStyleTest {
                 drawIdealLine = true,
                 scaleMode = PoseScaleMode.FIT,
                 renderTarget = OverlayRenderTarget.ANNOTATED_EXPORT,
+                coordinateSpace = OverlayCoordinateSpace.UPRIGHT_NORMALIZED,
             ),
         )
 

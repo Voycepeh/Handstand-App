@@ -22,7 +22,7 @@ data class OverlayDrawingFrame(
     val scaleMode: PoseScaleMode = PoseScaleMode.FIT,
     val debugProjection: Boolean = false,
     val renderTarget: OverlayRenderTarget = OverlayRenderTarget.LIVE_PREVIEW,
-    val coordinateSpace: OverlayCoordinateSpace = OverlayCoordinateSpace.UPRIGHT_NORMALIZED,
+    val coordinateSpace: OverlayCoordinateSpace,
     val styleScaleMultiplier: Float = 1f,
     val unreliableJointNames: Set<String> = emptySet(),
 )
