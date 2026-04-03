@@ -47,6 +47,7 @@ class UploadQueueCoordinator private constructor(
     }
 
     suspend fun reconcileAndKickoff(reason: String) {
+        normalizeLegacyJobs(reason)
         normalizeRetryingJobs()
         recoverDeadRunningJobs()
         val active = queueRepository.getActiveJob()?.takeIf { it.status == UploadJobStatus.RUNNING }
@@ -59,6 +60,55 @@ class UploadQueueCoordinator private constructor(
             .addTag(UploadProcessingWorker.WORK_TAG)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(UNIQUE_WORK, ExistingWorkPolicy.REPLACE, work)
+    }
+
+    private suspend fun normalizeLegacyJobs(reason: String) {
+        val now = System.currentTimeMillis()
+        queueRepository.getNonTerminalJobs().forEach { job ->
+            val normalized = when (job.status) {
+                UploadJobStatus.PROCESSING -> job.copy(
+                    status = UploadJobStatus.RETRYING,
+                    updatedAt = now,
+                    timeoutReason = job.timeoutReason ?: "legacy_processing_status",
+                    failureReason = job.failureReason ?: "RECOVERED_LEGACY_STATUS:$reason",
+                    workerToken = null,
+                )
+
+                UploadJobStatus.IDLE -> job.copy(
+                    status = UploadJobStatus.QUEUED,
+                    updatedAt = now,
+                    timeoutReason = job.timeoutReason ?: "legacy_idle_status",
+                    failureReason = job.failureReason,
+                    workerToken = null,
+                )
+
+                UploadJobStatus.STALLED -> if (job.isRecoverable && job.retryCount < job.maxRetries) {
+                    job.copy(
+                        status = UploadJobStatus.RETRYING,
+                        retryCount = job.retryCount + 1,
+                        updatedAt = now,
+                        timeoutReason = job.timeoutReason ?: "legacy_stalled_status",
+                        failureReason = job.failureReason ?: "RECOVERED_STALLED_JOB:$reason",
+                        workerToken = null,
+                    )
+                } else {
+                    job.copy(
+                        status = UploadJobStatus.FAILED,
+                        currentStage = UploadJobStage.FAILED,
+                        completedAt = now,
+                        updatedAt = now,
+                        timeoutReason = job.timeoutReason ?: "legacy_stalled_status",
+                        failureReason = job.failureReason ?: "UNRECOVERABLE_STALLED_JOB:$reason",
+                        workerToken = null,
+                    )
+                }
+
+                else -> null
+            }
+            if (normalized != null) {
+                queueRepository.save(normalized)
+            }
+        }
     }
 
 

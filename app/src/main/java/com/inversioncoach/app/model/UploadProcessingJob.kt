@@ -5,12 +5,15 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class UploadJobStatus {
+    IDLE,
     QUEUED,
     RUNNING,
     RETRYING,
+    PROCESSING,
     COMPLETED,
     FAILED,
     CANCELLED,
+    STALLED,
 }
 
 enum class UploadJobStage {

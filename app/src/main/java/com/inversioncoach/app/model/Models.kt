@@ -160,15 +160,6 @@ enum class UploadJobPipelineType {
     UPLOADED_VIDEO_ANALYSIS,
 }
 
-enum class UploadJobStatus {
-    IDLE,
-    PROCESSING,
-    COMPLETED,
-    FAILED,
-    CANCELLED,
-    STALLED,
-}
-
 enum class AnnotatedExportStage {
     QUEUED,
     PREPARING,

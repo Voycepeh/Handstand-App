@@ -2,7 +2,7 @@ package com.inversioncoach.app.ui.navigation
 
 import android.net.Uri
 
-internal enum class SessionHistoryMode(val routeValue: String) {
+enum class SessionHistoryMode(val routeValue: String) {
     HISTORY("history"),
     COMPARE("compare"),
     ;

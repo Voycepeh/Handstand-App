@@ -150,7 +150,7 @@ fun DrillSessionsSection(
     modifier: Modifier = Modifier,
     drillIdFilter: String?,
     comparisonMode: Boolean,
-    drills: List<com.inversioncoach.app.storage.db.DrillRecord>,
+    drills: List<com.inversioncoach.app.model.DrillDefinitionRecord>,
     sortedSessions: List<com.inversioncoach.app.model.SessionRecord>,
     selectedSort: HistorySort,
     sortAscending: Boolean,

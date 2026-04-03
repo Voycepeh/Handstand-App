@@ -88,6 +88,7 @@ import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.SessionDiagnostics
 import com.inversioncoach.app.pose.PoseScaleMode
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -717,7 +718,6 @@ class DefaultUploadVideoAnalysisRunner(
             } else {
                 val selectedTemplateRecord = selectedReferenceTemplateId?.let { repository.getReferenceTemplate(it) }
                 if (selectedTemplateRecord != null) {
-                    val referenceProfileId = ReferenceTemplateRecordCodec.sourceProfileIds(selectedTemplateRecord).firstOrNull().orEmpty()
                     val referenceProfileId = repository.getReferenceProfileIds(selectedTemplateRecord).firstOrNull().orEmpty()
                     val referenceProfile = repository.getMovementProfile(referenceProfileId)
                     if (referenceProfile != null) {
@@ -1228,9 +1228,6 @@ class DefaultUploadVideoAnalysisRunner(
 
     private fun templateDefinitionFromRecord(record: com.inversioncoach.app.model.ReferenceTemplateRecord): ReferenceTemplateDefinition? =
         ReferenceTemplateRecordCodec.toDefinition(record)
-
-    private suspend fun templatesAreEmptyForDrill(repository: SessionRepository, drillId: String): Boolean =
-        repository.listTemplatesForDrill(drillId).first().isEmpty()
 
     private suspend fun templatesAreEmptyForDrill(repository: SessionRepository, drillId: String): Boolean =
         repository.listTemplatesForDrill(drillId).first().isEmpty()

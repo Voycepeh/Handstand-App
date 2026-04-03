@@ -37,7 +37,7 @@ import com.inversioncoach.app.ui.startdrill.StartDrillDestination
 import com.inversioncoach.app.ui.startdrill.StartDrillScreen
 import com.inversioncoach.app.ui.upload.UploadVideoScreen
 
-private fun parseDrillTypeOrDefault(rawValue: String?, fallback: DrillType): DrillType =
+fun parseDrillTypeOrDefault(rawValue: String?, fallback: DrillType): DrillType =
     rawValue?.let(DrillType::fromStoredName) ?: fallback
 
 sealed class Route(val value: String) {

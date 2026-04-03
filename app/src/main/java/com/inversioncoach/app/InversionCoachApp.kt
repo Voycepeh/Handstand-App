@@ -8,6 +8,7 @@ import com.inversioncoach.app.movementprofile.ReferenceTemplateLoader
 import com.inversioncoach.app.movementprofile.toRecord
 import com.inversioncoach.app.history.RetentionCleanupWorker
 import com.inversioncoach.app.storage.ServiceLocator
+import com.inversioncoach.app.model.UploadJobStatus
 import com.inversioncoach.app.upload.UploadProcessingNotifications
 import com.inversioncoach.app.upload.UploadQueueCoordinator
 import kotlinx.coroutines.CoroutineScope
@@ -15,7 +16,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import android.util.Log
 
 class InversionCoachApp : Application(), Configuration.Provider {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -24,12 +24,8 @@ class InversionCoachApp : Application(), Configuration.Provider {
         super.onCreate()
         RetentionCleanupWorker.enqueuePeriodic(this)
         appScope.launch {
-            UploadProcessingOrchestrator.reconcileState(this@InversionCoachApp)
-        }
-        appScope.launch {
             val repo = ServiceLocator.repository(this@InversionCoachApp)
             UploadProcessingNotifications(this@InversionCoachApp).ensureChannel()
-            UploadQueueCoordinator.get(this@InversionCoachApp).reconcileAndKickoff("app_start")
             val now = System.currentTimeMillis()
             val existingDrills = repo.getAllDrills().first()
             val catalog = runCatching { DrillCatalogRepository(this@InversionCoachApp).loadCatalog() }.getOrNull()
@@ -46,6 +42,15 @@ class InversionCoachApp : Application(), Configuration.Provider {
                     repo.saveReferenceTemplate(template.toRecord(now))
                 }
             }
+            val coordinator = UploadQueueCoordinator.get(this@InversionCoachApp)
+            coordinator.reconcileAndKickoff("app_start")
+            val activeQueueJob = ServiceLocator.uploadQueueRepository(this@InversionCoachApp)
+                .getActiveJob()
+                ?.status == UploadJobStatus.RUNNING
+            repo.reconcileActiveUploadJobs(
+                hasActiveWorker = activeQueueJob,
+                reason = "app_start_queue_reconcile",
+            )
         }
     }
 

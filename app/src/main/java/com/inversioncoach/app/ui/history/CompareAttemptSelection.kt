@@ -2,7 +2,7 @@ package com.inversioncoach.app.ui.history
 
 import com.inversioncoach.app.model.SessionRecord
 
-internal data class CompareAttemptSelection(
+data class CompareAttemptSelection(
     val candidateSessionIds: Set<Long>,
     val anchorSessionId: Long?,
     val hasEnoughCandidates: Boolean,
