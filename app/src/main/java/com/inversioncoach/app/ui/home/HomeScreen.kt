@@ -76,7 +76,7 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
 
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())
-    val settings by repository.observeSettings().collectAsState<UserSettings?>(initial = null)
+    val settings by repository.observeSettings().collectAsState<UserSettings, UserSettings?>(initial = null)
     var onboardingGate by remember { mutableStateOf(FirstLaunchOnboardingGate.Loading) }
 
     LaunchedEffect(settings?.hasCompletedPreferencesOnboarding) {

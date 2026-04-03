@@ -62,7 +62,6 @@ import com.inversioncoach.app.ui.components.SessionMediaActionsCard
 import com.inversioncoach.app.ui.live.mediaAssetExists
 import com.inversioncoach.app.ui.live.ExportWorkOwnership
 import com.inversioncoach.app.ui.live.SessionDiagnostics
-import com.inversioncoach.app.ui.upload.UploadJobCoordinator
 import kotlinx.coroutines.launch
 import java.util.Locale
 
