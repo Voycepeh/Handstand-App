@@ -248,7 +248,7 @@ class MlKitVideoPoseFrameSource(
                                     if (candidateIndex % 2 == 0) {
                                         Log.i(
                                             TAG,
-                                            "decode_sample frameIndex=$candidateIndex timestampMs=$timestampMs/$durationMs decodeMs=$decodeMs mode=${decision.mode} sample=${decision.sample} motionScore=${"%.3f".format(decision.motionScore)} reasons=${decision.reasons.joinToString(separator = \",\")}",
+                                            "decode_sample frameIndex=$candidateIndex timestampMs=$timestampMs/$durationMs decodeMs=$decodeMs mode=${decision.mode} sample=${decision.sample} motionScore=${"%.3f".format(decision.motionScore)} reasons=${decision.reasons.joinToString(separator = ",")}",
                                         )
                                     }
                                     if (decision.sample) {
