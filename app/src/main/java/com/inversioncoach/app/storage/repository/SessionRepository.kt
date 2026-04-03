@@ -35,6 +35,7 @@ import com.inversioncoach.app.drills.toSelectableDrill
 import com.inversioncoach.app.drills.catalog.DrillTemplate
 import com.inversioncoach.app.drills.studio.ReferenceTemplateDraftSerializer
 import com.inversioncoach.app.movementprofile.MovementProfileExtractor
+import com.inversioncoach.app.movementprofile.ReferenceTemplateDefinition
 import com.inversioncoach.app.movementprofile.ReferenceTemplateBuilder
 import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.storage.SessionBlobStorage
@@ -92,6 +93,12 @@ class SessionRepository(
         if (drillId == null) referenceTemplateDao.observeAll() else referenceTemplateDao.observeByDrillId(drillId)
 
     suspend fun getReferenceTemplate(templateId: String): ReferenceTemplateRecord? = referenceTemplateDao.getById(templateId)
+
+    suspend fun getReferenceTemplateDefinition(templateId: String): ReferenceTemplateDefinition? =
+        referenceTemplateDao.getById(templateId)?.let { ReferenceTemplatePersistenceCodec.decodeTemplateDefinition(it) }
+
+    fun getReferenceProfileIds(record: ReferenceTemplateRecord): List<String> =
+        ReferenceTemplatePersistenceCodec.decodeReferenceProfileIds(record.sourceProfileIdsJson)
 
     suspend fun saveReferenceTemplate(record: ReferenceTemplateRecord) = referenceTemplateDao.upsert(record)
     suspend fun updateTemplateFromDraft(

@@ -51,6 +51,15 @@ class DatabaseMigrationsTest {
     }
 
     @Test
+    fun migrationsAreUniqueAndContiguous() {
+        val pairs = DatabaseMigrations.ALL.map { it.startVersion to it.endVersion }
+        assertEquals("Migration pairs should be unique to avoid merge-conflict drift", pairs.toSet().size, pairs.size)
+
+        val expected = (11..19).map { it to it + 1 }
+        assertEquals("Migrations should cover every version hop from 11 to 20", expected, pairs)
+    }
+
+    @Test
     fun migrationSqlForCalibrationTableAndSessionColumnsIsDefined() {
         assertTrue(DatabaseMigrations.CREATE_DRILL_MOVEMENT_PROFILES_SQL.contains("CREATE TABLE IF NOT EXISTS `drill_movement_profiles`"))
         assertEquals(
