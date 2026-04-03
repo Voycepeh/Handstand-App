@@ -759,6 +759,7 @@ object AnnotatedExportJobTracker {
     }
 
     fun isActive(sessionId: Long): Boolean = activeSessionIds.contains(sessionId)
+    fun activeSessionIds(): Set<Long> = activeSessionIds.toSet()
 
     fun progressFor(sessionId: Long) = progressBySessionId.map { it[sessionId] }
 }

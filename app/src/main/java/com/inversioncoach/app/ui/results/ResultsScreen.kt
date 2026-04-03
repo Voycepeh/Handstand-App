@@ -60,7 +60,7 @@ import com.inversioncoach.app.ui.components.DropdownOption
 import com.inversioncoach.app.ui.components.ReliableDropdownField
 import com.inversioncoach.app.ui.components.SessionMediaActionsCard
 import com.inversioncoach.app.ui.live.mediaAssetExists
-import com.inversioncoach.app.ui.live.AnnotatedExportJobTracker
+import com.inversioncoach.app.ui.live.ExportWorkOwnership
 import com.inversioncoach.app.ui.live.SessionDiagnostics
 import com.inversioncoach.app.ui.upload.UploadJobCoordinator
 import kotlinx.coroutines.launch
@@ -158,12 +158,9 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
         notes = repository.readSessionNotes(sessionId).orEmpty()
         persistedDiagnostics = repository.readSessionDiagnostics(sessionId)
         repository.reconcileRawPersistState(sessionId)
-        val hasActiveExportWork =
-            AnnotatedExportJobTracker.isActive(sessionId) ||
-                (UploadJobCoordinator.isActive() && UploadJobCoordinator.currentSessionId() == sessionId)
         repository.recoverStaleAnnotatedExportState(
             sessionId = sessionId,
-            hasActiveExportWork = hasActiveExportWork,
+            hasActiveExportWork = ExportWorkOwnership.hasActiveExportWork(sessionId),
             trigger = "results_hydration",
         )
         repository.reconcileActiveUploadJobs(

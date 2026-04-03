@@ -60,7 +60,7 @@ import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
-import com.inversioncoach.app.ui.upload.UploadJobCoordinator
+import com.inversioncoach.app.ui.live.ExportWorkOwnership
 import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
@@ -91,11 +91,8 @@ fun HomeScreen(
     }
 
     LaunchedEffect(sessions) {
-        val activeExportSessionIds = buildSet {
-            UploadJobCoordinator.currentSessionId()?.let { add(it) }
-        }
         repository.recoverStaleAnnotatedExports(
-            activeExportSessionIds = activeExportSessionIds,
+            activeExportSessionIds = ExportWorkOwnership.activeSessionIds(),
             trigger = "home_hydration",
         )
     }
