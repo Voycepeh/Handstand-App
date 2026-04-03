@@ -17,14 +17,8 @@ class VoiceCoach(context: Context) : TextToSpeech.OnInitListener {
         }
     }
 
-    private var lastSpokenCueId: String? = null
-    private var lastSpokenAtMs: Long = 0L
-
     fun speak(cue: CoachingCue, volume: Float = 1f) {
         if (!ready) return
-
-        val nowMs = System.currentTimeMillis()
-        if (lastSpokenCueId == cue.id && nowMs - lastSpokenAtMs < DUPLICATE_CUE_GUARD_MS) return
 
         tts.setSpeechRate(1.0f)
         tts.setPitch(1.0f)
@@ -32,17 +26,10 @@ class VoiceCoach(context: Context) : TextToSpeech.OnInitListener {
             putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume.coerceIn(0f, 1f))
         }
         tts.speak(cue.text, TextToSpeech.QUEUE_FLUSH, params, "${cue.id}_${cue.generatedAtMs}")
-        lastSpokenCueId = cue.id
-        lastSpokenAtMs = nowMs
     }
 
     fun shutdown() {
         tts.stop()
         tts.shutdown()
     }
-
-    companion object {
-        private const val DUPLICATE_CUE_GUARD_MS = 800L
-    }
 }
-

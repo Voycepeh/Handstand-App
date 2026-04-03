@@ -200,6 +200,7 @@ class LiveCoachingViewModel(
     private var invalidFrameCount = 0
     private val validFrameScores = mutableListOf<Int>()
     private var activeBodyProfile: UserBodyProfile? = null
+    private val cueOrchestrator = SessionCueOrchestrator()
 
     val sessionTitle: String
         get() = if (sessionMode == SessionMode.FREESTYLE) "Freestyle Live Coaching session" else "${drillType.displayName} session"
@@ -577,9 +578,10 @@ class LiveCoachingViewModel(
             SessionDiagnostics.log("raw_faults drill=$drillType faults=${motionFaults.map { it.code }}")
         }
 
-        if (cue != null && _uiState.value.startupState == SessionStartupState.ACTIVE) {
-            _spokenCue.value = cue
-        }
+        cueOrchestrator.activeSessionCue(
+            cue = cue,
+            startupState = _uiState.value.startupState,
+        )?.let { _spokenCue.value = it }
 
         validFrameScores += analysis.score.overall
         if (!analysis.fault.isNullOrBlank()) {
@@ -663,6 +665,7 @@ class LiveCoachingViewModel(
     fun beginStartupCountdown(countdownSeconds: Int): Boolean {
         if (_uiState.value.startupState != SessionStartupState.IDLE || startupJob?.isActive == true) return false
         startupCancelled = false
+        cueOrchestrator.resetForStartup()
         _spokenCue.value = null
         _uiState.value = _uiState.value.copy(
             startupState = SessionStartupState.COUNTDOWN,
@@ -704,6 +707,10 @@ class LiveCoachingViewModel(
         _uiState.value = _uiState.value.copy(
             sessionCountdownRemainingSeconds = boundedRemaining,
         )
+        cueOrchestrator.countdownCue(
+            startupState = _uiState.value.startupState,
+            remainingSeconds = boundedRemaining,
+        )?.let { _spokenCue.value = it }
     }
 
     fun activateSessionIfStartupReady(): Boolean {
@@ -722,6 +729,7 @@ class LiveCoachingViewModel(
             sessionCountdownRemainingSeconds = null,
             warningMessage = null,
         )
+        cueOrchestrator.sessionStartedCue(startupState = _uiState.value.startupState)?.let { _spokenCue.value = it }
         startSession()
         return true
     }
@@ -731,6 +739,7 @@ class LiveCoachingViewModel(
         startupJob = null
         if (_uiState.value.startupState == SessionStartupState.ACTIVE) return
         startupCancelled = true
+        cueOrchestrator.resetForStartup()
         _spokenCue.value = null
         _uiState.value = _uiState.value.copy(
             startupState = SessionStartupState.CANCELLED,
