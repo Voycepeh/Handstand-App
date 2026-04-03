@@ -38,6 +38,11 @@ class DrillMovementProfileJson {
     }
 
     private fun bodyProfileJson(body: UserBodyProfile): JSONObject = JSONObject().apply {
+        val encoded = runCatching { JSONObject(body.encode()) }.getOrNull()
+        if (encoded != null) {
+            encoded.keys().forEach { key -> put(key, encoded.get(key)) }
+            return@apply
+        }
         put("version", body.captureVersion)
         put("shoulderWidthNormalized", body.shoulderWidthNormalized)
         put("hipWidthNormalized", body.hipWidthNormalized)
@@ -88,17 +93,19 @@ class DrillMovementProfileJson {
         })
     }
 
-    private fun decodeUserBodyProfile(obj: JSONObject): UserBodyProfile = UserBodyProfile(
-        version = obj.optInt("version", 1),
-        shoulderWidthNormalized = obj.optDouble("shoulderWidthNormalized", 0.0).toFloat(),
-        hipWidthNormalized = obj.optDouble("hipWidthNormalized", 0.0).toFloat(),
-        torsoLengthNormalized = obj.optDouble("torsoLengthNormalized", 0.0).toFloat(),
-        upperArmLengthNormalized = obj.optDouble("upperArmLengthNormalized", 0.0).toFloat(),
-        forearmLengthNormalized = obj.optDouble("forearmLengthNormalized", 0.0).toFloat(),
-        femurLengthNormalized = obj.optDouble("femurLengthNormalized", 0.0).toFloat(),
-        shinLengthNormalized = obj.optDouble("shinLengthNormalized", 0.0).toFloat(),
-        leftRightConsistency = obj.optDouble("leftRightConsistency", 0.0).toFloat(),
-    )
+    private fun decodeUserBodyProfile(obj: JSONObject): UserBodyProfile =
+        UserBodyProfile.decode(obj.toString())
+            ?: UserBodyProfile(
+                version = obj.optInt("version", 1),
+                shoulderWidthNormalized = obj.optDouble("shoulderWidthNormalized", 1.0).toFloat(),
+                hipWidthNormalized = obj.optDouble("hipWidthNormalized", 1.0).toFloat(),
+                torsoLengthNormalized = obj.optDouble("torsoLengthNormalized", 1.0).toFloat(),
+                upperArmLengthNormalized = obj.optDouble("upperArmLengthNormalized", 1.0).toFloat(),
+                forearmLengthNormalized = obj.optDouble("forearmLengthNormalized", 1.0).toFloat(),
+                femurLengthNormalized = obj.optDouble("femurLengthNormalized", 1.0).toFloat(),
+                shinLengthNormalized = obj.optDouble("shinLengthNormalized", 1.0).toFloat(),
+                leftRightConsistency = obj.optDouble("leftRightConsistency", 0.5).toFloat(),
+            )
 
     private fun decodeHoldTemplate(obj: JSONObject, fallbackDrillType: DrillType): HoldTemplate {
         val metrics = obj.optJSONArray("metrics")?.toMetricList().orEmpty()

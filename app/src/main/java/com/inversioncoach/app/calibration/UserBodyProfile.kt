@@ -3,6 +3,7 @@ package com.inversioncoach.app.calibration
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
+import kotlin.math.abs
 
 data class CaptureStepSummary(
     val stepType: String,
@@ -130,6 +131,40 @@ data class UserBodyProfile(
     }.toString()
 
     companion object {
+        fun normalize(profile: UserBodyProfile?): UserBodyProfile? {
+            val source = profile ?: return null
+            val ratios = source.segmentRatios
+            val symmetry = source.symmetryMetrics
+            if (!ratios.isValid()) return null
+            val shoulderToTorso = ratios.shoulderToTorso.coerceAtLeast(0.0001f)
+            val upperArmToTorso = ratios.upperArmToTorso.coerceAtLeast(0.0001f)
+            val thighToTorso = ratios.thighToTorso.coerceAtLeast(0.0001f)
+            val forearmToUpperArm = ratios.forearmToUpperArm.coerceAtLeast(0.0001f)
+            val shinToThigh = ratios.shinToThigh.coerceAtLeast(0.0001f)
+            return source.copy(
+                overallQuality = source.overallQuality.coerceIn(0f, 1f),
+                frontConfidence = source.frontConfidence.coerceIn(0f, 1f),
+                sideConfidence = source.sideConfidence.coerceIn(0f, 1f),
+                overheadConfidence = source.overheadConfidence.coerceIn(0f, 1f),
+                segmentRatios = SegmentRatios(
+                    shoulderToTorso = shoulderToTorso,
+                    hipToShoulder = ratios.hipToShoulder.coerceAtLeast(0.0001f),
+                    upperArmToTorso = upperArmToTorso,
+                    forearmToUpperArm = forearmToUpperArm,
+                    thighToTorso = thighToTorso,
+                    shinToThigh = shinToThigh,
+                    armToTorso = (upperArmToTorso + (forearmToUpperArm * upperArmToTorso)).coerceAtLeast(0.0001f),
+                    legToTorso = (thighToTorso + (shinToThigh * thighToTorso)).coerceAtLeast(0.0001f),
+                ),
+                symmetryMetrics = SymmetryMetrics(
+                    armSymmetry = symmetry.armSymmetry.coerceIn(0f, 1f),
+                    legSymmetry = symmetry.legSymmetry.coerceIn(0f, 1f),
+                    shoulderLevelBaseline = symmetry.shoulderLevelBaseline.sanitizeFinite(),
+                    hipLevelBaseline = symmetry.hipLevelBaseline.sanitizeFinite(),
+                ),
+            )
+        }
+
         fun decode(raw: String?): UserBodyProfile? {
             if (raw.isNullOrBlank()) return null
             if (!raw.trimStart().startsWith("{")) return decodeLegacy(raw)
@@ -149,7 +184,7 @@ data class UserBodyProfile(
                     "legToTorso",
                 ).all { segment.has(it) }
                 if (!hasRequiredRatios) return@runCatching null
-                UserBodyProfile(
+                normalize(UserBodyProfile(
                     id = obj.optString("id").takeIf { it.isNotBlank() } ?: "bp_${UUID.randomUUID()}",
                     name = obj.optString("name", "Body Profile"),
                     createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
@@ -190,7 +225,7 @@ data class UserBodyProfile(
                             )
                         }
                     },
-                )
+                ))
             }.getOrNull()
         }
 
@@ -206,7 +241,7 @@ data class UserBodyProfile(
                 val thigh = parts[6].toFloat()
                 val shin = parts[7].toFloat()
                 val symmetry = parts[8].toFloat()
-                UserBodyProfile(
+                normalize(UserBodyProfile(
                     captureVersion = parts[0].toInt(),
                     segmentRatios = SegmentRatios(
                         shoulderToTorso = shoulder,
@@ -224,8 +259,21 @@ data class UserBodyProfile(
                         shoulderLevelBaseline = 0f,
                         hipLevelBaseline = 0f,
                     ),
-                )
+                ))
             }.getOrNull()
         }
+
+        private fun SegmentRatios.isValid(): Boolean = listOf(
+            shoulderToTorso,
+            hipToShoulder,
+            upperArmToTorso,
+            forearmToUpperArm,
+            thighToTorso,
+            shinToThigh,
+            armToTorso,
+            legToTorso,
+        ).all { it.isFinite() && it > 0f && abs(it) < 100f }
+
+        private fun Float.sanitizeFinite(): Float = if (isFinite()) this else 0f
     }
 }

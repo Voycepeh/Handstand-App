@@ -71,7 +71,7 @@ object ServiceLocator {
         return calibrationProvider ?: synchronized(this) {
             calibrationProvider ?: DefaultCalibrationProfileProvider(
                 drillMovementProfileRepository(context),
-                runtimeBodyProfileResolver(context),
+                runtimeBodyProfileResolver(context)::resolve,
             ).also { calibrationProvider = it }
         }
     }
@@ -95,7 +95,6 @@ object ServiceLocator {
     fun runtimeBodyProfileResolver(context: Context): RuntimeBodyProfileResolver {
         return runtimeBodyProfileResolver ?: synchronized(this) {
             runtimeBodyProfileResolver ?: RuntimeBodyProfileResolver(
-                userProfileManager = null,
                 sessionRepository = repository(context),
             ).also { runtimeBodyProfileResolver = it }
         }
