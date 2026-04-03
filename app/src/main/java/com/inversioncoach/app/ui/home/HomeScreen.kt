@@ -49,9 +49,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.inversioncoach.app.model.AnnotatedExportQuality
+import com.inversioncoach.app.model.AppSettingsPolicy
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.UserSettings
-import com.inversioncoach.app.model.AnnotatedExportQuality
+import com.inversioncoach.app.model.effectiveExportQuality
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.storage.repository.UserProfileStatus
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
@@ -63,7 +65,6 @@ import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 import kotlinx.coroutines.launch
 
-private const val MB_PER_GB = 1024
 
 @Composable
 fun HomeScreen(
@@ -126,7 +127,7 @@ fun HomeScreen(
                             settings.copy(
                                 annotatedExportQuality = quality.name,
                                 startupCountdownSeconds = countdownSeconds,
-                                maxStorageMb = storageGb * MB_PER_GB,
+                                maxStorageMb = AppSettingsPolicy.storageGbToMb(storageGb),
                                 hasCompletedPreferencesOnboarding = true,
                             ),
                         )
@@ -137,9 +138,9 @@ fun HomeScreen(
                     scope.launch {
                         repository.saveSettings(
                             settings.copy(
-                                annotatedExportQuality = AnnotatedExportQuality.STABLE.name,
-                                startupCountdownSeconds = 10,
-                                maxStorageMb = 5 * MB_PER_GB,
+                                annotatedExportQuality = AppSettingsPolicy.defaultExportQuality.name,
+                                startupCountdownSeconds = AppSettingsPolicy.defaultCountdownSeconds,
+                                maxStorageMb = AppSettingsPolicy.defaultStorageMb,
                                 hasCompletedPreferencesOnboarding = true,
                             ),
                         )
@@ -159,15 +160,17 @@ private fun PreferencesOnboardingDialog(
 ) {
     var quality by remember(settings.annotatedExportQuality) {
         mutableStateOf(
-            runCatching { AnnotatedExportQuality.valueOf(settings.annotatedExportQuality) }
-                .getOrDefault(AnnotatedExportQuality.STABLE),
+            settings.effectiveExportQuality(),
         )
     }
     var countdown by remember(settings.startupCountdownSeconds) {
-        mutableIntStateOf(settings.startupCountdownSeconds.takeIf { it in listOf(3, 5, 10) } ?: 10)
+        mutableIntStateOf(
+            settings.startupCountdownSeconds.takeIf { it in AppSettingsPolicy.countdownOptionsSeconds }
+                ?: AppSettingsPolicy.defaultCountdownSeconds,
+        )
     }
     var storageGb by remember(settings.maxStorageMb) {
-        mutableIntStateOf((settings.maxStorageMb / MB_PER_GB).coerceIn(1, 100))
+        mutableIntStateOf(AppSettingsPolicy.storageMbToGb(settings.maxStorageMb))
     }
 
     AlertDialog(
@@ -191,7 +194,7 @@ private fun PreferencesOnboardingDialog(
                 )
                 Text("Countdown before recording", fontWeight = FontWeight.SemiBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(3, 5, 10).forEach { seconds ->
+                    AppSettingsPolicy.countdownOptionsSeconds.forEach { seconds ->
                         OutlinedButton(onClick = { countdown = seconds }) { Text("$seconds seconds") }
                     }
                 }
@@ -200,7 +203,9 @@ private fun PreferencesOnboardingDialog(
                 OutlinedTextField(
                     value = storageGb.toString(),
                     onValueChange = { raw ->
-                        raw.toIntOrNull()?.let { storageGb = it.coerceIn(1, 100) }
+                        raw.toIntOrNull()?.let {
+                            storageGb = it.coerceIn(AppSettingsPolicy.minStorageGb, AppSettingsPolicy.maxStorageGb)
+                        }
                     },
                     label = { Text("GB") },
                     singleLine = true,
@@ -209,7 +214,13 @@ private fun PreferencesOnboardingDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(quality, countdown, storageGb.coerceIn(1, 100)) }) {
+            Button(onClick = {
+                onConfirm(
+                    quality,
+                    countdown,
+                    storageGb.coerceIn(AppSettingsPolicy.minStorageGb, AppSettingsPolicy.maxStorageGb),
+                )
+            }) {
                 Text("Save preferences")
             }
         },

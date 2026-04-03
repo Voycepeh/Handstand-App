@@ -39,11 +39,11 @@ import androidx.lifecycle.viewModelScope
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.AnnotatedExportFailureReason
-import com.inversioncoach.app.model.AnnotatedExportQuality
 import com.inversioncoach.app.drills.DrillStatus
 import com.inversioncoach.app.drills.DrillCameraView
 import com.inversioncoach.app.drills.DrillMovementMode
 import com.inversioncoach.app.model.DrillType
+import com.inversioncoach.app.model.effectiveExportQuality
 import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.ReferenceAssetRecord
 import com.inversioncoach.app.model.RawPersistStatus
@@ -242,10 +242,7 @@ class DefaultUploadVideoAnalysisRunner(
         onProgress: (UploadProgress) -> Unit,
         onLog: (String) -> Unit,
     ): UploadFlowResult = withContext(Dispatchers.IO) {
-        val exportQuality = repository.observeSettings().first().annotatedExportQuality
-        val preset = runCatching { AnnotatedExportQuality.valueOf(exportQuality) }
-            .getOrDefault(AnnotatedExportQuality.STABLE)
-            .toExportPreset()
+        val preset = repository.observeSettings().first().effectiveExportQuality().toExportPreset()
         val startedAt = System.currentTimeMillis()
         val drillDefinition = selectedDrillId?.let { repository.getDrill(it) }
         val activeProfileContext = runtimeBodyProfileResolver?.resolve()

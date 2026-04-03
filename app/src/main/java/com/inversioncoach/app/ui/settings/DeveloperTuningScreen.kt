@@ -22,7 +22,6 @@ fun DeveloperTuningScreen(onBack: () -> Unit) {
     var elbow by remember { mutableFloatStateOf(ThresholdTuningStore.elbowBottomThresholdDeg) }
     var trunk by remember { mutableFloatStateOf(ThresholdTuningStore.trunkLeanMaxDeg) }
     var line by remember { mutableFloatStateOf(ThresholdTuningStore.lineDeviationMaxNorm) }
-    var tempo by remember { mutableFloatStateOf(ThresholdTuningStore.tempoMinSec) }
 
     ScaffoldedScreen(title = "Developer threshold tuning", onBack = onBack) { padding ->
         Column(
@@ -46,12 +45,6 @@ fun DeveloperTuningScreen(onBack: () -> Unit) {
                 line = it
                 ThresholdTuningStore.lineDeviationMaxNorm = it
             }, valueRange = 0.05f..0.35f)
-
-            Text("Tempo min sec: ${"%.2f".format(tempo)}")
-            Slider(value = tempo, onValueChange = {
-                tempo = it
-                ThresholdTuningStore.tempoMinSec = it
-            }, valueRange = 0.3f..2f)
 
             Text("Changes are applied live for debug/development sessions.", modifier = Modifier.fillMaxWidth())
         }

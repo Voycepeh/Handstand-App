@@ -34,12 +34,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.inversioncoach.app.model.AnnotatedExportQuality
+import com.inversioncoach.app.model.AppSettingsPolicy
 import com.inversioncoach.app.model.UserSettings
+import com.inversioncoach.app.model.effectiveExportQuality
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import kotlinx.coroutines.launch
-
-private const val MB_PER_GB = 1024
 
 @Composable
 fun SettingsScreen(
@@ -56,9 +56,9 @@ fun SettingsScreen(
     var cueFrequency by remember { mutableFloatStateOf(2f) }
     var debug by remember { mutableStateOf(false) }
     var localOnlyPrivacyMode by remember { mutableStateOf(true) }
-    var maxStorageGb by remember { mutableIntStateOf(5) }
-    var startupCountdownSeconds by remember { mutableIntStateOf(10) }
-    var exportQuality by remember { mutableStateOf(AnnotatedExportQuality.STABLE) }
+    var maxStorageGb by remember { mutableIntStateOf(AppSettingsPolicy.defaultStorageGb) }
+    var startupCountdownSeconds by remember { mutableIntStateOf(AppSettingsPolicy.defaultCountdownSeconds) }
+    var exportQuality by remember { mutableStateOf(AppSettingsPolicy.defaultExportQuality) }
     var showSaveConfirmation by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
@@ -68,10 +68,9 @@ fun SettingsScreen(
             cueFrequency = settings.cueFrequencySeconds
             debug = settings.debugOverlayEnabled
             localOnlyPrivacyMode = settings.localOnlyPrivacyMode
-            maxStorageGb = (settings.maxStorageMb.toFloat() / MB_PER_GB).toInt().coerceIn(1, 100)
+            maxStorageGb = AppSettingsPolicy.storageMbToGb(settings.maxStorageMb)
             startupCountdownSeconds = settings.startupCountdownSeconds
-            exportQuality = runCatching { AnnotatedExportQuality.valueOf(settings.annotatedExportQuality) }
-                .getOrDefault(AnnotatedExportQuality.STABLE)
+            exportQuality = settings.effectiveExportQuality()
         }
     }
 
@@ -94,7 +93,7 @@ fun SettingsScreen(
 
             StorageSettingsCard(
                 storageLimitGb = maxStorageGb,
-                onStorageLimitGbChanged = { maxStorageGb = it.coerceIn(1, 100) },
+                onStorageLimitGbChanged = { maxStorageGb = it.coerceIn(AppSettingsPolicy.minStorageGb, AppSettingsPolicy.maxStorageGb) },
             )
 
             SettingsCard(title = "Voice cues") {
@@ -136,7 +135,7 @@ fun SettingsScreen(
                                     cueFrequencySeconds = cueFrequency,
                                     debugOverlayEnabled = debug,
                                     localOnlyPrivacyMode = localOnlyPrivacyMode,
-                                    maxStorageMb = maxStorageGb * MB_PER_GB,
+                                    maxStorageMb = AppSettingsPolicy.storageGbToMb(maxStorageGb),
                                     startupCountdownSeconds = startupCountdownSeconds,
                                     annotatedExportQuality = exportQuality.name,
                                 ),
@@ -200,7 +199,7 @@ private fun CountdownSettingsCard(
     selectedSeconds: Int,
     onSelectedSeconds: (Int) -> Unit,
 ) {
-    val options = listOf(3, 5, 10)
+    val options = AppSettingsPolicy.countdownOptionsSeconds
     SettingsCard(title = "Countdown before recording") {
         Text(
             "Choose how long the app waits before recording starts. Use a longer countdown if you need more time to get into position.",
@@ -233,7 +232,7 @@ private fun StorageSettingsCard(
         Slider(
             value = storageLimitGb.toFloat(),
             onValueChange = { onStorageLimitGbChanged(it.toInt()) },
-            valueRange = 1f..100f,
+            valueRange = AppSettingsPolicy.minStorageGb.toFloat()..AppSettingsPolicy.maxStorageGb.toFloat(),
         )
         Text("$storageLimitGb GB")
     }

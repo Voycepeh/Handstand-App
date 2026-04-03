@@ -22,6 +22,7 @@ import com.inversioncoach.app.model.SessionComparisonRecord
 import com.inversioncoach.app.model.UploadJobPipelineType
 import com.inversioncoach.app.model.UploadJobStatus
 import com.inversioncoach.app.model.UserSettings
+import com.inversioncoach.app.model.normalized
 import com.inversioncoach.app.calibration.UserBodyProfile
 import com.inversioncoach.app.drills.DrillCameraView
 import com.inversioncoach.app.drills.DrillMovementMode
@@ -696,11 +697,12 @@ class SessionRepository(
     }
 
     fun observeSettings(): Flow<UserSettings> =
-        userSettingsDao.observeSettings().map { it ?: UserSettings() }
+        userSettingsDao.observeSettings().map { (it ?: UserSettings()).normalized() }
 
     suspend fun saveSettings(settings: UserSettings) {
-        userSettingsDao.upsert(settings)
-        enforceStorageLimit(settings.maxStorageMb)
+        val normalizedSettings = settings.normalized()
+        userSettingsDao.upsert(normalizedSettings)
+        enforceStorageLimit(normalizedSettings.maxStorageMb)
     }
 
     suspend fun getDrillCameraSide(drillType: DrillType): DrillCameraSide? {
@@ -873,7 +875,7 @@ class SessionRepository(
         )
 
     private suspend fun enforceConfiguredStorageLimit() {
-        val settings = userSettingsDao.getSettings() ?: UserSettings()
+        val settings = (userSettingsDao.getSettings() ?: UserSettings()).normalized()
         enforceStorageLimit(settings.maxStorageMb)
     }
 
