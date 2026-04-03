@@ -10,7 +10,9 @@ import com.inversioncoach.app.drills.studio.DrillStudioDocument
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 data class DrillStudioEditorState(
@@ -37,11 +39,22 @@ class DrillStudioEditorViewModel(
     val state: StateFlow<DrillStudioEditorState> = _state.asStateFlow()
 
     fun initialize(initialDrillId: String?) {
-        refreshAndSelect(initialDrillId)
+        val current = _state.value
+        if (current.hasUnsavedChanges) return
+        viewModelScope.launch {
+            refreshAndSelect(initialDrillId)
+        }
     }
 
     fun selectDrill(drillId: String) {
-        refreshAndSelect(drillId)
+        val current = _state.value
+        if (current.hasUnsavedChanges && current.selectedDrillId != drillId) {
+            _state.value = current.copy(status = "Unsaved changes. Save or reset before switching drills.")
+            return
+        }
+        viewModelScope.launch {
+            refreshAndSelect(drillId)
+        }
     }
 
     fun updateWorking(updated: DrillStudioDocument) {
@@ -50,38 +63,44 @@ class DrillStudioEditorViewModel(
 
     fun saveDraft() {
         val draft = _state.value.working ?: return
-        runCatching {
-            store.saveDraft(draft)
-            refreshAndSelect(draft.id, status = "Draft saved")
-        }.onFailure { throwable ->
-            _state.value = _state.value.copy(status = "Save failed: ${throwable.message}")
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { store.saveDraft(draft) }
+                refreshAndSelect(draft.id, status = "Draft saved")
+            }.onFailure { throwable ->
+                _state.value = _state.value.copy(status = "Save failed: ${throwable.message}")
+            }
         }
     }
 
     fun resetDraft() {
         val draft = _state.value.working ?: return
-        runCatching {
-            store.resetDraft(draft.id)
-            refreshAndSelect(draft.id, status = "Draft reset")
-        }.onFailure { throwable ->
-            _state.value = _state.value.copy(status = "Reset failed: ${throwable.message}")
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { store.resetDraft(draft.id) }
+                refreshAndSelect(draft.id, status = "Draft reset")
+            }.onFailure { throwable ->
+                _state.value = _state.value.copy(status = "Reset failed: ${throwable.message}")
+            }
         }
     }
 
     fun duplicateSelected() {
         val draft = _state.value.working ?: return
-        runCatching {
-            val duplicate = store.duplicate(draft.id)
-            refreshAndSelect(duplicate.id, status = "Duplicated to ${duplicate.displayName}")
-        }.onFailure { throwable ->
-            _state.value = _state.value.copy(status = "Duplicate failed: ${throwable.message}")
+        viewModelScope.launch {
+            runCatching {
+                val duplicate = withContext(Dispatchers.IO) { store.duplicate(draft.id) }
+                refreshAndSelect(duplicate.id, status = "Duplicated to ${duplicate.displayName}")
+            }.onFailure { throwable ->
+                _state.value = _state.value.copy(status = "Duplicate failed: ${throwable.message}")
+            }
         }
     }
 
     fun importDraft(uri: Uri) {
         viewModelScope.launch {
             runCatching {
-                val imported = importExport.importDraft(uri)
+                val imported = withContext(Dispatchers.IO) { importExport.importDraft(uri) }
                 refreshAndSelect(imported.id, status = "Imported ${imported.displayName}")
             }.onFailure { throwable ->
                 _state.value = _state.value.copy(status = "Import failed: ${throwable.message}")
@@ -89,25 +108,33 @@ class DrillStudioEditorViewModel(
         }
     }
 
-    fun exportDraft(): File? {
-        val draft = _state.value.working ?: return null
-        return runCatching {
-            importExport.exportDraft(draft).also { file ->
-                _state.value = _state.value.copy(status = "Exported ${file.name}")
+    fun exportDraft(onComplete: (File?) -> Unit) {
+        val draft = _state.value.working ?: run {
+            onComplete(null)
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                val exported = withContext(Dispatchers.IO) { importExport.exportDraft(draft) }
+                _state.value = _state.value.copy(status = "Exported ${exported.name}")
+                onComplete(exported)
+            }.getOrElse { throwable ->
+                _state.value = _state.value.copy(status = "Export failed: ${throwable.message}")
+                onComplete(null)
             }
-        }.getOrElse { throwable ->
-            _state.value = _state.value.copy(status = "Export failed: ${throwable.message}")
-            null
         }
     }
 
-    private fun refreshAndSelect(requestedId: String?, status: String? = null) {
-        val drills = store.listDrills()
-        val selectedId = requestedId
-            ?.takeIf { id -> drills.any { it.id == id } }
-            ?: drills.firstOrNull()?.id
-            .orEmpty()
-        val baseline = selectedId.takeIf { it.isNotBlank() }?.let(store::loadForEditor)
+    private suspend fun refreshAndSelect(requestedId: String?, status: String? = null) {
+        val (drills, selectedId, baseline) = withContext(Dispatchers.IO) {
+            val drills = store.listDrills()
+            val selectedId = requestedId
+                ?.takeIf { id -> drills.any { it.id == id } }
+                ?: drills.firstOrNull()?.id
+                .orEmpty()
+            val baseline = selectedId.takeIf { it.isNotBlank() }?.let(store::loadForEditor)
+            Triple(drills, selectedId, baseline)
+        }
         _state.value = DrillStudioEditorState(
             drills = drills,
             selectedDrillId = selectedId,

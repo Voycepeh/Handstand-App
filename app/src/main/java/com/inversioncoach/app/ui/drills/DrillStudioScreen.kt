@@ -242,14 +242,16 @@ fun DrillStudioScreen(onBack: () -> Unit, initialDrillId: String? = null) {
                 }
 
                 Button(onClick = {
-                    val exported = vm.exportDraft() ?: return@Button
-                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", exported)
-                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "application/json"
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    vm.exportDraft { exported ->
+                        if (exported == null) return@exportDraft
+                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", exported)
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/json"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Share drill draft"))
                     }
-                    context.startActivity(Intent.createChooser(shareIntent, "Share drill draft"))
                 }, modifier = Modifier.fillMaxWidth()) {
                     Text("Export & Share JSON")
                 }
