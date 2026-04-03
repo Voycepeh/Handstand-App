@@ -84,10 +84,10 @@ sealed class Route(val value: String) {
 }
 
 @Composable
-fun AppNavHost(modifier: Modifier = Modifier, openSessionId: Long? = null) {
+fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
     val navController = rememberNavController()
-    LaunchedEffect(openSessionId) {
-        openSessionId?.let { navController.navigate(Route.Results.create(it)) }
+    LaunchedEffect(initialSessionId) {
+        initialSessionId?.let { navController.navigate(Route.Results.create(it)) }
     }
     NavHost(navController = navController, startDestination = Route.Home.value, modifier = modifier) {
         composable(Route.Home.value) {

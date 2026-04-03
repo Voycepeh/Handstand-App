@@ -10,21 +10,20 @@ import com.inversioncoach.app.ui.navigation.AppNavHost
 import com.inversioncoach.app.ui.theme.InversionCoachTheme
 
 class MainActivity : ComponentActivity() {
-    private var pendingOpenSessionId: Long? by mutableStateOf(null)
-
+    private var launchSessionId: Long? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        pendingOpenSessionId = intent?.getLongExtra("openSessionId", -1L)?.takeIf { it > 0L }
+        launchSessionId = intent?.extras?.getLong("upload_session_id")?.takeIf { it > 0L }
         setContent {
             InversionCoachTheme {
-                AppNavHost(openSessionId = pendingOpenSessionId)
+                AppNavHost(initialSessionId = launchSessionId)
             }
         }
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        launchSessionId = intent.extras?.getLong("upload_session_id")?.takeIf { it > 0L }
         setIntent(intent)
-        pendingOpenSessionId = intent.getLongExtra("openSessionId", -1L).takeIf { it > 0L }
     }
 }

@@ -16,6 +16,7 @@ import com.inversioncoach.app.model.ReferenceAssetRecord
 import com.inversioncoach.app.model.ReferenceTemplateRecord
 import com.inversioncoach.app.model.SessionComparisonRecord
 import com.inversioncoach.app.model.SessionRecord
+import com.inversioncoach.app.model.UploadProcessingJob
 import com.inversioncoach.app.model.UserProfileEntity
 import com.inversioncoach.app.model.UserProfileRecord
 import com.inversioncoach.app.model.UploadProcessingJobRecord
@@ -38,9 +39,9 @@ import com.inversioncoach.app.model.UserSettings
         ReferenceAssetRecord::class,
         MovementProfileRecord::class,
         CalibrationConfigRecord::class,
-        UploadProcessingJobRecord::class,
+        UploadProcessingJob::class,
     ],
-    version = 19,
+    version = 20,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)

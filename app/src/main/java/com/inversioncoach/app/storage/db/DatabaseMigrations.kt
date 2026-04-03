@@ -298,6 +298,49 @@ object DatabaseMigrations {
         }
     }
 
+
+    val MIGRATION_19_20: Migration = object : Migration(19, 20) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `upload_processing_jobs` (
+                    `jobId` TEXT NOT NULL,
+                    `sessionId` INTEGER,
+                    `sourceUri` TEXT NOT NULL,
+                    `trackingMode` TEXT NOT NULL,
+                    `selectedDrillId` TEXT,
+                    `selectedReferenceTemplateId` TEXT,
+                    `isReferenceUpload` INTEGER NOT NULL,
+                    `createDrillFromReferenceUpload` INTEGER NOT NULL,
+                    `pendingDrillName` TEXT,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    `enqueueOrder` INTEGER NOT NULL,
+                    `status` TEXT NOT NULL,
+                    `currentStage` TEXT NOT NULL,
+                    `stageStartedAt` INTEGER,
+                    `startedAt` INTEGER,
+                    `completedAt` INTEGER,
+                    `lastHeartbeatAt` INTEGER,
+                    `lastProgressAt` INTEGER,
+                    `processedFrames` INTEGER NOT NULL,
+                    `totalFrames` INTEGER NOT NULL,
+                    `lastTimestampMs` INTEGER,
+                    `retryCount` INTEGER NOT NULL,
+                    `maxRetries` INTEGER NOT NULL,
+                    `failureReason` TEXT,
+                    `timeoutReason` TEXT,
+                    `isRecoverable` INTEGER NOT NULL,
+                    `workerToken` TEXT,
+                    PRIMARY KEY(`jobId`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_upload_processing_jobs_status_enqueueOrder` ON `upload_processing_jobs` (`status`, `enqueueOrder`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_upload_processing_jobs_sessionId` ON `upload_processing_jobs` (`sessionId`)")
+        }
+    }
+
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_11_12,
         MIGRATION_12_13,
@@ -307,5 +350,6 @@ object DatabaseMigrations {
         MIGRATION_16_17,
         MIGRATION_17_18,
         MIGRATION_18_19,
+        MIGRATION_19_20,
     )
 }

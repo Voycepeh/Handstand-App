@@ -42,6 +42,15 @@ class DatabaseMigrationsTest {
     }
 
     @Test
+    fun includesMigrationFrom19To20() {
+        val has19To20 = DatabaseMigrations.ALL.any { migration ->
+            migration.startVersion == 19 && migration.endVersion == 20
+        }
+
+        assertTrue("DatabaseMigrations.ALL must contain Migration(19, 20)", has19To20)
+    }
+
+    @Test
     fun migrationSqlForCalibrationTableAndSessionColumnsIsDefined() {
         assertTrue(DatabaseMigrations.CREATE_DRILL_MOVEMENT_PROFILES_SQL.contains("CREATE TABLE IF NOT EXISTS `drill_movement_profiles`"))
         assertEquals(

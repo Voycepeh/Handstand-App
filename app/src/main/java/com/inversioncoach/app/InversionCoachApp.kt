@@ -8,7 +8,8 @@ import com.inversioncoach.app.movementprofile.ReferenceTemplateLoader
 import com.inversioncoach.app.movementprofile.toRecord
 import com.inversioncoach.app.history.RetentionCleanupWorker
 import com.inversioncoach.app.storage.ServiceLocator
-import com.inversioncoach.app.ui.upload.UploadProcessingOrchestrator
+import com.inversioncoach.app.upload.UploadProcessingNotifications
+import com.inversioncoach.app.upload.UploadQueueCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,11 +28,8 @@ class InversionCoachApp : Application(), Configuration.Provider {
         }
         appScope.launch {
             val repo = ServiceLocator.repository(this@InversionCoachApp)
-            Log.i("InversionCoachApp", "process_recreation_reconcile_start")
-            repo.reconcileActiveUploadJobs(
-                hasActiveWorker = false,
-                reason = "app_launch_process_recreation",
-            )
+            UploadProcessingNotifications(this@InversionCoachApp).ensureChannel()
+            UploadQueueCoordinator.get(this@InversionCoachApp).reconcileAndKickoff("app_start")
             val now = System.currentTimeMillis()
             val existingDrills = repo.getAllDrills().first()
             val catalog = runCatching { DrillCatalogRepository(this@InversionCoachApp).loadCatalog() }.getOrNull()

@@ -79,6 +79,8 @@ import com.inversioncoach.app.recording.OverlayTimelineJson
 import com.inversioncoach.app.recording.toTimelineFrame
 import com.inversioncoach.app.model.toExportPreset
 import com.inversioncoach.app.storage.ServiceLocator
+import com.inversioncoach.app.upload.EnqueueResult
+import com.inversioncoach.app.upload.UploadQueueCoordinator
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.SessionDiagnostics
@@ -1267,6 +1269,7 @@ class UploadVideoViewModel(
     private val isReferenceUpload: Boolean,
     private val createDrillFromReferenceUpload: Boolean,
     private val pendingDrillName: String? = null,
+    private val queueCoordinator: UploadQueueCoordinator? = null,
     private val resolveDrillTrackingMode: suspend (String) -> UploadTrackingMode? = { drillId ->
         repository?.getDrill(drillId)?.movementMode?.toUploadTrackingMode()
     },
@@ -1287,7 +1290,7 @@ class UploadVideoViewModel(
         private val uploadScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     }
 
-    constructor(runner: UploadVideoAnalysisRunner) : this(runner, null, null, null, false, false, null)
+    constructor(runner: UploadVideoAnalysisRunner) : this(runner, null, null, null, false, false, null, null)
 
     init {
         if (selectedDrillId != null) {
@@ -1317,33 +1320,17 @@ class UploadVideoViewModel(
         val repo = repository
         if (repo != null) {
             viewModelScope.launch {
-                Log.i(TAG, "process_recreation_reconcile_start hasActiveWorker=${UploadJobCoordinator.isActive()}")
-                val reconciled = repo.reconcileActiveUploadJobs(
-                    hasActiveWorker = UploadJobCoordinator.isActive(),
-                    reason = "upload_screen_entry",
-                )
-                val active = reconciled ?: repo.getActiveUploadedSession()
-                Log.i(TAG, "reconciliation_result sessionId=${active?.id ?: -1} status=${active?.uploadJobStatus ?: "none"}")
-                if (active != null) {
-                    observedSessionId = active.id
-                    _state.update { current ->
-                        current.copy(
-                            sessionId = active.id,
-                            stage = deriveUploadStage(active),
-                            currentProcessingStage = deriveUploadStage(active),
-                            stageText = active.uploadProgressDetail
-                                ?: if (active.uploadJobStatus == UploadJobStatus.STALLED) "Processing stopped unexpectedly" else current.stageText,
-                            errorMessage = if (active.uploadJobStatus == UploadJobStatus.STALLED) {
-                                active.uploadJobFailureReason ?: "Processing stopped unexpectedly"
-                            } else {
-                                current.errorMessage
-                            },
-                            canCancel = active.uploadJobStatus == UploadJobStatus.PROCESSING,
-                        )
+                if (activeSessionId == null) {
+                    val restored = repo.observeSessions().first().firstOrNull { session ->
+                        session.sessionSource == SessionSource.UPLOADED_VIDEO &&
+                            session.annotatedExportStatus in setOf(
+                                AnnotatedExportStatus.VALIDATING_INPUT,
+                                AnnotatedExportStatus.PROCESSING,
+                                AnnotatedExportStatus.PROCESSING_SLOW,
+                            )
                     }
+                    if (restored != null) activeSessionId = restored.id
                 }
-            }
-            viewModelScope.launch {
                 repo.observeSessions().collectLatest { sessions ->
                     val sessionId = observedSessionId ?: return@collectLatest
                     val session = sessions.firstOrNull { it.id == sessionId } ?: return@collectLatest
@@ -1442,21 +1429,43 @@ class UploadVideoViewModel(
             }
             return
         }
-        runningJob = uploadScope.launch {
-            val existingActive = repository?.getActiveUploadedSession()
-            if (existingActive != null) {
-                _state.update {
-                    it.copy(
-                        sessionId = existingActive.id,
-                        stage = deriveUploadStage(existingActive),
-                        currentProcessingStage = deriveUploadStage(existingActive),
-                        stageText = existingActive.uploadProgressDetail ?: "Another upload is already in progress.",
-                        errorMessage = "Another upload is already in progress. Reopen it to continue.",
-                        canCancel = false,
+        if (queueCoordinator != null) {
+            viewModelScope.launch {
+                when (
+                    queueCoordinator.enqueue(
+                        sourceUri = uri.toString(),
+                        trackingMode = trackingMode.name,
+                        selectedDrillId = selectedDrillId,
+                        selectedReferenceTemplateId = selectedReferenceTemplateId,
+                        isReferenceUpload = isReferenceUpload,
+                        createDrillFromReferenceUpload = createDrillFromReferenceUpload,
+                        pendingDrillName = _state.value.pendingDrillName,
                     )
+                ) {
+                    is EnqueueResult.Enqueued -> _state.update {
+                        it.copy(
+                            selectedVideoUri = uri,
+                            stage = UploadStage.PREPARING_ANALYSIS,
+                            currentProcessingStage = UploadStage.PREPARING_ANALYSIS,
+                            stageText = "Upload queued for background processing.",
+                            errorMessage = null,
+                            canCancel = true,
+                        )
+                    }
+                    EnqueueResult.QueueFull -> _state.update {
+                        it.copy(
+                            stage = UploadStage.FAILED,
+                            currentProcessingStage = UploadStage.FAILED,
+                            stageText = "Queue full",
+                            errorMessage = "Upload queue is full. Wait for current processing to finish.",
+                            canCancel = false,
+                        )
+                    }
                 }
-                return@launch
             }
+            return
+        }
+        activeJob = uploadScope.launch {
             _state.update {
                 it.copy(
                     selectedVideoUri = uri,
@@ -1699,6 +1708,7 @@ fun UploadVideoScreen(
             isReferenceUpload,
             createDrillFromReferenceUpload,
             pendingDrillName = defaultDraftName,
+            queueCoordinator = UploadQueueCoordinator.get(context),
         )
     }
     val state by viewModel.state.collectAsState()

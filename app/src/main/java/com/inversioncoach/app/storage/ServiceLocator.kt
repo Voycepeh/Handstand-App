@@ -13,6 +13,7 @@ import com.inversioncoach.app.calibration.storage.RoomDrillMovementProfileReposi
 import com.inversioncoach.app.storage.db.DatabaseMigrations
 import com.inversioncoach.app.storage.db.InversionCoachDatabase
 import com.inversioncoach.app.storage.repository.SessionRepository
+import com.inversioncoach.app.storage.repository.UploadProcessingQueueRepository
 
 object ServiceLocator {
     @Volatile
@@ -25,6 +26,8 @@ object ServiceLocator {
     private var drillMovementProfileRepository: DrillMovementProfileRepository? = null
     @Volatile
     private var runtimeBodyProfileResolver: RuntimeBodyProfileResolver? = null
+    @Volatile
+    private var uploadProcessingQueueRepository: UploadProcessingQueueRepository? = null
 
     fun db(context: Context): InversionCoachDatabase {
         return db ?: synchronized(this) {
@@ -79,6 +82,13 @@ object ServiceLocator {
                 dao = db(context).calibrationDao(),
                 json = DrillMovementProfileJson(),
             ).also { drillMovementProfileRepository = it }
+        }
+    }
+
+    fun uploadQueueRepository(context: Context): UploadProcessingQueueRepository {
+        return uploadProcessingQueueRepository ?: synchronized(this) {
+            uploadProcessingQueueRepository ?: UploadProcessingQueueRepository(db(context).uploadProcessingJobDao())
+                .also { uploadProcessingQueueRepository = it }
         }
     }
 
