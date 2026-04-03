@@ -2,6 +2,56 @@
 
 CaliVision is a drill-centric Android training app for calisthenics practice. It connects live coaching, upload analysis, drill authoring, replay review, and calibration/profile context in one workflow.
 
+## Why I built CaliVision
+
+I built CaliVision because my own movement practice felt too unstructured when it depended on recording videos and replaying them manually. I wanted a tighter loop: practice with intention, compare against references, and get structured feedback quickly enough to adjust in the next set—not hours later.
+
+The goal is simple: shorten the feedback cycle for calisthenics and handstand training through analysis, comparison, and drill-centered review. CaliVision is also an active experiment in practical AI-assisted software development, where AI helps accelerate the work but does not replace human judgment.
+
+## How this project is built
+
+This project uses a human-led, AI-assisted workflow:
+
+- **ChatGPT** is used as a planning and architecture partner: clarifying requirements, pressure-testing design choices, explaining tradeoffs, and reviewing proposed changes.
+- **Codex** is used as an execution partner: implementing scoped repository changes, updating docs, and preparing PR-ready diffs.
+- **Human owner (me)** remains the decision-maker: selecting direction, compiling/integrating in VS Code, validating behavior, and manually testing the app on real workflows.
+
+Short version for skimmers: **ChatGPT helps plan, Codex helps implement, and I approve + validate everything before it ships.**
+
+```mermaid
+flowchart LR
+    IDEA[Problem / Idea]
+    PLAN[Plan with ChatGPT]
+    EXEC[Execute with Codex]
+    BUILD[Compile + Integrate in VS Code]
+    TEST[Manual App Testing]
+    REVIEW[Review + Refine]
+
+    IDEA --> PLAN --> EXEC --> BUILD --> TEST --> REVIEW --> PLAN
+```
+
+## Human-in-the-loop SDLC
+
+This is intentionally **not** fully autonomous software development. AI contributes speed, structure, and implementation support, while human oversight controls quality and product direction.
+
+```mermaid
+flowchart TB
+    H[Human Owner]
+    G[ChatGPT<br/>Planner / Architecture Sounding Board<br/>Explainer / Reviewer]
+    C[Codex<br/>Scoped Repo Executor]
+    V[VS Code + Local Build]
+    T[App Testing]
+
+    H -->|Defines goals, accepts/rejects changes| G
+    H -->|Delegates scoped implementation tasks| C
+    G -->|Plans, reviews, explains tradeoffs| H
+    C -->|Produces code/doc diffs| H
+    H -->|Compiles + integrates| V
+    V -->|Build artifacts for verification| T
+    H -->|Runs manual tests + signs off| T
+    T -->|Findings + regressions| H
+```
+
 ## What the app does
 
 CaliVision keeps users in drill context from start to review:
