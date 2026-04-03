@@ -14,7 +14,20 @@ class LiveRouteTest {
         )
 
         assertEquals(
-            "live/FREE_HANDSTAND/true/true/true/true/true/true/LEFT/FREESTYLE?selectedDrillId=drill%20custom%2Fid",
+            "live/FREE_HANDSTAND/true/true/true/true/true/true/LEFT/SIDE?selectedDrillId=drill%20custom%2Fid",
+            route,
+        )
+    }
+
+    @Test
+    fun liveRouteKeepsFreestyleViewForFreestyleSessions() {
+        val route = Route.Live.create(
+            drillType = DrillType.FREESTYLE,
+            options = LiveSessionOptions(),
+        )
+
+        assertEquals(
+            "live/FREESTYLE/true/true/true/true/true/true/LEFT/FREESTYLE?selectedDrillId=",
             route,
         )
     }

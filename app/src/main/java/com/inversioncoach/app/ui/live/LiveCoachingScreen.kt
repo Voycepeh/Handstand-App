@@ -56,6 +56,7 @@ import com.inversioncoach.app.model.LiveSessionOptions
 import com.inversioncoach.app.model.SessionStartupState
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.model.SessionMode
+import com.inversioncoach.app.model.canonicalizeFor
 import com.inversioncoach.app.motion.DrillCatalog
 import com.inversioncoach.app.motion.RepMode
 import com.inversioncoach.app.overlay.FreestyleViewMode
@@ -85,6 +86,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     val repository = remember { ServiceLocator.repository(context) }
 
     val trackingMode = remember(drillType) { DrillCatalog.byType(drillType).repMode }
+    val resolvedOptions = remember(drillType, options) { options.canonicalizeFor(drillType) }
 
     val vm = remember {
         LiveCoachingViewModel(
@@ -94,7 +96,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             repository = repository,
             calibrationProfileProvider = ServiceLocator.calibrationProfileProvider(context),
             runtimeBodyProfileResolver = ServiceLocator.runtimeBodyProfileResolver(context),
-            options = options,
+            options = resolvedOptions,
             annotatedExportPipeline = AnnotatedExportPipeline(
                 repository = repository,
                 compositor = AnnotatedVideoCompositor(context.applicationContext),
@@ -192,11 +194,11 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     LaunchedEffect(
         spokenCue?.generatedAtMs,
         settings.audioVolume,
-        options.voiceEnabled,
+        resolvedOptions.voiceEnabled,
         uiState.startupState,
     ) {
         val cue = spokenCue ?: return@LaunchedEffect
-        if (!options.voiceEnabled) return@LaunchedEffect
+        if (!resolvedOptions.voiceEnabled) return@LaunchedEffect
         if (settings.audioVolume <= 0f) return@LaunchedEffect
         if (uiState.startupState != SessionStartupState.ACTIVE) return@LaunchedEffect
         if (cue.generatedAtMs != uiState.currentCueGeneratedAtMs || cue.id != uiState.currentCueId) return@LaunchedEffect
@@ -209,8 +211,8 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
         vm.launchStartupCountdown(settings.startupCountdownSeconds)
     }
 
-    LaunchedEffect(uiState.startupState, uiState.sessionCountdownRemainingSeconds, options.voiceEnabled, settings.audioVolume) {
-        if (!options.voiceEnabled || settings.audioVolume <= 0f) return@LaunchedEffect
+    LaunchedEffect(uiState.startupState, uiState.sessionCountdownRemainingSeconds, resolvedOptions.voiceEnabled, settings.audioVolume) {
+        if (!resolvedOptions.voiceEnabled || settings.audioVolume <= 0f) return@LaunchedEffect
         if (uiState.startupState != SessionStartupState.COUNTDOWN) return@LaunchedEffect
         val remaining = uiState.sessionCountdownRemainingSeconds ?: return@LaunchedEffect
         if (remaining <= 0) return@LaunchedEffect
@@ -225,9 +227,9 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
         )
     }
 
-    LaunchedEffect(uiState.startupState, options.voiceEnabled, settings.audioVolume) {
+    LaunchedEffect(uiState.startupState, resolvedOptions.voiceEnabled, settings.audioVolume) {
         if (uiState.startupState != SessionStartupState.ACTIVE) return@LaunchedEffect
-        if (!options.voiceEnabled || settings.audioVolume <= 0f) return@LaunchedEffect
+        if (!resolvedOptions.voiceEnabled || settings.audioVolume <= 0f) return@LaunchedEffect
         voiceCoach.speak(
             cue = com.inversioncoach.app.model.CoachingCue(
                 id = "session_initiated",
@@ -240,13 +242,13 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     }
 
     LaunchedEffect(
-        options.recordingEnabled,
+        resolvedOptions.recordingEnabled,
         uiState.cameraPermissionGranted,
         uiState.cameraReady,
         uiState.isRecording,
         uiState.startupState,
     ) {
-        if (!options.recordingEnabled) return@LaunchedEffect
+        if (!resolvedOptions.recordingEnabled) return@LaunchedEffect
         if (!uiState.cameraPermissionGranted || !uiState.cameraReady || uiState.isRecording) return@LaunchedEffect
         if (uiState.startupState != SessionStartupState.ACTIVE) return@LaunchedEffect
 
@@ -281,30 +283,30 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                     PreviewView(ctx).apply {
                         scaleType = livePreviewScaleType
                         post {
-                            cameraManager.bind(lifecycleOwner, this, analyzer, options.zoomOutCamera) { ready, error ->
+                            cameraManager.bind(lifecycleOwner, this, analyzer, resolvedOptions.zoomOutCamera) { ready, error ->
                                 vm.onCameraReady(ready, error)
                             }
                         }
                     }
                 },
             )
-            if (options.showSkeletonOverlay) {
+            if (resolvedOptions.showSkeletonOverlay) {
                 OverlayRenderer(
                     frame = smoothed,
                     drillType = drillType,
                     sessionMode = uiState.sessionMode,
                     modifier = Modifier.fillMaxSize(),
                     scaleMode = livePreviewScaleType.toPoseScaleMode(),
-                    showIdealLine = options.showIdealLine,
-                    showCenterOfGravity = options.showCenterOfGravity,
+                    showIdealLine = resolvedOptions.showIdealLine,
+                    showCenterOfGravity = resolvedOptions.showCenterOfGravity,
                     showDebugOverlay = uiState.showDebugOverlay,
                     debugMetrics = uiState.debugMetrics,
                     debugAngles = uiState.debugAngles,
                     currentPhase = uiState.currentPhase,
                     activeFault = uiState.activeFault,
                     cueText = if (uiState.sessionMode == SessionMode.FREESTYLE) "" else uiState.currentCue,
-                    drillCameraSide = options.drillCameraSide,
-                    effectiveView = options.effectiveView,
+                    drillCameraSide = resolvedOptions.drillCameraSide,
+                    effectiveView = resolvedOptions.effectiveView,
                     freestyleViewMode = uiState.freestyleViewMode,
                     unreliableJointNames = uiState.unreliableJointNames,
                 )
@@ -347,7 +349,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                     stageLabel = "${last?.stage?.name ?: "SESSION_START"} • ${last?.status?.name ?: "STARTED"}",
                     eventMessage = last?.message ?: "No diagnostics yet",
                     startedAt = formatSessionDateTime(vm.sessionStartTimestampMs),
-                    cameraSideLabel = options.drillCameraSide.name.lowercase().replaceFirstChar { it.uppercase() },
+                    cameraSideLabel = resolvedOptions.drillCameraSide.name.lowercase().replaceFirstChar { it.uppercase() },
                     cueText = uiState.currentCue.ifBlank { "Awaiting stable frame..." },
                     confidenceText = "${(uiState.confidence * 100).toInt()}% • Raw ${uiState.alignmentScore}",
                     holdSummary = "Hold ${formatSessionDuration(uiState.totalAlignedDurationMs)} (${(uiState.alignmentRate * 100).toInt()}%)",

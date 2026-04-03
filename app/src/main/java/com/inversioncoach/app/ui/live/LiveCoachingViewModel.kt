@@ -30,6 +30,7 @@ import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SmoothedPoseFrame
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.model.toExportPreset
+import com.inversioncoach.app.model.canonicalizeFor
 import com.inversioncoach.app.drills.core.DrillRegistry
 import com.inversioncoach.app.motion.MotionAnalysisPipeline
 import com.inversioncoach.app.motion.UserCalibrationSettings
@@ -106,6 +107,7 @@ class LiveCoachingViewModel(
         FAILED,
     }
 
+    private val sessionOptions = options.canonicalizeFor(drillType)
     private val sessionMode = drillType.sessionMode()
     private val drillRegistry = DrillRegistry()
     private val drillDefinition = drillRegistry.definitionFor(drillType)
@@ -117,9 +119,9 @@ class LiveCoachingViewModel(
             isRecording = false,
             startupState = SessionStartupState.IDLE,
             sessionCountdownRemainingSeconds = null,
-            showOverlay = options.showSkeletonOverlay,
-            showIdealLine = options.showIdealLine,
-            drillCameraSide = if (sessionMode == SessionMode.FREESTYLE) null else options.drillCameraSide,
+            showOverlay = sessionOptions.showSkeletonOverlay,
+            showIdealLine = sessionOptions.showIdealLine,
+            drillCameraSide = if (sessionMode == SessionMode.FREESTYLE) null else sessionOptions.drillCameraSide,
         ),
     )
     val uiState: StateFlow<LiveSessionUiState> = _uiState.asStateFlow()
@@ -133,6 +135,7 @@ class LiveCoachingViewModel(
     private var latestScore: DrillScore = DrillScore(0, emptyMap(), "-", "-")
     private var sessionId: Long? = null
     private var sessionStartedAtMs: Long = 0L
+    private var sessionActivatedAtMs: Long = 0L
     private var lastFramePersistAt = 0L
     private var rawVideoUri: String? = null
     private var rawMasterUri: String? = null
@@ -190,7 +193,7 @@ class LiveCoachingViewModel(
     private var legacyBodyProfileFallback: UserBodyProfile? = null
     private var startupCancelled = false
     private val drillConfig = DrillConfigs.byTypeOrNull(drillType)
-    private val readinessEngine = drillConfig?.let { SharedReadinessEngine(drillType, it, options.drillCameraSide) }
+    private val readinessEngine = drillConfig?.let { SharedReadinessEngine(drillType, it, sessionOptions.drillCameraSide) }
     private val issueAggregator = IssueEventAggregator()
     private val invalidReasonCounts = mutableMapOf<String, Int>()
     private var validFrameCount = 0
@@ -348,7 +351,8 @@ class LiveCoachingViewModel(
     fun onPoseFrame(frame: PoseFrame, settings: UserSettings) {
         activeSettings = settings
         val readiness = readinessEngine?.evaluate(frame)
-        val sideForAnalysis = readiness?.actualSide ?: options.drillCameraSide
+        val sessionIsActive = _uiState.value.startupState == SessionStartupState.ACTIVE
+        val sideForAnalysis = readiness?.actualSide ?: sessionOptions.drillCameraSide
         val frameForSession = if (sessionMode == SessionMode.FREESTYLE) frame else frame.filterForDrillSide(sideForAnalysis)
         val corrected = correctionEngine.process(frameForSession, activeBodyProfile)
         if (corrected.inversionDetected) {
@@ -375,7 +379,7 @@ class LiveCoachingViewModel(
         }
         val smoothed = smoother.smooth(corrected.frame)
         val calibration = UserCalibrationSettings()
-        val motionEligible = sessionMode == SessionMode.DRILL && (readiness?.timerEligible ?: false)
+        val motionEligible = sessionMode == SessionMode.DRILL && sessionIsActive && (readiness?.timerEligible ?: false)
         val freestyleViewMode = if (sessionMode == SessionMode.FREESTYLE) freestyleOrientationClassifier.classify(smoothed.joints) else FreestyleViewMode.UNKNOWN
         val motion = if (motionEligible) {
             motionPipeline.analyze(
@@ -391,11 +395,11 @@ class LiveCoachingViewModel(
             val overlayFrame = overlayStabilizer.stabilize(
                 frame = smoothed,
                 sessionMode = sessionMode,
-                drillCameraSide = if (sessionMode == SessionMode.FREESTYLE) null else options.drillCameraSide,
-                effectiveView = options.effectiveView,
-                showIdealLine = options.showIdealLine,
-                showSkeleton = options.showSkeletonOverlay,
-                showCenterOfGravity = options.showCenterOfGravity,
+                drillCameraSide = if (sessionMode == SessionMode.FREESTYLE) null else sessionOptions.drillCameraSide,
+                effectiveView = sessionOptions.effectiveView,
+                showIdealLine = sessionOptions.showIdealLine,
+                showSkeleton = sessionOptions.showSkeletonOverlay,
+                showCenterOfGravity = sessionOptions.showCenterOfGravity,
                 freestyleViewMode = freestyleViewMode,
                 scaleMode = PoseScaleMode.FILL,
                 unreliableJointNames = corrected.unreliableJointNames,
@@ -706,6 +710,7 @@ class LiveCoachingViewModel(
         if (_uiState.value.startupState != SessionStartupState.COUNTDOWN || startupCancelled) return false
         val initiatedAtMs = System.currentTimeMillis()
         _spokenCue.value = null
+        sessionActivatedAtMs = initiatedAtMs
         sessionStartedAtMs = initiatedAtMs
         overlayFrames.clear()
         overlayTimelineRecorder = OverlayTimelineRecorder(
@@ -1021,13 +1026,14 @@ class LiveCoachingViewModel(
             }
             motionPipeline.setRepTemplate(activeMovementProfile?.repTemplate)
             val now = System.currentTimeMillis()
-            sessionStartedAtMs = now
+            val startedAtMs = sessionActivatedAtMs.takeIf { it > 0L } ?: now
+            if (sessionStartedAtMs <= 0L) sessionStartedAtMs = startedAtMs
             val newSessionId = repository.saveSession(
                 SessionRecord(
                     title = sessionTitle,
                     drillType = drillType,
                     sessionSource = com.inversioncoach.app.model.SessionSource.LIVE_COACHING,
-                    startedAtMs = now,
+                    startedAtMs = sessionStartedAtMs,
                     completedAtMs = 0L,
                     overallScore = 0,
                     strongestArea = "pending",
@@ -1075,7 +1081,7 @@ class LiveCoachingViewModel(
                 rawUri = null,
                 annotatedUri = null,
                 overlayFrameCount = 0,
-                failureReason = "sessionStartedAtMs=$now",
+                failureReason = "sessionStartedAtMs=$sessionStartedAtMs;sessionActivatedAtMs=$sessionActivatedAtMs",
             )
             sessionId = newSessionId
             AnnotatedExportJobTracker.markFinished(newSessionId)
@@ -1106,7 +1112,7 @@ class LiveCoachingViewModel(
 
     private fun calibrationMetadataJson(): String {
         val profile = activeMovementProfile ?: return ""
-        return "calibrationProfileVersion:${profile.profileVersion};calibrationUpdatedAtMs:${profile.updatedAtMs};effectiveView:${options.effectiveView.name}"
+        return "calibrationProfileVersion:${profile.profileVersion};calibrationUpdatedAtMs:${profile.updatedAtMs};effectiveView:${sessionOptions.effectiveView.name}"
     }
 
     private suspend fun maybePersistLearnedRepTemplate(nowMs: Long): DrillMovementProfile? {
@@ -1421,7 +1427,7 @@ class LiveCoachingViewModel(
                     sessionId = activeSessionId,
                     rawVideoUri = exportSnapshot.rawUri,
                     drillType = drillType,
-                    drillCameraSide = options.drillCameraSide,
+                    drillCameraSide = sessionOptions.drillCameraSide,
                     overlayTimeline = exportSnapshot.overlayTimeline,
                     rawDurationMsHint = exportSnapshot.rawDurationMs,
                     preset = exportPreset,

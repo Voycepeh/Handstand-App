@@ -19,8 +19,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.LiveSessionOptions
-import com.inversioncoach.app.overlay.DrillCameraSide
-import com.inversioncoach.app.overlay.EffectiveView
 import com.inversioncoach.app.ui.calibration.CalibrationScreen
 import com.inversioncoach.app.ui.drilldetail.DrillDetailScreen
 import com.inversioncoach.app.ui.drills.ManageDrillsScreen
@@ -53,7 +51,7 @@ sealed class Route(val value: String) {
     }
     data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}/{showCenterOfGravity}/{zoomOutCamera}/{drillCameraSide}/{effectiveView}?selectedDrillId={selectedDrillId}") {
         fun create(drillType: DrillType, options: LiveSessionOptions): String =
-            "live/${drillType.name}/${options.voiceEnabled}/${options.recordingEnabled}/${options.showSkeletonOverlay}/${options.showIdealLine}/${options.showCenterOfGravity}/${options.zoomOutCamera}/${options.drillCameraSide.name}/${options.effectiveView.name}?selectedDrillId=${Uri.encode(options.selectedDrillId ?: "")}"
+            LiveRouteCodec.create(drillType, options)
     }
     data object Results : Route("results/{sessionId}") { fun create(sessionId: Long) = "results/$sessionId" }
     data object SessionTooShort : Route("session-too-short/{elapsedMs}/{thresholdSeconds}") {
@@ -126,20 +124,8 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
             navArgument("effectiveView") { type = NavType.StringType },
             navArgument("selectedDrillId") { type = NavType.StringType; defaultValue = "" },
         )) { backStack ->
-            val args = backStack.arguments
-            val drill = parseDrillTypeOrDefault(args?.getString("drill"), DrillType.WALL_HANDSTAND)
-            val options = LiveSessionOptions(
-                voiceEnabled = args?.getBoolean("voice") ?: true,
-                recordingEnabled = args?.getBoolean("record") ?: true,
-                showSkeletonOverlay = args?.getBoolean("skeleton") ?: true,
-                showIdealLine = args?.getBoolean("idealLine") ?: true,
-                showCenterOfGravity = args?.getBoolean("showCenterOfGravity") ?: true,
-                zoomOutCamera = args?.getBoolean("zoomOutCamera") ?: true,
-                drillCameraSide = DrillCameraSide.entries.firstOrNull { it.name == args?.getString("drillCameraSide") } ?: DrillCameraSide.LEFT,
-                effectiveView = EffectiveView.entries.firstOrNull { it.name == args?.getString("effectiveView") } ?: EffectiveView.FREESTYLE,
-                selectedDrillId = args?.getString("selectedDrillId").orEmpty().ifBlank { null },
-            )
-            LiveCoachingScreen(drillType = drill, options = options, onStop = { result ->
+            val liveRouteArgs = LiveRouteCodec.parse(backStack.arguments)
+            LiveCoachingScreen(drillType = liveRouteArgs.drillType, options = liveRouteArgs.options, onStop = { result ->
                 if (result.wasDiscardedForShortDuration) navController.navigate(Route.SessionTooShort.create(result.elapsedSessionMs, result.validationThresholdSeconds))
                 else navController.navigate(Route.Results.create(result.sessionId))
             })
