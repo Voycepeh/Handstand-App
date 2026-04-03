@@ -51,6 +51,8 @@ import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.model.SessionComparisonRecord
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SessionSource
+import com.inversioncoach.app.model.UploadJobPipelineType
+import com.inversioncoach.app.model.UploadJobStatus
 import com.inversioncoach.app.calibration.RuntimeBodyProfileResolver
 import com.inversioncoach.app.movementprofile.ExistingDrillToProfileAdapter
 import com.inversioncoach.app.movementprofile.AnalysisProgressObserver
@@ -97,6 +99,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 import org.json.JSONObject
+import java.util.UUID
 
 private const val TAG = "UploadVideoFlow"
 private const val ANALYSIS_PROGRESS_UPDATE_FRAME_INTERVAL = 1
@@ -180,6 +183,7 @@ data class UploadFlowResult(
 interface UploadVideoAnalysisRunner {
     suspend fun run(
         uri: Uri,
+        ownerToken: String,
         trackingMode: UploadTrackingMode,
         selectedDrillId: String? = null,
         selectedReferenceTemplateId: String? = null,
@@ -218,6 +222,7 @@ class DefaultUploadVideoAnalysisRunner(
 
     override suspend fun run(
         uri: Uri,
+        ownerToken: String,
         trackingMode: UploadTrackingMode,
         selectedDrillId: String?,
         selectedReferenceTemplateId: String?,
@@ -284,6 +289,13 @@ class DefaultUploadVideoAnalysisRunner(
             ),
         )
         onSessionCreated(sessionId)
+        repository.markUploadJobStarted(
+            sessionId = sessionId,
+            ownerToken = ownerToken,
+            pipelineType = UploadJobPipelineType.UPLOADED_VIDEO_ANALYSIS,
+            stageLabel = "Importing raw video",
+            detail = "Upload pipeline started",
+        )
         repository.updateUploadPipelineProgress(
             sessionId = sessionId,
             stageLabel = "Importing raw video",
@@ -455,6 +467,14 @@ class DefaultUploadVideoAnalysisRunner(
                         totalFrames = normalizedTotal,
                         timestampMs = timestampMs,
                         detail = detail,
+                    )
+                    repository.markUploadJobHeartbeat(
+                        sessionId = sessionId,
+                        stageLabel = stageLabel,
+                        detail = detail,
+                        processedFrames = normalizedProcessed,
+                        totalFrames = normalizedTotal,
+                        timestampMs = timestampMs,
                     )
                 }
             }
@@ -966,6 +986,11 @@ class DefaultUploadVideoAnalysisRunner(
                     totalFrames = analysis.overlayTimeline.size + analysis.droppedFrames,
                     detail = "Annotated replay ready",
                 )
+                repository.markUploadJobTerminal(
+                    sessionId = sessionId,
+                    status = UploadJobStatus.COMPLETED,
+                    outcome = "annotated_ready",
+                )
                 currentStage = UploadStage.COMPLETED_ANNOTATED
                 onProgress(UploadProgress(currentStage, 1f, etaMs = 0L, detail = "Annotated replay ready"))
                 log("complete annotatedReady=true replayUri=$replayUri")
@@ -1000,6 +1025,12 @@ class DefaultUploadVideoAnalysisRunner(
                 processedFrames = analysis.overlayTimeline.size + analysis.droppedFrames,
                 totalFrames = analysis.overlayTimeline.size + analysis.droppedFrames,
                 detail = "Raw replay ready; annotated export failed",
+            )
+            repository.markUploadJobTerminal(
+                sessionId = sessionId,
+                status = UploadJobStatus.COMPLETED,
+                outcome = "raw_ready_annotated_failed",
+                failureReason = failureReason,
             )
             currentStage = UploadStage.COMPLETED_RAW_ONLY
             onProgress(UploadProgress(currentStage, 1f, etaMs = 0L, detail = "Raw replay ready; annotated export failed"))
@@ -1046,6 +1077,12 @@ class DefaultUploadVideoAnalysisRunner(
                 sessionId = sessionId,
                 stageLabel = "Failed",
                 detail = "Upload workflow failed",
+            )
+            repository.markUploadJobTerminal(
+                sessionId = sessionId,
+                status = if (error is kotlinx.coroutines.CancellationException) UploadJobStatus.CANCELLED else UploadJobStatus.FAILED,
+                outcome = if (error is kotlinx.coroutines.CancellationException) "cancelled" else "failed",
+                failureReason = error.message ?: mappedFailure,
             )
             repository.updateMediaPipelineState(sessionId) { session ->
                 session.copy(
@@ -1101,6 +1138,9 @@ class DefaultUploadVideoAnalysisRunner(
         val phaseLabel = when (stage) {
             "decode_start" -> "Analyzing uploaded video"
             "frame_sampled" -> "Sampling video frames"
+            "pose_detection_running" -> "Running pose detection"
+            "pose_detection_complete" -> "Pose detection complete"
+            "analysis_frame_processed" -> "Building timeline"
             "analysis_complete" -> "Finalizing results..."
             else -> "Analyzing movement"
         }
@@ -1111,6 +1151,9 @@ class DefaultUploadVideoAnalysisRunner(
             } else {
                 "Sampling uploaded frames"
             }
+            "pose_detection_running" -> "Running pose detection..."
+            "pose_detection_complete" -> "Pose detection complete"
+            "analysis_frame_processed" -> "Appending timeline samples"
             "analysis_complete" -> "Finalizing results..."
             else -> if (totalFramesForUi > 0 && analyzedFramesForUi > 0) {
                 "Analyzing movement: $analyzedFramesForUi / $totalFramesForUi frames"
@@ -1223,7 +1266,7 @@ internal fun validateSelectedDrillForUpload(
 }
 
 class UploadVideoViewModel(
-    private val runner: UploadVideoAnalysisRunner,
+    private val appContext: Context,
     private val repository: SessionRepository?,
     private val selectedDrillId: String?,
     private val selectedReferenceTemplateId: String?,
@@ -1245,10 +1288,10 @@ class UploadVideoViewModel(
         ),
     )
     val state: StateFlow<UploadVideoUiState> = _state.asStateFlow()
+    private var runningJob: Job? = null
+    private var observedSessionId: Long? = null
     companion object {
         private val uploadScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        private var activeJob: Job? = null
-        private var activeSessionId: Long? = null
     }
 
     constructor(runner: UploadVideoAnalysisRunner) : this(runner, null, null, null, false, false, null, null)
@@ -1293,7 +1336,7 @@ class UploadVideoViewModel(
                     if (restored != null) activeSessionId = restored.id
                 }
                 repo.observeSessions().collectLatest { sessions ->
-                    val sessionId = activeSessionId ?: return@collectLatest
+                    val sessionId = observedSessionId ?: return@collectLatest
                     val session = sessions.firstOrNull { it.id == sessionId } ?: return@collectLatest
                     val stage = deriveUploadStage(session)
                     _state.update { current ->
@@ -1306,7 +1349,16 @@ class UploadVideoViewModel(
                             stage = stage,
                             currentProcessingStage = stage,
                             progressPercent = maxOf(persistedProgress, preservedProgress),
-                            stageText = session.uploadProgressDetail ?: current.stageText,
+                            stageText = if (session.uploadJobStatus == UploadJobStatus.STALLED) {
+                                "Processing stopped unexpectedly"
+                            } else {
+                                session.uploadProgressDetail ?: current.stageText
+                            },
+                            errorMessage = if (session.uploadJobStatus == UploadJobStatus.STALLED) {
+                                session.uploadJobFailureReason ?: "Processing stopped unexpectedly"
+                            } else {
+                                current.errorMessage
+                            },
                             rawVideoStatus = session.rawPersistStatus,
                             annotatedVideoStatus = session.annotatedExportStatus,
                             etaMs = session.annotatedExportEtaSeconds?.times(1000L),
@@ -1347,7 +1399,15 @@ class UploadVideoViewModel(
     }
 
     fun analyze(uri: Uri) {
-        if (activeJob?.isActive == true) return
+        if (runningJob?.isActive == true || UploadJobCoordinator.isActive()) {
+            _state.update {
+                it.copy(
+                    stageText = "Another upload is already in progress.",
+                    errorMessage = "Please wait for the active upload to finish before starting a new one.",
+                )
+            }
+            return
+        }
         val trackingMode = _state.value.effectiveMovementType
         if (trackingMode == null) {
             _state.update {
@@ -1430,8 +1490,10 @@ class UploadVideoViewModel(
                 )
             }
             runCatching {
+                val ownerToken = UUID.randomUUID().toString()
                 runner.run(
                     uri = uri,
+                    ownerToken = ownerToken,
                     trackingMode = trackingMode,
                     selectedDrillId = selectedDrillId,
                     selectedReferenceTemplateId = selectedReferenceTemplateId,
@@ -1439,7 +1501,8 @@ class UploadVideoViewModel(
                     createDrillFromReferenceUpload = createDrillFromReferenceUpload,
                     pendingDrillName = _state.value.pendingDrillName,
                     onSessionCreated = { sessionId ->
-                        activeSessionId = sessionId
+                        UploadJobCoordinator.begin(sessionId, ownerToken)
+                        observedSessionId = sessionId
                         _state.update { current -> current.copy(sessionId = sessionId) }
                     },
                     onProgress = { progress ->
@@ -1480,7 +1543,7 @@ class UploadVideoViewModel(
                         }
                     },
                     onLog = { line ->
-                        (_state.value.sessionId ?: activeSessionId)?.let { sessionId ->
+                        (_state.value.sessionId ?: observedSessionId)?.let { sessionId ->
                             repository?.saveSessionDiagnostics(sessionId, (_state.value.technicalLog + "\n" + line).trim())
                         }
                         _state.update { current ->
@@ -1491,6 +1554,7 @@ class UploadVideoViewModel(
                     },
                 )
             }.onSuccess { result ->
+                UploadJobCoordinator.clear()
                 val completionMessage = if (result.annotatedReady) {
                     "Annotated replay ready"
                 } else {
@@ -1517,6 +1581,7 @@ class UploadVideoViewModel(
                     )
                 }
             }.onFailure { error ->
+                UploadJobCoordinator.clear()
                 Log.e(TAG, "analysis_failed uri=$uri", error)
                 _state.update {
                     it.copy(
@@ -1544,11 +1609,19 @@ class UploadVideoViewModel(
     }
 
     fun cancel() {
-        activeJob?.cancel()
+        runningJob?.cancel()
+        UploadJobCoordinator.clear()
+        Log.i(TAG, "upload_cancel requested sessionId=${_state.value.sessionId ?: -1}")
         _state.value.sessionId?.let { sessionId ->
             viewModelScope.launch {
                 repository?.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
                 repository?.updateAnnotatedExportFailureReason(sessionId, "EXPORT_CANCELLED")
+                repository?.markUploadJobTerminal(
+                    sessionId = sessionId,
+                    status = UploadJobStatus.CANCELLED,
+                    outcome = "cancelled",
+                    failureReason = "User cancelled upload",
+                )
             }
         }
         _state.update {
@@ -1573,6 +1646,8 @@ private fun String.toUploadTrackingMode(): UploadTrackingMode? = when (this) {
 }
 
 internal fun deriveUploadStage(session: SessionRecord): UploadStage = when {
+    session.uploadJobStatus == UploadJobStatus.STALLED -> UploadStage.FAILED
+    session.uploadJobStatus == UploadJobStatus.CANCELLED -> UploadStage.CANCELLED
     session.rawPersistStatus == RawPersistStatus.PROCESSING -> UploadStage.IMPORTING_RAW_VIDEO
     session.rawPersistStatus == RawPersistStatus.FAILED -> UploadStage.FAILED
     session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE") -> UploadStage.FAILED
@@ -1630,11 +1705,7 @@ fun UploadVideoScreen(
     }
     val viewModel = remember(selectedDrillId, selectedReferenceTemplateId, isReferenceUpload, createDrillFromReferenceUpload) {
         UploadVideoViewModel(
-            DefaultUploadVideoAnalysisRunner(
-                context = context.applicationContext,
-                repository = repository,
-                runtimeBodyProfileResolver = ServiceLocator.runtimeBodyProfileResolver(context),
-            ),
+            context.applicationContext,
             repository,
             selectedDrillId,
             selectedReferenceTemplateId,

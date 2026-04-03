@@ -287,8 +287,57 @@ object DatabaseMigrations {
 
     val MIGRATION_18_19: Migration = object : Migration(18, 19) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("ALTER TABLE user_settings ADD COLUMN annotatedExportQuality TEXT NOT NULL DEFAULT 'STABLE'")
-            db.execSQL("ALTER TABLE user_settings ADD COLUMN hasCompletedPreferencesOnboarding INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobPipelineType TEXT")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobStatus TEXT NOT NULL DEFAULT 'IDLE'")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobOwnerToken TEXT")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobStartedAtMs INTEGER")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobUpdatedAtMs INTEGER")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobHeartbeatAtMs INTEGER")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobTerminalOutcome TEXT")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN uploadJobFailureReason TEXT")
+        }
+    }
+
+
+    val MIGRATION_19_20: Migration = object : Migration(19, 20) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `upload_processing_jobs` (
+                    `jobId` TEXT NOT NULL,
+                    `sessionId` INTEGER,
+                    `sourceUri` TEXT NOT NULL,
+                    `trackingMode` TEXT NOT NULL,
+                    `selectedDrillId` TEXT,
+                    `selectedReferenceTemplateId` TEXT,
+                    `isReferenceUpload` INTEGER NOT NULL,
+                    `createDrillFromReferenceUpload` INTEGER NOT NULL,
+                    `pendingDrillName` TEXT,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    `enqueueOrder` INTEGER NOT NULL,
+                    `status` TEXT NOT NULL,
+                    `currentStage` TEXT NOT NULL,
+                    `stageStartedAt` INTEGER,
+                    `startedAt` INTEGER,
+                    `completedAt` INTEGER,
+                    `lastHeartbeatAt` INTEGER,
+                    `lastProgressAt` INTEGER,
+                    `processedFrames` INTEGER NOT NULL,
+                    `totalFrames` INTEGER NOT NULL,
+                    `lastTimestampMs` INTEGER,
+                    `retryCount` INTEGER NOT NULL,
+                    `maxRetries` INTEGER NOT NULL,
+                    `failureReason` TEXT,
+                    `timeoutReason` TEXT,
+                    `isRecoverable` INTEGER NOT NULL,
+                    `workerToken` TEXT,
+                    PRIMARY KEY(`jobId`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_upload_processing_jobs_status_enqueueOrder` ON `upload_processing_jobs` (`status`, `enqueueOrder`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_upload_processing_jobs_sessionId` ON `upload_processing_jobs` (`sessionId`)")
         }
     }
 

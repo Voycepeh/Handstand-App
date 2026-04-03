@@ -6,6 +6,8 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.SessionRecord
+import com.inversioncoach.app.model.SessionSource
+import com.inversioncoach.app.model.UploadJobStatus
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -27,6 +29,14 @@ interface SessionDao {
 
     @Query("SELECT * FROM session_records WHERE id = :sessionId LIMIT 1")
     suspend fun getById(sessionId: Long): SessionRecord?
+
+    @Query(
+        "SELECT * FROM session_records WHERE sessionSource = :source AND uploadJobStatus = :status ORDER BY uploadJobUpdatedAtMs DESC LIMIT 1",
+    )
+    suspend fun getActiveUploadSession(
+        source: SessionSource = SessionSource.UPLOADED_VIDEO,
+        status: UploadJobStatus = UploadJobStatus.PROCESSING,
+    ): SessionRecord?
 
     @Query("SELECT id FROM session_records")
     suspend fun getAllIds(): List<Long>

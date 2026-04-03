@@ -29,7 +29,7 @@ object ServiceLocator {
     @Volatile
     private var uploadProcessingQueueRepository: UploadProcessingQueueRepository? = null
 
-    private fun db(context: Context): InversionCoachDatabase {
+    fun db(context: Context): InversionCoachDatabase {
         return db ?: synchronized(this) {
             db ?: Room.databaseBuilder(
                 context.applicationContext,

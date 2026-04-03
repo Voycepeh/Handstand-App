@@ -1,5 +1,6 @@
 package com.inversioncoach.app.storage.repository
 
+import android.util.Log
 import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.CalibrationConfigRecord
@@ -16,7 +17,10 @@ import com.inversioncoach.app.model.IssueEvent
 import com.inversioncoach.app.model.ProfileCalibrationEntity
 import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.SessionRecord
+import com.inversioncoach.app.model.SessionSource
 import com.inversioncoach.app.model.SessionComparisonRecord
+import com.inversioncoach.app.model.UploadJobPipelineType
+import com.inversioncoach.app.model.UploadJobStatus
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.calibration.UserBodyProfile
 import com.inversioncoach.app.drills.DrillCameraView
@@ -44,6 +48,8 @@ import kotlinx.coroutines.flow.map
 import java.util.UUID
 
 private const val STALE_EXPORT_RECONCILIATION_MS = 2 * 60 * 1000L
+private const val STALE_UPLOAD_HEARTBEAT_MS = 45 * 1000L
+private const val UPLOAD_REPO_TAG = "UploadJobRepo"
 private const val DEFAULT_PROFILE_NAME = "Profile 1"
 
 data class UserProfileStatus(
@@ -430,8 +436,110 @@ class SessionRepository(
                 uploadAnalysisTotalFrames = totalFrames.coerceAtLeast(0),
                 uploadAnalysisTimestampMs = timestampMs,
                 uploadProgressDetail = detail,
+                uploadJobUpdatedAtMs = System.currentTimeMillis(),
             ),
         )
+    }
+
+    suspend fun markUploadJobStarted(
+        sessionId: Long,
+        ownerToken: String,
+        pipelineType: UploadJobPipelineType = UploadJobPipelineType.UPLOADED_VIDEO_ANALYSIS,
+        stageLabel: String? = null,
+        detail: String? = null,
+    ) {
+        val now = System.currentTimeMillis()
+        val session = sessionDao.getById(sessionId) ?: return
+        sessionDao.upsert(
+            session.copy(
+                uploadJobPipelineType = pipelineType,
+                uploadJobStatus = UploadJobStatus.PROCESSING,
+                uploadJobOwnerToken = ownerToken,
+                uploadJobStartedAtMs = now,
+                uploadJobUpdatedAtMs = now,
+                uploadJobHeartbeatAtMs = now,
+                uploadJobTerminalOutcome = null,
+                uploadJobFailureReason = null,
+                uploadPipelineStageLabel = stageLabel ?: session.uploadPipelineStageLabel,
+                uploadProgressDetail = detail ?: session.uploadProgressDetail,
+            ),
+        )
+    }
+
+    suspend fun markUploadJobHeartbeat(
+        sessionId: Long,
+        stageLabel: String? = null,
+        detail: String? = null,
+        processedFrames: Int? = null,
+        totalFrames: Int? = null,
+        timestampMs: Long? = null,
+    ) {
+        val now = System.currentTimeMillis()
+        val session = sessionDao.getById(sessionId) ?: return
+        sessionDao.upsert(
+            session.copy(
+                uploadJobStatus = UploadJobStatus.PROCESSING,
+                uploadJobUpdatedAtMs = now,
+                uploadJobHeartbeatAtMs = now,
+                uploadPipelineStageLabel = stageLabel ?: session.uploadPipelineStageLabel,
+                uploadProgressDetail = detail ?: session.uploadProgressDetail,
+                uploadAnalysisProcessedFrames = processedFrames ?: session.uploadAnalysisProcessedFrames,
+                uploadAnalysisTotalFrames = totalFrames ?: session.uploadAnalysisTotalFrames,
+                uploadAnalysisTimestampMs = timestampMs ?: session.uploadAnalysisTimestampMs,
+            ),
+        )
+    }
+
+    suspend fun markUploadJobTerminal(
+        sessionId: Long,
+        status: UploadJobStatus,
+        outcome: String,
+        failureReason: String? = null,
+    ) {
+        val now = System.currentTimeMillis()
+        val session = sessionDao.getById(sessionId) ?: return
+        sessionDao.upsert(
+            session.copy(
+                uploadJobStatus = status,
+                uploadJobUpdatedAtMs = now,
+                uploadJobHeartbeatAtMs = now,
+                uploadJobTerminalOutcome = outcome,
+                uploadJobFailureReason = failureReason,
+                uploadJobOwnerToken = null,
+            ),
+        )
+    }
+
+    suspend fun getActiveUploadedSession(): SessionRecord? = sessionDao.getActiveUploadSession()
+
+    suspend fun reconcileActiveUploadJobs(
+        hasActiveWorker: Boolean,
+        reason: String,
+    ): SessionRecord? {
+        val active = sessionDao.getActiveUploadSession(source = SessionSource.UPLOADED_VIDEO, status = UploadJobStatus.PROCESSING) ?: return null
+        val heartbeat = active.uploadJobHeartbeatAtMs ?: active.uploadJobUpdatedAtMs ?: active.annotatedExportLastUpdatedAt ?: 0L
+        val now = System.currentTimeMillis()
+        val stale = heartbeat > 0 && now - heartbeat >= STALE_UPLOAD_HEARTBEAT_MS
+        Log.i(
+            UPLOAD_REPO_TAG,
+            "reconcile sessionId=${active.id} hasActiveWorker=$hasActiveWorker stale=$stale heartbeatAgeMs=${now - heartbeat} reason=$reason",
+        )
+        if (hasActiveWorker || !stale) return active
+        Log.w(UPLOAD_REPO_TAG, "stall_detected sessionId=${active.id} reason=$reason")
+        sessionDao.upsert(
+            active.copy(
+                uploadJobStatus = UploadJobStatus.STALLED,
+                uploadJobUpdatedAtMs = now,
+                uploadJobTerminalOutcome = "stalled",
+                uploadJobFailureReason = "Heartbeat timed out ($reason)",
+                uploadJobOwnerToken = null,
+                annotatedExportStatus = AnnotatedExportStatus.ANNOTATED_FAILED,
+                annotatedExportFailureReason = "UPLOAD_JOB_STALLED",
+                annotatedExportFailureDetail = "Processing stopped unexpectedly",
+                annotatedExportStage = AnnotatedExportStage.FAILED,
+            ),
+        )
+        return sessionDao.getById(active.id)
     }
 
     suspend fun reconcileStaleProcessingState(sessionId: Long, hasActiveExportJob: Boolean): Boolean {

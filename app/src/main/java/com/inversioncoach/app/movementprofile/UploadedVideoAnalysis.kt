@@ -9,6 +9,7 @@ import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.io.Serializable
 import kotlin.math.max
+import kotlin.math.roundToLong
 
 private const val UPLOAD_ANALYSIS_TAG = "UploadAnalysis"
 
@@ -116,6 +117,7 @@ class UploadedVideoAnalyzer(
                 )
             )
             sourceFrames.forEachIndexed { index, frame ->
+                val frameStart = System.nanoTime()
                 if (index % 2 == 0) {
                     Log.i(
                         UPLOAD_ANALYSIS_TAG,
@@ -134,10 +136,14 @@ class UploadedVideoAnalyzer(
                         ),
                     )
                 } else {
+                    val postProcessMs: Long
+                    val alignment: Float
                     val normalized = poseFrameNormalizer.normalize(frame)
                     val angleFrame = angleEngine.compute(normalized)
-                    val alignment = alignmentScorer.score(normalized, profile.alignmentRules)
+                    val postStart = System.nanoTime()
+                    alignment = alignmentScorer.score(normalized, profile.alignmentRules)
                     val phase = phaseDetector.update(angleFrame, alignment >= 0.65f)
+                    postProcessMs = ((System.nanoTime() - postStart) / 1_000_000.0).roundToLong()
                     phaseTimeline += frame.timestampMs to phase.name
                     timeline += OverlayTimelinePoint(
                         timestampMs = frame.timestampMs,
@@ -155,7 +161,19 @@ class UploadedVideoAnalyzer(
                             estimatedTotalFrames = sourceFrames.size,
                             droppedFrames = dropped,
                             timestampMs = frame.timestampMs,
+                            detail = "postProcessMs=$postProcessMs",
                         ),
+                    )
+                }
+                val elapsedMs = ((System.nanoTime() - frameStart) / 1_000_000.0).roundToLong()
+                if (index % 4 == 0) {
+                    val processed = index + 1
+                    val throughput = (processed * 1000.0) / maxOf(1L, System.currentTimeMillis() - analysisStart).toDouble()
+                    val remaining = sourceFrames.size - processed
+                    val etaSec = if (throughput <= 0.0) -1 else (remaining / throughput).roundToLong()
+                    Log.i(
+                        UPLOAD_ANALYSIS_TAG,
+                        "analysis_timing frame=$processed/${sourceFrames.size} frameMs=$elapsedMs throughputFps=${"%.2f".format(throughput)} etaSec=$etaSec",
                     )
                 }
             }

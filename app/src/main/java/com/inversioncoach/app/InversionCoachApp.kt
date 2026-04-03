@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import android.util.Log
 
 class InversionCoachApp : Application(), Configuration.Provider {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -22,6 +23,9 @@ class InversionCoachApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         RetentionCleanupWorker.enqueuePeriodic(this)
+        appScope.launch {
+            UploadProcessingOrchestrator.reconcileState(this@InversionCoachApp)
+        }
         appScope.launch {
             val repo = ServiceLocator.repository(this@InversionCoachApp)
             UploadProcessingNotifications(this@InversionCoachApp).ensureChannel()
