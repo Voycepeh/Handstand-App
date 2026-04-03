@@ -146,6 +146,7 @@ class LiveCoachingViewModel(
     private var annotatedVideoUri: String? = null
     private var annotatedExportStatus: AnnotatedExportStatus = AnnotatedExportStatus.NOT_STARTED
     private var exportLifecycleState: ExportLifecycleState = ExportLifecycleState.IDLE
+    private var activeExportAttemptId: String? = null
     private var annotatedExportFailureReason: String? = null
     private var annotatedExportFailureDetail: String? = null
     private var annotatedExportElapsedMs: Long? = null
@@ -817,8 +818,8 @@ class LiveCoachingViewModel(
                 resolveTerminalAnnotatedExportStatus(hasActiveExportJob)
                 val (reconciledStatus, reconciledFailureReason) = reconcileMediaStateForPersistence(hasActiveExportJob)
                 if (reconciledStatus == AnnotatedExportStatus.ANNOTATED_FAILED && !reconciledFailureReason.isNullOrBlank()) {
-                    repository.updateAnnotatedExportStatus(activeSessionId, reconciledStatus)
-                    repository.updateAnnotatedExportFailureReason(activeSessionId, reconciledFailureReason)
+                    repository.adminUpdateAnnotatedExportStatus(activeSessionId, reconciledStatus)
+                    repository.adminUpdateAnnotatedExportFailureReason(activeSessionId, reconciledFailureReason)
                 }
                 val finalVideos = resolveSessionVideoOutcome(
                     rawVideoUri = rawVideoUri,
@@ -1162,6 +1163,9 @@ class LiveCoachingViewModel(
             elapsedMs = annotatedExportElapsedMs,
             failureDetail = annotatedExportFailureDetail,
             failureReason = annotatedExportFailureReason,
+            attemptId = activeExportAttemptId,
+            ownerType = "LIVE_EXPORT",
+            ownerId = "live-$activeSessionId",
         )
         SessionDiagnostics.logStructured(
             event = "annotated_export_progress",
@@ -1340,8 +1344,22 @@ class LiveCoachingViewModel(
                 return
             }
 
+            if (activeExportAttemptId.isNullOrBlank()) {
+                activeExportAttemptId = repository.claimProcessingAttempt(
+                    sessionId = activeSessionId,
+                    ownerType = "LIVE_EXPORT",
+                    ownerId = "live-$activeSessionId",
+                    supersedeReason = "EXPORT_RETRY_SUPERSEDED",
+                )
+            }
             setAnnotatedExportState(AnnotatedExportStatus.VALIDATING_INPUT, null)
-            repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.VALIDATING_INPUT)
+            repository.updateAnnotatedExportStatus(
+                activeSessionId,
+                AnnotatedExportStatus.VALIDATING_INPUT,
+                attemptId = activeExportAttemptId,
+                ownerType = "LIVE_EXPORT",
+                ownerId = "live-$activeSessionId",
+            )
             val preflight = validateExportSnapshot(snapshot)
             if (preflight.fatalReason != null) {
                 persistAnnotatedExportFailed(activeSessionId, preflight.fatalReason)
@@ -1481,6 +1499,8 @@ class LiveCoachingViewModel(
                     overlayFrameCount = snapshot.overlayFrameCount,
                 )
                 AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.COMPLETED, 100, 0L)
+                repository.releaseProcessingAttempt(activeSessionId, activeExportAttemptId)
+                activeExportAttemptId = null
             } catch (_: CancellationException) {
                 persistAnnotatedExportFailed(activeSessionId, "EXPORT_CANCELLED")
             } catch (t: Throwable) {
@@ -1492,6 +1512,8 @@ class LiveCoachingViewModel(
                 }
                 SessionDiagnostics.log("post_stop_total_duration_ms=${System.currentTimeMillis() - pipelineStartMs}")
                 AnnotatedExportJobTracker.markFinished(activeSessionId)
+                repository.releaseProcessingAttempt(activeSessionId, activeExportAttemptId)
+                activeExportAttemptId = null
             }
         } finally {
             finalizeOwnerSessionId = null
@@ -1541,8 +1563,20 @@ class LiveCoachingViewModel(
         annotatedExportEtaSeconds = null
         annotatedExportElapsedMs = 0L
         annotatedExportLastUpdatedAt = System.currentTimeMillis()
-        repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.SKIPPED)
-        repository.updateAnnotatedExportFailureReason(activeSessionId, AnnotatedExportFailureReason.OVERLAY_CAPTURE_EMPTY.name)
+        repository.updateAnnotatedExportStatus(
+            activeSessionId,
+            AnnotatedExportStatus.SKIPPED,
+            attemptId = activeExportAttemptId,
+            ownerType = "LIVE_EXPORT",
+            ownerId = "live-$activeSessionId",
+        )
+        repository.updateAnnotatedExportFailureReason(
+            activeSessionId,
+            AnnotatedExportFailureReason.OVERLAY_CAPTURE_EMPTY.name,
+            attemptId = activeExportAttemptId,
+            ownerType = "LIVE_EXPORT",
+            ownerId = "live-$activeSessionId",
+        )
         SessionDiagnostics.logStructured(
             event = "annotated_export_skipped_no_overlay",
             sessionId = activeSessionId,
@@ -1575,6 +1609,12 @@ class LiveCoachingViewModel(
     }
 
     private suspend fun markAnnotatedExportLaunchStarted(activeSessionId: Long) {
+        activeExportAttemptId = repository.claimProcessingAttempt(
+            sessionId = activeSessionId,
+            ownerType = "LIVE_EXPORT",
+            ownerId = "live-$activeSessionId",
+            supersedeReason = "EXPORT_RETRY_SUPERSEDED",
+        )
         exportLifecycleState = ExportLifecycleState.PROCESSING
         setAnnotatedExportState(AnnotatedExportStatus.PROCESSING, null)
         annotatedExportStage = AnnotatedExportStage.PREPARING
@@ -1582,9 +1622,30 @@ class LiveCoachingViewModel(
         annotatedExportEtaSeconds = null
         annotatedExportElapsedMs = 0L
         annotatedExportLastUpdatedAt = System.currentTimeMillis()
-        repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.PROCESSING)
-        repository.updateAnnotatedExportFailureReason(activeSessionId, null)
-        repository.updateAnnotatedExportProgress(activeSessionId, AnnotatedExportStage.PREPARING, 20, null, 0L)
+        repository.updateAnnotatedExportStatus(
+            activeSessionId,
+            AnnotatedExportStatus.PROCESSING,
+            attemptId = activeExportAttemptId,
+            ownerType = "LIVE_EXPORT",
+            ownerId = "live-$activeSessionId",
+        )
+        repository.updateAnnotatedExportFailureReason(
+            activeSessionId,
+            null,
+            attemptId = activeExportAttemptId,
+            ownerType = "LIVE_EXPORT",
+            ownerId = "live-$activeSessionId",
+        )
+        repository.updateAnnotatedExportProgress(
+            activeSessionId,
+            AnnotatedExportStage.PREPARING,
+            20,
+            null,
+            0L,
+            attemptId = activeExportAttemptId,
+            ownerType = "LIVE_EXPORT",
+            ownerId = "live-$activeSessionId",
+        )
     }
 
     private suspend fun createExportSnapshot(activeSessionId: Long): ExportSnapshot {
@@ -1721,8 +1782,20 @@ class LiveCoachingViewModel(
         annotatedFinalUri = null
         setAnnotatedExportState(AnnotatedExportStatus.ANNOTATED_FAILED, reason)
         exportLifecycleState = ExportLifecycleState.FAILED
-        repository.updateAnnotatedExportStatus(activeSessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-        repository.updateAnnotatedExportFailureReason(activeSessionId, reason)
+        repository.updateAnnotatedExportStatus(
+            activeSessionId,
+            AnnotatedExportStatus.ANNOTATED_FAILED,
+            attemptId = activeExportAttemptId,
+            ownerType = "LIVE_EXPORT",
+            ownerId = "live-$activeSessionId",
+        )
+        repository.updateAnnotatedExportFailureReason(
+            activeSessionId,
+            reason,
+            attemptId = activeExportAttemptId,
+            ownerType = "LIVE_EXPORT",
+            ownerId = "live-$activeSessionId",
+        )
         repository.updateAnnotatedExportProgress(
             sessionId = activeSessionId,
             stage = AnnotatedExportStage.FAILED,
@@ -1731,6 +1804,9 @@ class LiveCoachingViewModel(
             elapsedMs = annotatedExportElapsedMs,
             failureDetail = annotatedExportFailureDetail,
             failureReason = reason,
+            attemptId = activeExportAttemptId,
+            ownerType = "LIVE_EXPORT",
+            ownerId = "live-$activeSessionId",
         )
         SessionDiagnostics.record(
             sessionId = activeSessionId,
@@ -1749,6 +1825,8 @@ class LiveCoachingViewModel(
             failureReason = reason,
         )
         AnnotatedExportJobTracker.updateProgress(activeSessionId, ExportProgressStage.FAILED, 100, null)
+        repository.releaseProcessingAttempt(activeSessionId, activeExportAttemptId)
+        activeExportAttemptId = null
     }
 
     private fun resolveTerminalAnnotatedExportStatus(hasActiveExportJob: Boolean): AnnotatedExportStatus {

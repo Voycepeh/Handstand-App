@@ -50,6 +50,43 @@ import java.util.UUID
 private const val STALE_UPLOAD_HEARTBEAT_MS = 45 * 1000L
 private const val UPLOAD_REPO_TAG = "UploadJobRepo"
 private const val EXPORT_STATE_TAG = "ExportStateGuard"
+private const val DEFAULT_PROFILE_NAME = "Profile 1"
+private val ACTIVE_EXPORT_STATUSES = setOf(
+    AnnotatedExportStatus.VALIDATING_INPUT,
+    AnnotatedExportStatus.PROCESSING,
+    AnnotatedExportStatus.PROCESSING_SLOW,
+)
+private val TERMINAL_EXPORT_STATUSES = setOf(
+    AnnotatedExportStatus.ANNOTATED_READY,
+    AnnotatedExportStatus.ANNOTATED_FAILED,
+    AnnotatedExportStatus.SKIPPED,
+    AnnotatedExportStatus.CANCELLED,
+)
+
+internal fun canMutateAttemptOwnedExportState(
+    session: SessionRecord,
+    attemptId: String?,
+    ownerType: String?,
+    ownerId: String?,
+): Boolean {
+    val hasClaimedAttempt = !session.activeProcessingAttemptId.isNullOrBlank()
+    val requiresOwnershipProof = hasClaimedAttempt || session.annotatedExportStatus in ACTIVE_EXPORT_STATUSES
+    if (!requiresOwnershipProof) return true
+    if (attemptId.isNullOrBlank()) return false
+    if (session.activeProcessingAttemptId != attemptId) return false
+    if (!ownerType.isNullOrBlank() && session.processingOwnerType != ownerType) return false
+    if (!ownerId.isNullOrBlank() && session.processingOwnerId != ownerId) return false
+    return true
+}
+
+data class UserProfileStatus(
+    val id: Long,
+    val name: String,
+    val isActive: Boolean,
+    val isCalibrated: Boolean,
+)
+
+
 internal fun projectSelectableDrills(drills: List<DrillDefinitionRecord>): List<SelectableDrill> =
     drills
         .associateBy { it.id }
@@ -363,8 +400,16 @@ class SessionRepository(
         elapsedMs: Long?,
         failureDetail: String? = null,
         failureReason: String? = null,
+        attemptId: String? = null,
+        ownerType: String? = null,
+        ownerId: String? = null,
     ) {
         val session = sessionDao.getById(sessionId) ?: return
+        if (!isAttemptOwner(session, attemptId, ownerType, ownerId)) {
+            Log.w(EXPORT_STATE_TAG, "stale_writer_rejected sessionId=$sessionId event=progress attemptId=$attemptId ownerType=$ownerType ownerId=$ownerId")
+            return
+        }
+        val now = System.currentTimeMillis()
         sessionDao.upsert(
             session.copy(
                 annotatedExportStage = stage,
@@ -373,7 +418,43 @@ class SessionRepository(
                 annotatedExportElapsedMs = elapsedMs,
                 annotatedExportFailureDetail = failureDetail,
                 annotatedExportFailureReason = failureReason ?: session.annotatedExportFailureReason,
-                annotatedExportLastUpdatedAt = System.currentTimeMillis(),
+                annotatedExportLastUpdatedAt = now,
+                processingLastProgressAtMs = now,
+            ),
+        )
+    }
+
+    suspend fun claimProcessingAttempt(
+        sessionId: Long,
+        ownerType: String,
+        ownerId: String,
+        supersedeReason: String? = null,
+    ): String? {
+        val session = sessionDao.getById(sessionId) ?: return null
+        val attemptId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        Log.i(EXPORT_STATE_TAG, "attempt_claimed sessionId=$sessionId attemptId=$attemptId ownerType=$ownerType ownerId=$ownerId supersedeReason=${supersedeReason.orEmpty()}")
+        sessionDao.upsert(
+            session.copy(
+                activeProcessingAttemptId = attemptId,
+                processingOwnerType = ownerType,
+                processingOwnerId = ownerId,
+                processingStartedAtMs = now,
+                processingLastProgressAtMs = now,
+                annotatedExportFailureReason = supersedeReason ?: session.annotatedExportFailureReason,
+            ),
+        )
+        return attemptId
+    }
+
+    suspend fun releaseProcessingAttempt(sessionId: Long, attemptId: String?) {
+        val session = sessionDao.getById(sessionId) ?: return
+        if (attemptId.isNullOrBlank() || session.activeProcessingAttemptId != attemptId) return
+        sessionDao.upsert(
+            session.copy(
+                activeProcessingAttemptId = null,
+                processingOwnerType = null,
+                processingOwnerId = null,
             ),
         )
     }
@@ -394,23 +475,78 @@ class SessionRepository(
         return true
     }
 
-    suspend fun updateAnnotatedExportStatus(sessionId: Long, status: AnnotatedExportStatus) {
+    suspend fun updateAnnotatedExportStatus(
+        sessionId: Long,
+        status: AnnotatedExportStatus,
+        attemptId: String? = null,
+        ownerType: String? = null,
+        ownerId: String? = null,
+    ) {
         val session = sessionDao.getById(sessionId) ?: return
+        if (!isAttemptOwner(session, attemptId, ownerType, ownerId)) {
+            Log.w(EXPORT_STATE_TAG, "stale_writer_rejected sessionId=$sessionId event=status attemptId=$attemptId ownerType=$ownerType ownerId=$ownerId status=$status")
+            return
+        }
+        if (session.annotatedExportStatus in TERMINAL_EXPORT_STATUSES && status in ACTIVE_EXPORT_STATUSES) {
+            Log.w(EXPORT_STATE_TAG, "status_regression_rejected sessionId=$sessionId from=${session.annotatedExportStatus} to=$status attemptId=$attemptId")
+            return
+        }
         if (session.annotatedExportStatus != status) {
             Log.i(
                 EXPORT_STATE_TAG,
                 "status_transition sessionId=$sessionId from=${session.annotatedExportStatus} to=$status",
             )
         }
+        val now = System.currentTimeMillis()
         sessionDao.upsert(
             session.copy(
                 annotatedExportStatus = status,
-                annotatedExportLastUpdatedAt = System.currentTimeMillis(),
+                annotatedExportLastUpdatedAt = now,
+                processingLastProgressAtMs = now,
+                activeProcessingAttemptId = if (status in TERMINAL_EXPORT_STATUSES) null else session.activeProcessingAttemptId,
+                processingOwnerType = if (status in TERMINAL_EXPORT_STATUSES) null else session.processingOwnerType,
+                processingOwnerId = if (status in TERMINAL_EXPORT_STATUSES) null else session.processingOwnerId,
             ),
         )
     }
 
-    suspend fun updateAnnotatedExportFailureReason(sessionId: Long, reason: String?) {
+    suspend fun updateAnnotatedExportFailureReason(
+        sessionId: Long,
+        reason: String?,
+        attemptId: String? = null,
+        ownerType: String? = null,
+        ownerId: String? = null,
+    ) {
+        val session = sessionDao.getById(sessionId) ?: return
+        if (!isAttemptOwner(session, attemptId, ownerType, ownerId)) {
+            Log.w(EXPORT_STATE_TAG, "stale_writer_rejected sessionId=$sessionId event=failure_reason attemptId=$attemptId ownerType=$ownerType ownerId=$ownerId")
+            return
+        }
+        sessionDao.upsert(session.copy(annotatedExportFailureReason = reason))
+    }
+
+    suspend fun adminUpdateAnnotatedExportStatus(
+        sessionId: Long,
+        status: AnnotatedExportStatus,
+    ) {
+        val session = sessionDao.getById(sessionId) ?: return
+        val now = System.currentTimeMillis()
+        sessionDao.upsert(
+            session.copy(
+                annotatedExportStatus = status,
+                annotatedExportLastUpdatedAt = now,
+                processingLastProgressAtMs = now,
+                activeProcessingAttemptId = null,
+                processingOwnerType = null,
+                processingOwnerId = null,
+            ),
+        )
+    }
+
+    suspend fun adminUpdateAnnotatedExportFailureReason(
+        sessionId: Long,
+        reason: String?,
+    ) {
         val session = sessionDao.getById(sessionId) ?: return
         sessionDao.upsert(session.copy(annotatedExportFailureReason = reason))
     }
@@ -552,11 +688,7 @@ class SessionRepository(
     ): Boolean {
         val session = sessionDao.getById(sessionId) ?: return false
         val isStale =
-            session.annotatedExportStatus in setOf(
-                AnnotatedExportStatus.VALIDATING_INPUT,
-                AnnotatedExportStatus.PROCESSING,
-                AnnotatedExportStatus.PROCESSING_SLOW,
-            ) &&
+            session.annotatedExportStatus in ACTIVE_EXPORT_STATUSES &&
                 session.annotatedVideoUri.isNullOrBlank() &&
                 !hasActiveExportWork
         if (!isStale) return false
@@ -573,6 +705,9 @@ class SessionRepository(
                 annotatedExportStage = AnnotatedExportStage.FAILED,
                 annotatedExportPercent = 100,
                 annotatedExportLastUpdatedAt = System.currentTimeMillis(),
+                activeProcessingAttemptId = null,
+                processingOwnerType = null,
+                processingOwnerId = null,
             ),
         )
         return true
@@ -587,7 +722,7 @@ class SessionRepository(
         sessions.forEach { session ->
             val changed = recoverStaleAnnotatedExportState(
                 sessionId = session.id,
-                hasActiveExportWork = activeExportSessionIds.contains(session.id),
+                hasActiveExportWork = hasVerifiedActiveExportOwnership(session, activeExportSessionIds),
                 trigger = trigger,
             )
             if (changed) recovered += 1
@@ -599,6 +734,23 @@ class SessionRepository(
             )
         }
         return recovered
+    }
+
+    private fun isAttemptOwner(
+        session: SessionRecord,
+        attemptId: String?,
+        ownerType: String?,
+        ownerId: String?,
+    ): Boolean = canMutateAttemptOwnedExportState(session, attemptId, ownerType, ownerId)
+
+    private fun hasVerifiedActiveExportOwnership(
+        session: SessionRecord,
+        activeExportSessionIds: Set<Long>,
+    ): Boolean {
+        if (!activeExportSessionIds.contains(session.id)) return false
+        return !session.activeProcessingAttemptId.isNullOrBlank() &&
+            !session.processingOwnerType.isNullOrBlank() &&
+            !session.processingOwnerId.isNullOrBlank()
     }
 
     suspend fun updateRawPersistStatus(sessionId: Long, status: RawPersistStatus) {

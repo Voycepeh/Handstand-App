@@ -298,8 +298,8 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
                             if (isProcessing) {
                                 OutlinedButton(onClick = {
                                     scope.launch {
-                                        repository.updateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-                                        repository.updateAnnotatedExportFailureReason(sessionId, "EXPORT_CANCELLED")
+                                        repository.adminUpdateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
+                                        repository.adminUpdateAnnotatedExportFailureReason(sessionId, "EXPORT_CANCELLED")
                                     }
                                 }) { Text("Cancel") }
                             }
