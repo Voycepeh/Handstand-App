@@ -10,6 +10,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -83,8 +84,11 @@ sealed class Route(val value: String) {
 }
 
 @Composable
-fun AppNavHost(modifier: Modifier = Modifier) {
+fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
     val navController = rememberNavController()
+    LaunchedEffect(initialSessionId) {
+        initialSessionId?.let { navController.navigate(Route.Results.create(it)) }
+    }
     NavHost(navController = navController, startDestination = Route.Home.value, modifier = modifier) {
         composable(Route.Home.value) {
             HomeScreen(

@@ -77,6 +77,8 @@ import com.inversioncoach.app.recording.OverlayTimelineJson
 import com.inversioncoach.app.recording.toTimelineFrame
 import com.inversioncoach.app.model.toExportPreset
 import com.inversioncoach.app.storage.ServiceLocator
+import com.inversioncoach.app.upload.EnqueueResult
+import com.inversioncoach.app.upload.UploadQueueCoordinator
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.SessionDiagnostics
@@ -126,6 +128,7 @@ data class UploadProgress(
     val processedFrames: Int? = null,
     val totalFrames: Int? = null,
     val phasePercent: Int? = null,
+    val lastTimestampMs: Long? = null,
 )
 
 enum class UploadTrackingMode {
@@ -534,6 +537,7 @@ class DefaultUploadVideoAnalysisRunner(
                                     processedFrames = analyzedFramesForUi,
                                     totalFrames = totalFramesForUi,
                                     phasePercent = movementPercent,
+                                    lastTimestampMs = event.timestampMs,
                                 ),
                             )
                         }
@@ -547,6 +551,7 @@ class DefaultUploadVideoAnalysisRunner(
                                 processedFrames = analyzedFramesForUi,
                                 totalFrames = totalFramesForUi.takeIf { it > 0 } ?: (estimatedTotal ?: 0),
                                 phasePercent = 0,
+                                lastTimestampMs = event.timestampMs,
                             ),
                         )
                     } else if (event.stage == "analysis_complete") {
@@ -559,6 +564,7 @@ class DefaultUploadVideoAnalysisRunner(
                                 processedFrames = analyzedFramesForUi.coerceAtLeast(totalFramesForUi),
                                 totalFrames = totalFramesForUi.coerceAtLeast(analyzedFramesForUi),
                                 phasePercent = 100,
+                                lastTimestampMs = event.timestampMs,
                             ),
                         )
                     }
@@ -858,7 +864,7 @@ class DefaultUploadVideoAnalysisRunner(
                         totalFrames = total,
                         detail = "Rendering annotated video",
                     )
-                    onProgress(UploadProgress(UploadStage.EXPORTING_ANNOTATED_VIDEO, percent / 100f, detail = "Rendered $rendered/$total"))
+                    onProgress(UploadProgress(UploadStage.EXPORTING_ANNOTATED_VIDEO, percent / 100f, detail = "Rendered $rendered/$total", lastTimestampMs = null))
                 },
             )
             log("export_done started=${export.started} failure=${export.failureReason.orEmpty()} uri=${export.persistedUri.orEmpty()}")
@@ -1224,6 +1230,7 @@ class UploadVideoViewModel(
     private val isReferenceUpload: Boolean,
     private val createDrillFromReferenceUpload: Boolean,
     private val pendingDrillName: String? = null,
+    private val queueCoordinator: UploadQueueCoordinator? = null,
     private val resolveDrillTrackingMode: suspend (String) -> UploadTrackingMode? = { drillId ->
         repository?.getDrill(drillId)?.movementMode?.toUploadTrackingMode()
     },
@@ -1244,7 +1251,7 @@ class UploadVideoViewModel(
         private var activeSessionId: Long? = null
     }
 
-    constructor(runner: UploadVideoAnalysisRunner) : this(runner, null, null, null, false, false, null)
+    constructor(runner: UploadVideoAnalysisRunner) : this(runner, null, null, null, false, false, null, null)
 
     init {
         if (selectedDrillId != null) {
@@ -1274,6 +1281,17 @@ class UploadVideoViewModel(
         val repo = repository
         if (repo != null) {
             viewModelScope.launch {
+                if (activeSessionId == null) {
+                    val restored = repo.observeSessions().first().firstOrNull { session ->
+                        session.sessionSource == SessionSource.UPLOADED_VIDEO &&
+                            session.annotatedExportStatus in setOf(
+                                AnnotatedExportStatus.VALIDATING_INPUT,
+                                AnnotatedExportStatus.PROCESSING,
+                                AnnotatedExportStatus.PROCESSING_SLOW,
+                            )
+                    }
+                    if (restored != null) activeSessionId = restored.id
+                }
                 repo.observeSessions().collectLatest { sessions ->
                     val sessionId = activeSessionId ?: return@collectLatest
                     val session = sessions.firstOrNull { it.id == sessionId } ?: return@collectLatest
@@ -1352,6 +1370,42 @@ class UploadVideoViewModel(
                     errorMessage = "Enter a drill name before uploading a new reference drill.",
                     canCancel = false,
                 )
+            }
+            return
+        }
+        if (queueCoordinator != null) {
+            viewModelScope.launch {
+                when (
+                    queueCoordinator.enqueue(
+                        sourceUri = uri.toString(),
+                        trackingMode = trackingMode.name,
+                        selectedDrillId = selectedDrillId,
+                        selectedReferenceTemplateId = selectedReferenceTemplateId,
+                        isReferenceUpload = isReferenceUpload,
+                        createDrillFromReferenceUpload = createDrillFromReferenceUpload,
+                        pendingDrillName = _state.value.pendingDrillName,
+                    )
+                ) {
+                    is EnqueueResult.Enqueued -> _state.update {
+                        it.copy(
+                            selectedVideoUri = uri,
+                            stage = UploadStage.PREPARING_ANALYSIS,
+                            currentProcessingStage = UploadStage.PREPARING_ANALYSIS,
+                            stageText = "Upload queued for background processing.",
+                            errorMessage = null,
+                            canCancel = true,
+                        )
+                    }
+                    EnqueueResult.QueueFull -> _state.update {
+                        it.copy(
+                            stage = UploadStage.FAILED,
+                            currentProcessingStage = UploadStage.FAILED,
+                            stageText = "Queue full",
+                            errorMessage = "Upload queue is full. Wait for current processing to finish.",
+                            canCancel = false,
+                        )
+                    }
+                }
             }
             return
         }
@@ -1587,6 +1641,7 @@ fun UploadVideoScreen(
             isReferenceUpload,
             createDrillFromReferenceUpload,
             pendingDrillName = defaultDraftName,
+            queueCoordinator = UploadQueueCoordinator.get(context),
         )
     }
     val state by viewModel.state.collectAsState()
