@@ -89,7 +89,7 @@ fun HomeScreen(
         showPreferencesOnboarding = !settings.hasCompletedPreferencesOnboarding
     }
 
-    ScaffoldedScreen(title = "Inversion Coach") { padding ->
+    ScaffoldedScreen(title = "CaliVision") { padding ->
         Content(
             padding = padding,
             onStart = onStart,

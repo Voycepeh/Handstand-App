@@ -1,6 +1,6 @@
 # System Overview
 
-Inversion Coach is a drill-centric coaching system. The product is shaped around practical coaching journeys that share common analysis, media, and persistence infrastructure.
+CaliVision is a drill-centric coaching system. The product is shaped around practical coaching journeys that share common analysis, media, and persistence infrastructure.
 
 ## Workflow surfaces
 
