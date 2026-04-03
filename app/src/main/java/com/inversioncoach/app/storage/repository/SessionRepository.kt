@@ -84,6 +84,9 @@ class SessionRepository(
         if (drillType == null) sessionDao.observeAll() else sessionDao.observeByDrill(drillType)
 
     fun observeSession(sessionId: Long): Flow<SessionRecord?> = sessionDao.observeById(sessionId)
+    fun observeHistorySessions(drillId: String? = null): Flow<List<SessionRecord>> =
+        observeSessions().map { sessions -> sessions.filterForDrill(drillId) }
+
     fun observeReferenceTemplates(drillId: String? = null): Flow<List<ReferenceTemplateRecord>> =
         if (drillId == null) referenceTemplateDao.observeAll() else referenceTemplateDao.observeByDrillId(drillId)
 

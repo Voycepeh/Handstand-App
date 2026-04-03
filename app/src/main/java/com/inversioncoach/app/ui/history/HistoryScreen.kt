@@ -36,6 +36,7 @@ import com.inversioncoach.app.model.AnnotatedExportStage
 import com.inversioncoach.app.model.AnnotatedExportStatus
 import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.storage.ServiceLocator
+import com.inversioncoach.app.storage.repository.resolvedDrillId
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
@@ -51,7 +52,7 @@ fun HistoryScreen(
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
-    val sessions by repository.observeSessions().collectAsState(initial = emptyList())
+    val sessions by repository.observeHistorySessions(drillIdFilter).collectAsState(initial = emptyList())
     val comparedSessionIds by repository.observeComparedSessionIds().collectAsState(initial = emptyList())
     val latestComparisonScores by repository.observeLatestComparisonScores().collectAsState(initial = emptyMap())
     val drills by repository.getAllDrills().collectAsState(initial = emptyList())
@@ -94,16 +95,7 @@ fun HistoryScreen(
     }
 
     val maxStorageBytes = settings.maxStorageMb.toLong() * 1024L * 1024L
-    val filteredSessions = remember(sessions, drillIdFilter) {
-        if (drillIdFilter.isNullOrBlank()) {
-            sessions
-        } else {
-            sessions.filter { session ->
-                val drillId = session.drillId ?: parseHistoryMetric(session.metricsJson, "drillId")
-                drillId == drillIdFilter
-            }
-        }
-    }
+    val filteredSessions = sessions
 
     val sortedSessions = remember(filteredSessions, selectedSort, sortAscending, sessionSizes.toMap()) {
         val sorted = when (selectedSort) {
@@ -114,6 +106,9 @@ fun HistoryScreen(
             }
         }
         if (sortAscending) sorted else sorted.reversed()
+    }
+    val compareSelection = remember(sortedSessions, comparedSessionIds) {
+        selectCompareAttemptTargets(sortedSessions, comparedSessionIds)
     }
 
     fun onSortSelected(sort: HistorySort) {
@@ -144,6 +139,7 @@ fun HistoryScreen(
             latestComparisonScores = latestComparisonScores,
             onSortSelected = ::onSortSelected,
             onOpenSession = onOpenSession,
+            compareSelection = compareSelection,
         )
     }
 }
@@ -164,6 +160,7 @@ fun DrillSessionsSection(
     latestComparisonScores: Map<Long, Int>,
     onSortSelected: (HistorySort) -> Unit,
     onOpenSession: (Long) -> Unit,
+    compareSelection: CompareAttemptSelection = CompareAttemptSelection(emptySet(), null, hasEnoughCandidates = false),
     onOpenComparisonTools: (() -> Unit)? = null,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -178,6 +175,9 @@ fun DrillSessionsSection(
             else "Review session history and open any session for details.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (comparisonMode && !compareSelection.hasEnoughCandidates) {
+            Text("Need at least 2 sessions for compare attempts.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (!drillIdFilter.isNullOrBlank()) {
             val drillName = drills.firstOrNull { it.id == drillIdFilter }?.name ?: drillIdFilter
             Text("Filtered to drill: $drillName", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -220,7 +220,7 @@ fun DrillSessionsSection(
                 ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(session.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                        val drillId = parseHistoryMetric(session.metricsJson, "drillId")
+                        val drillId = session.resolvedDrillId()
                         val drillName = drills.firstOrNull { it.id == drillId }?.name
                         if (!drillId.isNullOrBlank()) {
                             Text("Drill: ${drillName ?: drillId}", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -240,6 +240,9 @@ fun DrillSessionsSection(
                                 Text("Similarity score: $score", color = MaterialTheme.colorScheme.primary)
                             }
                         }
+                        if (comparisonMode && compareSelection.anchorSessionId == session.id) {
+                            Text("Current compare anchor", color = MaterialTheme.colorScheme.primary)
+                        }
                         Text("Storage: $sizeGb GB", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -254,9 +257,6 @@ internal fun historyCardDurationText(session: com.inversioncoach.app.model.Sessi
 }
 
 enum class HistorySort { RECENCY, STORAGE_SIZE, SESSION_DURATION }
-
-private fun parseHistoryMetric(raw: String, key: String): String? =
-    raw.split('|').firstOrNull { token -> token.startsWith("$key:") }?.substringAfter(':')?.takeIf { it.isNotBlank() }
 
 internal fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): String = when {
     session.rawPersistStatus == RawPersistStatus.FAILED -> "Failed"

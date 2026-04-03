@@ -29,6 +29,7 @@ import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.history.DrillSessionsSection
 import com.inversioncoach.app.ui.history.HistorySort
+import com.inversioncoach.app.ui.history.selectCompareAttemptTargets
 
 
 internal object DrillWorkspacePrimaryActions {
@@ -55,7 +56,7 @@ fun DrillWorkspaceScreen(
     val context = LocalContext.current
     val repo = remember { ServiceLocator.repository(context) }
     val drills by repo.getAllDrills().collectAsState(initial = emptyList())
-    val allSessions by repo.observeSessions().collectAsState(initial = emptyList())
+    val filteredSessions by repo.observeHistorySessions(drillId).collectAsState(initial = emptyList())
     val comparedSessionIds by repo.observeComparedSessionIds().collectAsState(initial = emptyList())
     val latestComparisonScores by repo.observeLatestComparisonScores().collectAsState(initial = emptyMap())
     val settings by repo.observeSettings().collectAsState(initial = com.inversioncoach.app.model.UserSettings())
@@ -63,15 +64,6 @@ fun DrillWorkspaceScreen(
     var selectedSort by remember { mutableStateOf(HistorySort.RECENCY) }
     var sortAscending by remember { mutableStateOf(false) }
     var totalStorageBytes by remember { mutableLongStateOf(0L) }
-    val filteredSessions = remember(allSessions, drillId) {
-        allSessions.filter { session ->
-            val sessionDrillId = session.drillId ?: session.metricsJson.split('|')
-                .firstOrNull { it.startsWith("drillId:") }
-                ?.substringAfter(':')
-                ?.takeIf { it.isNotBlank() }
-            sessionDrillId == drillId
-        }
-    }
     val sortedSessions = remember(filteredSessions, selectedSort, sortAscending, sessionSizes.toMap()) {
         val sorted = when (selectedSort) {
             HistorySort.RECENCY -> filteredSessions.sortedBy { it.startedAtMs }
@@ -81,6 +73,9 @@ fun DrillWorkspaceScreen(
             }
         }
         if (sortAscending) sorted else sorted.reversed()
+    }
+    val compareSelection = remember(sortedSessions, comparedSessionIds) {
+        selectCompareAttemptTargets(sortedSessions, comparedSessionIds)
     }
 
     LaunchedEffect(filteredSessions) {
@@ -160,6 +155,7 @@ fun DrillWorkspaceScreen(
                 latestComparisonScores = latestComparisonScores,
                 onSortSelected = ::onSortSelected,
                 onOpenSession = onOpenSession,
+                compareSelection = compareSelection,
                 onOpenComparisonTools = { onCompareAttempts(drillId) },
             )
         }

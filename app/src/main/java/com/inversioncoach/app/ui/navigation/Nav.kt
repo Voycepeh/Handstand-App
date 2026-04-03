@@ -59,11 +59,11 @@ sealed class Route(val value: String) {
     data object SessionTooShort : Route("session-too-short/{elapsedMs}/{thresholdSeconds}") {
         fun create(elapsedMs: Long, thresholdSeconds: Int) = "session-too-short/$elapsedMs/$thresholdSeconds"
     }
-    data object SessionHistory : Route("session-history?drillId={drillId}&mode={mode}") {
-        fun create(drillId: String? = null, mode: String = "history"): String =
-            "session-history?drillId=${Uri.encode(drillId ?: "")}&mode=${Uri.encode(mode)}"
+    data object SessionHistory : Route(SessionHistoryRoutes.routePattern) {
+        fun create(drillId: String? = null, mode: SessionHistoryMode = SessionHistoryMode.HISTORY): String =
+            SessionHistoryRoutes.create(drillId = drillId, mode = mode)
     }
-    data object History : Route("history")
+    data object ProgressOverview : Route("history")
     data object DrillStudio : Route("drill-studio?mode={mode}&drillId={drillId}&templateId={templateId}") {
         fun createNew(): String = "drill-studio?mode=create&drillId=&templateId="
         fun createForDrill(drillId: String): String = "drill-studio?mode=drill&drillId=${Uri.encode(drillId)}&templateId="
@@ -94,7 +94,7 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
             HomeScreen(
                 onStart = { navController.navigate(Route.Start.create(StartDrillDestination.LIVE)) },
                 onStartFreestyle = { navController.navigate(Route.Live.create(DrillType.FREESTYLE, LiveSessionOptions.freestyleDefaults())) },
-                onHistory = { navController.navigate(Route.History.value) },
+                onHistory = { navController.navigate(Route.ProgressOverview.value) },
                 onDrills = { navController.navigate(Route.Start.create(StartDrillDestination.WORKSPACE)) },
                 onSettings = { navController.navigate(Route.Settings.value) },
                 onUploadVideo = { navController.navigate(Route.UploadVideo.value) },
@@ -150,20 +150,20 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
         composable(
             Route.SessionHistory.value,
             arguments = listOf(
-                navArgument("drillId") { type = NavType.StringType; defaultValue = "" },
-                navArgument("mode") { type = NavType.StringType; defaultValue = "history" },
+                navArgument(SessionHistoryRoutes.drillIdArg) { type = NavType.StringType; defaultValue = "" },
+                navArgument(SessionHistoryRoutes.modeArg) { type = NavType.StringType; defaultValue = SessionHistoryMode.HISTORY.routeValue },
             ),
         ) {
-            val drillId = it.arguments?.getString("drillId").orEmpty().ifBlank { null }
-            val mode = it.arguments?.getString("mode").orEmpty()
+            val drillId = it.arguments?.getString(SessionHistoryRoutes.drillIdArg).orEmpty().ifBlank { null }
+            val mode = SessionHistoryMode.fromRoute(it.arguments?.getString(SessionHistoryRoutes.modeArg))
             HistoryScreen(
                 onBack = { navController.popBackStack() },
                 onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
                 drillIdFilter = drillId,
-                comparisonMode = mode == "compare",
+                comparisonMode = mode == SessionHistoryMode.COMPARE,
             )
         }
-        composable(Route.History.value) { HomeHistoryScreen(onBack = { navController.popBackStack() }, onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) }) }
+        composable(Route.ProgressOverview.value) { HomeHistoryScreen(onBack = { navController.popBackStack() }, onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) }) }
         composable(Route.DrillStudio.value, arguments = listOf(
             navArgument("mode") { type = NavType.StringType; defaultValue = "drill" },
             navArgument("drillId") { type = NavType.StringType; defaultValue = "" },
@@ -228,7 +228,9 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
                 drillId = drillId,
                 onBack = { navController.popBackStack() },
                 onUploadAttempt = { id -> navController.navigate(Route.UploadVideoForDrill.create(id, null, false)) },
-                onCompareAttempts = { selectedDrillId -> navController.navigate(Route.SessionHistory.create(selectedDrillId, mode = "compare")) },
+                onCompareAttempts = { selectedDrillId ->
+                    navController.navigate(Route.SessionHistory.create(selectedDrillId, mode = SessionHistoryMode.COMPARE))
+                },
                 onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
                 onStartLiveSession = { drillType ->
                     navController.navigate(Route.Live.create(drillType, LiveSessionOptions()))
