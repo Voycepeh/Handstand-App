@@ -191,17 +191,10 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
         }
     }
 
-    LaunchedEffect(
-        spokenCue?.generatedAtMs,
-        settings.audioVolume,
-        resolvedOptions.voiceEnabled,
-        uiState.startupState,
-    ) {
+    LaunchedEffect(spokenCue?.id, spokenCue?.generatedAtMs) {
         val cue = spokenCue ?: return@LaunchedEffect
         if (!resolvedOptions.voiceEnabled) return@LaunchedEffect
         if (settings.audioVolume <= 0f) return@LaunchedEffect
-        if (uiState.startupState != SessionStartupState.ACTIVE) return@LaunchedEffect
-        if (cue.generatedAtMs != uiState.currentCueGeneratedAtMs || cue.id != uiState.currentCueId) return@LaunchedEffect
         voiceCoach.speak(cue, volume = settings.audioVolume)
     }
 
@@ -209,36 +202,6 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
         if (!uiState.cameraPermissionGranted || !uiState.cameraReady) return@LaunchedEffect
         if (uiState.startupState != SessionStartupState.IDLE) return@LaunchedEffect
         vm.launchStartupCountdown(settings.startupCountdownSeconds)
-    }
-
-    LaunchedEffect(uiState.startupState, uiState.sessionCountdownRemainingSeconds, resolvedOptions.voiceEnabled, settings.audioVolume) {
-        if (!resolvedOptions.voiceEnabled || settings.audioVolume <= 0f) return@LaunchedEffect
-        if (uiState.startupState != SessionStartupState.COUNTDOWN) return@LaunchedEffect
-        val remaining = uiState.sessionCountdownRemainingSeconds ?: return@LaunchedEffect
-        if (remaining <= 0) return@LaunchedEffect
-        voiceCoach.speak(
-            cue = com.inversioncoach.app.model.CoachingCue(
-                id = "session_countdown_$remaining",
-                text = remaining.toString(),
-                severity = 0,
-                generatedAtMs = System.currentTimeMillis(),
-            ),
-            volume = settings.audioVolume,
-        )
-    }
-
-    LaunchedEffect(uiState.startupState, resolvedOptions.voiceEnabled, settings.audioVolume) {
-        if (uiState.startupState != SessionStartupState.ACTIVE) return@LaunchedEffect
-        if (!resolvedOptions.voiceEnabled || settings.audioVolume <= 0f) return@LaunchedEffect
-        voiceCoach.speak(
-            cue = com.inversioncoach.app.model.CoachingCue(
-                id = "session_initiated",
-                text = "Session initiated.",
-                severity = 0,
-                generatedAtMs = System.currentTimeMillis(),
-            ),
-            volume = settings.audioVolume,
-        )
     }
 
     LaunchedEffect(
