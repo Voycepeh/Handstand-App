@@ -14,7 +14,6 @@ import com.inversioncoach.app.model.RetainedAssetType
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.FrameMetricRecord
 import com.inversioncoach.app.model.IssueEvent
-import com.inversioncoach.app.model.ProfileCalibrationEntity
 import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.SessionSource
@@ -23,7 +22,6 @@ import com.inversioncoach.app.model.UploadJobPipelineType
 import com.inversioncoach.app.model.UploadJobStatus
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.model.normalized
-import com.inversioncoach.app.calibration.UserBodyProfile
 import com.inversioncoach.app.drills.DrillCameraView
 import com.inversioncoach.app.drills.DrillMovementMode
 import com.inversioncoach.app.drills.DrillSourceType
@@ -41,7 +39,6 @@ import com.inversioncoach.app.overlay.DrillCameraSide
 import com.inversioncoach.app.storage.SessionBlobStorage
 import com.inversioncoach.app.media.SessionMediaOwnership
 import com.inversioncoach.app.storage.db.FrameMetricDao
-import com.inversioncoach.app.storage.db.ProfileDao
 import com.inversioncoach.app.storage.db.SessionDao
 import com.inversioncoach.app.storage.db.SessionComparisonDao
 import com.inversioncoach.app.storage.db.UserSettingsDao
@@ -54,6 +51,33 @@ private const val STALE_UPLOAD_HEARTBEAT_MS = 45 * 1000L
 private const val UPLOAD_REPO_TAG = "UploadJobRepo"
 private const val EXPORT_STATE_TAG = "ExportStateGuard"
 private const val DEFAULT_PROFILE_NAME = "Profile 1"
+private val ACTIVE_EXPORT_STATUSES = setOf(
+    AnnotatedExportStatus.VALIDATING_INPUT,
+    AnnotatedExportStatus.PROCESSING,
+    AnnotatedExportStatus.PROCESSING_SLOW,
+)
+private val TERMINAL_EXPORT_STATUSES = setOf(
+    AnnotatedExportStatus.ANNOTATED_READY,
+    AnnotatedExportStatus.ANNOTATED_FAILED,
+    AnnotatedExportStatus.SKIPPED,
+    AnnotatedExportStatus.CANCELLED,
+)
+
+internal fun canMutateAttemptOwnedExportState(
+    session: SessionRecord,
+    attemptId: String?,
+    ownerType: String?,
+    ownerId: String?,
+): Boolean {
+    val hasClaimedAttempt = !session.activeProcessingAttemptId.isNullOrBlank()
+    val requiresOwnershipProof = hasClaimedAttempt || session.annotatedExportStatus in ACTIVE_EXPORT_STATUSES
+    if (!requiresOwnershipProof) return true
+    if (attemptId.isNullOrBlank()) return false
+    if (session.activeProcessingAttemptId != attemptId) return false
+    if (!ownerType.isNullOrBlank() && session.processingOwnerType != ownerType) return false
+    if (!ownerId.isNullOrBlank() && session.processingOwnerId != ownerId) return false
+    return true
+}
 
 data class UserProfileStatus(
     val id: Long,
@@ -74,7 +98,6 @@ class SessionRepository(
     private val sessionDao: SessionDao,
     private val userSettingsDao: UserSettingsDao,
     private val frameMetricDao: FrameMetricDao,
-    private val profileDao: ProfileDao,
     private val referenceTemplateDao: com.inversioncoach.app.storage.db.ReferenceTemplateDao,
     private val sessionComparisonDao: SessionComparisonDao,
     private val drillDefinitionDao: com.inversioncoach.app.storage.db.DrillDefinitionDao,
@@ -377,8 +400,16 @@ class SessionRepository(
         elapsedMs: Long?,
         failureDetail: String? = null,
         failureReason: String? = null,
+        attemptId: String? = null,
+        ownerType: String? = null,
+        ownerId: String? = null,
     ) {
         val session = sessionDao.getById(sessionId) ?: return
+        if (!isAttemptOwner(session, attemptId, ownerType, ownerId)) {
+            Log.w(EXPORT_STATE_TAG, "stale_writer_rejected sessionId=$sessionId event=progress attemptId=$attemptId ownerType=$ownerType ownerId=$ownerId")
+            return
+        }
+        val now = System.currentTimeMillis()
         sessionDao.upsert(
             session.copy(
                 annotatedExportStage = stage,
@@ -387,7 +418,43 @@ class SessionRepository(
                 annotatedExportElapsedMs = elapsedMs,
                 annotatedExportFailureDetail = failureDetail,
                 annotatedExportFailureReason = failureReason ?: session.annotatedExportFailureReason,
-                annotatedExportLastUpdatedAt = System.currentTimeMillis(),
+                annotatedExportLastUpdatedAt = now,
+                processingLastProgressAtMs = now,
+            ),
+        )
+    }
+
+    suspend fun claimProcessingAttempt(
+        sessionId: Long,
+        ownerType: String,
+        ownerId: String,
+        supersedeReason: String? = null,
+    ): String? {
+        val session = sessionDao.getById(sessionId) ?: return null
+        val attemptId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        Log.i(EXPORT_STATE_TAG, "attempt_claimed sessionId=$sessionId attemptId=$attemptId ownerType=$ownerType ownerId=$ownerId supersedeReason=${supersedeReason.orEmpty()}")
+        sessionDao.upsert(
+            session.copy(
+                activeProcessingAttemptId = attemptId,
+                processingOwnerType = ownerType,
+                processingOwnerId = ownerId,
+                processingStartedAtMs = now,
+                processingLastProgressAtMs = now,
+                annotatedExportFailureReason = supersedeReason ?: session.annotatedExportFailureReason,
+            ),
+        )
+        return attemptId
+    }
+
+    suspend fun releaseProcessingAttempt(sessionId: Long, attemptId: String?) {
+        val session = sessionDao.getById(sessionId) ?: return
+        if (attemptId.isNullOrBlank() || session.activeProcessingAttemptId != attemptId) return
+        sessionDao.upsert(
+            session.copy(
+                activeProcessingAttemptId = null,
+                processingOwnerType = null,
+                processingOwnerId = null,
             ),
         )
     }
@@ -408,23 +475,78 @@ class SessionRepository(
         return true
     }
 
-    suspend fun updateAnnotatedExportStatus(sessionId: Long, status: AnnotatedExportStatus) {
+    suspend fun updateAnnotatedExportStatus(
+        sessionId: Long,
+        status: AnnotatedExportStatus,
+        attemptId: String? = null,
+        ownerType: String? = null,
+        ownerId: String? = null,
+    ) {
         val session = sessionDao.getById(sessionId) ?: return
+        if (!isAttemptOwner(session, attemptId, ownerType, ownerId)) {
+            Log.w(EXPORT_STATE_TAG, "stale_writer_rejected sessionId=$sessionId event=status attemptId=$attemptId ownerType=$ownerType ownerId=$ownerId status=$status")
+            return
+        }
+        if (session.annotatedExportStatus in TERMINAL_EXPORT_STATUSES && status in ACTIVE_EXPORT_STATUSES) {
+            Log.w(EXPORT_STATE_TAG, "status_regression_rejected sessionId=$sessionId from=${session.annotatedExportStatus} to=$status attemptId=$attemptId")
+            return
+        }
         if (session.annotatedExportStatus != status) {
             Log.i(
                 EXPORT_STATE_TAG,
                 "status_transition sessionId=$sessionId from=${session.annotatedExportStatus} to=$status",
             )
         }
+        val now = System.currentTimeMillis()
         sessionDao.upsert(
             session.copy(
                 annotatedExportStatus = status,
-                annotatedExportLastUpdatedAt = System.currentTimeMillis(),
+                annotatedExportLastUpdatedAt = now,
+                processingLastProgressAtMs = now,
+                activeProcessingAttemptId = if (status in TERMINAL_EXPORT_STATUSES) null else session.activeProcessingAttemptId,
+                processingOwnerType = if (status in TERMINAL_EXPORT_STATUSES) null else session.processingOwnerType,
+                processingOwnerId = if (status in TERMINAL_EXPORT_STATUSES) null else session.processingOwnerId,
             ),
         )
     }
 
-    suspend fun updateAnnotatedExportFailureReason(sessionId: Long, reason: String?) {
+    suspend fun updateAnnotatedExportFailureReason(
+        sessionId: Long,
+        reason: String?,
+        attemptId: String? = null,
+        ownerType: String? = null,
+        ownerId: String? = null,
+    ) {
+        val session = sessionDao.getById(sessionId) ?: return
+        if (!isAttemptOwner(session, attemptId, ownerType, ownerId)) {
+            Log.w(EXPORT_STATE_TAG, "stale_writer_rejected sessionId=$sessionId event=failure_reason attemptId=$attemptId ownerType=$ownerType ownerId=$ownerId")
+            return
+        }
+        sessionDao.upsert(session.copy(annotatedExportFailureReason = reason))
+    }
+
+    suspend fun adminUpdateAnnotatedExportStatus(
+        sessionId: Long,
+        status: AnnotatedExportStatus,
+    ) {
+        val session = sessionDao.getById(sessionId) ?: return
+        val now = System.currentTimeMillis()
+        sessionDao.upsert(
+            session.copy(
+                annotatedExportStatus = status,
+                annotatedExportLastUpdatedAt = now,
+                processingLastProgressAtMs = now,
+                activeProcessingAttemptId = null,
+                processingOwnerType = null,
+                processingOwnerId = null,
+            ),
+        )
+    }
+
+    suspend fun adminUpdateAnnotatedExportFailureReason(
+        sessionId: Long,
+        reason: String?,
+    ) {
         val session = sessionDao.getById(sessionId) ?: return
         sessionDao.upsert(session.copy(annotatedExportFailureReason = reason))
     }
@@ -566,11 +688,7 @@ class SessionRepository(
     ): Boolean {
         val session = sessionDao.getById(sessionId) ?: return false
         val isStale =
-            session.annotatedExportStatus in setOf(
-                AnnotatedExportStatus.VALIDATING_INPUT,
-                AnnotatedExportStatus.PROCESSING,
-                AnnotatedExportStatus.PROCESSING_SLOW,
-            ) &&
+            session.annotatedExportStatus in ACTIVE_EXPORT_STATUSES &&
                 session.annotatedVideoUri.isNullOrBlank() &&
                 !hasActiveExportWork
         if (!isStale) return false
@@ -587,6 +705,9 @@ class SessionRepository(
                 annotatedExportStage = AnnotatedExportStage.FAILED,
                 annotatedExportPercent = 100,
                 annotatedExportLastUpdatedAt = System.currentTimeMillis(),
+                activeProcessingAttemptId = null,
+                processingOwnerType = null,
+                processingOwnerId = null,
             ),
         )
         return true
@@ -601,7 +722,7 @@ class SessionRepository(
         sessions.forEach { session ->
             val changed = recoverStaleAnnotatedExportState(
                 sessionId = session.id,
-                hasActiveExportWork = activeExportSessionIds.contains(session.id),
+                hasActiveExportWork = hasVerifiedActiveExportOwnership(session, activeExportSessionIds),
                 trigger = trigger,
             )
             if (changed) recovered += 1
@@ -613,6 +734,23 @@ class SessionRepository(
             )
         }
         return recovered
+    }
+
+    private fun isAttemptOwner(
+        session: SessionRecord,
+        attemptId: String?,
+        ownerType: String?,
+        ownerId: String?,
+    ): Boolean = canMutateAttemptOwnedExportState(session, attemptId, ownerType, ownerId)
+
+    private fun hasVerifiedActiveExportOwnership(
+        session: SessionRecord,
+        activeExportSessionIds: Set<Long>,
+    ): Boolean {
+        if (!activeExportSessionIds.contains(session.id)) return false
+        return !session.activeProcessingAttemptId.isNullOrBlank() &&
+            !session.processingOwnerType.isNullOrBlank() &&
+            !session.processingOwnerId.isNullOrBlank()
     }
 
     suspend fun updateRawPersistStatus(sessionId: Long, status: RawPersistStatus) {
@@ -764,162 +902,6 @@ class SessionRepository(
         }
         userSettingsDao.upsert(settings.copy(drillCameraSideSelections = encodeDrillSides(updated)))
     }
-
-    /**
-     * Legacy compatibility only: `userBodyProfileJson` predates profile-based calibration storage.
-     * New code should use getActiveProfileCalibration()/saveCalibrationForActiveProfile().
-     */
-    suspend fun saveUserBodyProfile(profile: UserBodyProfile?) {
-        val activeProfile = getActiveProfile() ?: return
-        saveCalibration(activeProfile.id, profile)
-    }
-
-    /**
-     * Legacy compatibility only: prefer getActiveProfileCalibration() for canonical profile-based lookup.
-     */
-    suspend fun getUserBodyProfile(): UserBodyProfile? = getActiveProfileCalibration()
-
-    fun observeProfiles(): Flow<List<UserProfileStatus>> =
-        profileDao.observeProfiles().map { profiles ->
-            profiles.map { it.toStatus() }
-        }
-
-    fun observeProfileStatuses(): Flow<List<UserProfileStatus>> = observeProfiles()
-
-    fun observeActiveProfile(): Flow<UserProfileStatus?> =
-        profileDao.observeActiveProfile().map { it?.toStatus() }
-
-    suspend fun listProfiles(): List<UserProfileStatus> =
-        profileDao.observeProfiles().map { profiles -> profiles.map { it.toStatus() } }
-            .firstOrNull()
-            .orEmpty()
-
-    suspend fun getActiveProfile(): UserProfileStatus? {
-        val existing = profileDao.getActiveProfile()?.toStatus()
-        if (existing != null) return existing
-
-        val fallback = profileDao.getOldestUnarchivedProfile()
-        if (fallback != null) {
-            profileDao.setActiveProfile(fallback.id, System.currentTimeMillis())
-            return profileDao.getActiveProfile()?.toStatus()
-        }
-
-        ensureDefaultProfileExists()
-        return profileDao.getActiveProfile()?.toStatus()
-    }
-
-    suspend fun setActiveProfile(profileId: Long): Boolean {
-        val updatedAtMs = System.currentTimeMillis()
-        return profileDao.setActiveProfile(profileId = profileId, updatedAtMs = updatedAtMs)
-    }
-
-    suspend fun createProfile(displayName: String): Long? {
-        val normalizedName = displayName.trim()
-        if (normalizedName.isBlank()) return null
-        val now = System.currentTimeMillis()
-        val shouldActivate = getActiveProfile() == null
-        val insertedId = runCatching {
-            profileDao.insertProfile(
-                com.inversioncoach.app.model.UserProfileEntity(
-                    displayName = normalizedName,
-                    isActive = shouldActivate,
-                    isArchived = false,
-                    createdAtMs = now,
-                    updatedAtMs = now,
-                ),
-            )
-        }.getOrNull() ?: return null
-        return insertedId
-    }
-
-    suspend fun renameProfile(profileId: Long, displayName: String): Boolean {
-        val normalizedName = displayName.trim()
-        if (normalizedName.isBlank()) return false
-        return runCatching {
-            profileDao.renameProfile(profileId, normalizedName, System.currentTimeMillis()) > 0
-        }.getOrDefault(false)
-    }
-
-    suspend fun archiveProfile(profileId: Long): Boolean {
-        val profile = profileDao.getProfile(profileId) ?: return false
-        val updatedAtMs = System.currentTimeMillis()
-        val archived = profileDao.archiveProfile(profileId, updatedAtMs) > 0
-        if (!archived) return false
-        if (profile.isActive) {
-            val fallback = profileDao.getOldestUnarchivedProfile()
-            if (fallback != null) {
-                profileDao.setActiveProfile(fallback.id, updatedAtMs)
-            } else {
-                createProfile(DEFAULT_PROFILE_NAME)
-            }
-        }
-        return true
-    }
-
-    fun observeCalibration(profileId: Long): Flow<UserBodyProfile?> =
-        profileDao.observeCalibration(profileId).map { calibration ->
-            UserBodyProfile.decode(calibration?.calibrationPayloadJson)
-        }
-
-    suspend fun getCalibration(profileId: Long): UserBodyProfile? =
-        UserBodyProfile.decode(profileDao.getCalibration(profileId)?.calibrationPayloadJson)
-
-    suspend fun getActiveProfileCalibration(): UserBodyProfile? {
-        val activeProfile = getActiveProfile() ?: return null
-        return getCalibration(activeProfile.id)
-    }
-
-    suspend fun getActiveProfileCalibrationVersion(): Int? {
-        val activeProfile = getActiveProfile() ?: return null
-        return profileDao.getCalibration(activeProfile.id)?.profileVersion
-    }
-
-    suspend fun saveCalibration(profileId: Long, profile: UserBodyProfile?) {
-        if (profile == null) {
-            profileDao.deleteCalibration(profileId)
-            return
-        }
-        val updatedAtMs = System.currentTimeMillis()
-        val existingVersion = profileDao.getCalibration(profileId)?.profileVersion ?: 0
-        profileDao.upsertCalibration(
-            ProfileCalibrationEntity(
-                profileId = profileId,
-                profileVersion = existingVersion + 1,
-                updatedAtMs = updatedAtMs,
-                calibrationPayloadJson = profile.encode(),
-                calibrationMethod = "structural_calibration",
-            ),
-        )
-    }
-
-    suspend fun saveCalibrationForActiveProfile(profile: UserBodyProfile?) {
-        val activeProfile = getActiveProfile() ?: return
-        saveCalibration(activeProfile.id, profile)
-    }
-
-    suspend fun hasCalibration(profileId: Long): Boolean = profileDao.hasCalibration(profileId)
-
-    private suspend fun ensureDefaultProfileExists() {
-        if (profileDao.countActiveProfiles() > 0) return
-        val now = System.currentTimeMillis()
-        profileDao.insertProfile(
-            com.inversioncoach.app.model.UserProfileEntity(
-                displayName = DEFAULT_PROFILE_NAME,
-                isActive = true,
-                isArchived = false,
-                createdAtMs = now,
-                updatedAtMs = now,
-            ),
-        )
-    }
-
-    private fun com.inversioncoach.app.storage.db.UserProfileWithCalibration.toStatus(): UserProfileStatus =
-        UserProfileStatus(
-            id = id,
-            name = displayName,
-            isActive = isActive,
-            isCalibrated = hasCalibration,
-        )
 
     private suspend fun enforceConfiguredStorageLimit() {
         val settings = (userSettingsDao.getSettings() ?: UserSettings()).normalized()

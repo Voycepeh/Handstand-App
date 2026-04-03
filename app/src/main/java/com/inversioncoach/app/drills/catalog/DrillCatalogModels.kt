@@ -127,6 +127,32 @@ data class PhasePoseTemplate(
     val joints: Map<String, JointPoint>,
     val holdDurationMs: Int? = null,
     val transitionDurationMs: Int = 700,
+    val authoring: PhasePoseAuthoring? = null,
+)
+
+data class PhasePoseAuthoring(
+    val sourceType: PhasePoseSourceType = PhasePoseSourceType.MANUAL,
+    val sourceImageUri: String? = null,
+    val detectedJoints: Map<String, JointPoint> = emptyMap(),
+    val jointConfidence: Map<String, Float> = emptyMap(),
+    val manualOffsets: Map<String, JointPoint> = emptyMap(),
+    val qualityScore: Float? = null,
+    val guides: PhaseBoundaryGuides = PhaseBoundaryGuides(),
+)
+
+enum class PhasePoseSourceType {
+    MANUAL,
+    IMAGE,
+}
+
+data class PhaseBoundaryGuides(
+    val showFrameGuides: Boolean = true,
+    val showFloorLine: Boolean = false,
+    val floorLineY: Float = 0.9f,
+    val showWallLine: Boolean = false,
+    val wallLineX: Float = 0.1f,
+    val showBarLine: Boolean = false,
+    val barLineY: Float = 0.18f,
 )
 
 data class SkeletonKeyframeTemplate(

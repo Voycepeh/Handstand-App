@@ -341,6 +341,16 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_20_21: Migration = object : Migration(20, 21) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE session_records ADD COLUMN activeProcessingAttemptId TEXT")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN processingOwnerType TEXT")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN processingOwnerId TEXT")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN processingStartedAtMs INTEGER")
+            db.execSQL("ALTER TABLE session_records ADD COLUMN processingLastProgressAtMs INTEGER")
+        }
+    }
+
 
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_11_12,
@@ -352,5 +362,6 @@ object DatabaseMigrations {
         MIGRATION_17_18,
         MIGRATION_18_19,
         MIGRATION_19_20,
+        MIGRATION_20_21,
     )
 }

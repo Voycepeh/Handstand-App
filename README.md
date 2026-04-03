@@ -1,6 +1,6 @@
 # CaliVision
 
-CaliVision is a drill-centric Android training app for calisthenics practice. It connects live coaching, upload analysis, drill authoring, replay review, and drill-profile context in one workflow.
+CaliVision is a drill-centric Android training app for calisthenics practice. It connects live coaching, upload analysis, drill authoring, and replay review in one workflow.
 
 ## Why I built CaliVision
 
@@ -62,7 +62,6 @@ CaliVision keeps users in drill context from start to review:
 - **Live Session**: countdown-gated real-time coaching with overlays.
 - **Upload / Reference Training**: analyze imported clips and optionally produce drill-linked references.
 - **Results / Session History**: inspect outcomes and replay assets.
-- **Profiles**: manage training preferences used by analysis.
 
 ## Core workflows
 
@@ -77,7 +76,6 @@ flowchart TD
     MANAGE[Manage Drills]
     STUDIO[Drill Studio]
     UPLOAD[Upload / Reference Training]
-    CAL[Profiles]
 
     HOME --> START --> LIVE --> FINALIZE --> RESULTS
     RESULTS --> HISTORY
@@ -85,7 +83,6 @@ flowchart TD
 
     HOME --> MANAGE --> STUDIO --> MANAGE
     HOME --> UPLOAD --> RESULTS
-    HOME --> CAL --> HOME
 ```
 
 ```mermaid
@@ -115,7 +112,7 @@ Detailed diagrams live in [`docs/diagrams/`](docs/diagrams).
 - AndroidX Navigation + ViewModel state flows
 - Room database + blob/media storage
 - ML Kit on-device pose detection (landmark extraction)
-- Custom on-device motion analysis, biomechanics, profile, and drill scoring modules
+- Custom on-device motion analysis, biomechanics, and drill scoring modules
 - WorkManager-backed upload queue processing
 
 ## ML + movement analysis (current state)
@@ -129,23 +126,23 @@ Those landmarks then flow through CaliVision’s own analysis stack:
 
 - motion analysis + phase detection
 - biomechanics metrics
-- profile-agnostic interpretation
 - timeline overlays and structured feedback
 - drill scoring + reference comparison outputs
 
 Today’s seeded drill baselines and v1 movement templates are **authored rules and movement-analysis heuristics** built in the app’s domain layer. They are not a fully self-learning end-to-end model.
 
-The reference-template and movement-profile workflow is being structured so scoring and comparison can become more adaptive and data-informed over time as more drill data is captured, while remaining product-guided and technically explicit about what is rule-authored vs learned.
+The reference-template workflow is being structured so scoring and comparison can become more adaptive and data-informed over time as more drill data is captured, while remaining product-guided and technically explicit about what is rule-authored vs learned.
 
 ## How the system works
 
 1. UI routes in `ui/navigation/Nav.kt` coordinate screen transitions.
 2. Workflow view models (`ui/live`, `ui/upload`, `ui/drillstudio`) orchestrate user flows.
-3. Domain modules (`drills`, `movementprofile`) provide drill behavior and reference-profile analysis behavior.
+3. Domain modules (`drills`, `movementprofile`) provide drill behavior and reference-analysis behavior.
 4. Analysis modules (`pose`, `motion`, `biomechanics`) combine ML landmark extraction with CaliVision-authored scoring/classification logic.
 5. Recording/export modules (`recording`, `media`) generate replay outputs with fallback.
 6. `storage/repository/SessionRepository` persists sessions, drill metadata, media status, and references.
-7. `app/src/main/assets/drill_catalog/drill_catalog_v1.json` is the canonical seeded source; seeded reference/baseline templates are derived from catalog drill metadata at startup (no standalone `assets/reference_templates/*.json` dependency).
+7. Export processing ownership is attempt-scoped (`activeProcessingAttemptId` + owner metadata) so stale/retried workers cannot regress terminal state.
+8. `app/src/main/assets/drill_catalog/drill_catalog_v1.json` is the canonical seeded source; seeded reference/baseline templates are derived from catalog drill metadata at startup (no standalone `assets/reference_templates/*.json` dependency).
 
 ## Project structure / docs map
 
@@ -161,6 +158,19 @@ The reference-template and movement-profile workflow is being structured so scor
 ## Seeded skeleton preview renderer (developer note)
 
 Seeded drill motion previews now use one shared renderer in `ui/components/SeededSkeletonPreview.kt` across drill catalog cards and Drill Studio. The shared policy centralizes portrait aspect ratio, content padding/fit behavior, skeleton styling, and default playback timing assumptions so preview proportions stay consistent across surfaces.
+
+## Drill authoring phase-1 (image seeded phases)
+
+Drill Studio now includes a production path for **single-image phase seeding** inside the existing drill editing flow:
+
+- attach one image per phase
+- run on-device pose detection and overlay the detected skeleton on top of the image
+- apply small per-joint manual correction offsets
+- use optional frame/floor/wall/bar visual guides for alignment
+- persist authored phase pose + correction + guide metadata with the drill record
+- copy selected authoring images into app-managed storage for durable reopen behavior
+
+Manage Drills also supports **drill package export/import** for authored drills, so phase-seeded drills can be shared across devices and later promoted into app seed material with minimal transformation.
 
 ## Running locally
 
@@ -179,7 +189,7 @@ gradle :app:assembleDebug
 
 ## Documentation
 
-If you change workflow names, routes, navigation behavior, architecture boundaries, replay/export/media behavior, upload/reference behavior, or profile behavior, **update docs and diagrams in the same PR**.
+If you change workflow names, routes, navigation behavior, architecture boundaries, replay/export/media behavior, or upload/reference behavior, **update docs and diagrams in the same PR**.
 
 Start here:
 

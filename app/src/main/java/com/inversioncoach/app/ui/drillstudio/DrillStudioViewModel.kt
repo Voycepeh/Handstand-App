@@ -17,8 +17,11 @@ import com.inversioncoach.app.drills.catalog.DrillCatalogRepository
 import com.inversioncoach.app.drills.catalog.DrillPhaseTemplate
 import com.inversioncoach.app.drills.catalog.DrillTemplate
 import com.inversioncoach.app.drills.catalog.JointPoint
+import com.inversioncoach.app.drills.catalog.PhaseBoundaryGuides
 import com.inversioncoach.app.drills.catalog.PhasePoseTemplate
+import com.inversioncoach.app.drills.catalog.PhasePoseSourceType
 import com.inversioncoach.app.drills.catalog.PhaseWindow
+import com.inversioncoach.app.drills.catalog.PhasePoseAuthoring
 import com.inversioncoach.app.drills.catalog.SkeletonKeyframeTemplate
 import com.inversioncoach.app.drills.catalog.SkeletonTemplate
 import com.inversioncoach.app.model.DrillDefinitionRecord
@@ -185,7 +188,147 @@ class DrillStudioViewModel(
     fun updatePhasePoseJoint(phaseId: String, joint: String, point: JointPoint) = mutateReadyDraft { current ->
         current.copy(
             skeletonTemplate = current.skeletonTemplate.copy(
-                phasePoses = DrillStudioPhaseEditor.updatePoseJoint(current.skeletonTemplate.phasePoses, phaseId, joint, point),
+                phasePoses = current.skeletonTemplate.phasePoses.map { pose ->
+                    if (pose.phaseId != phaseId) return@map pose
+                    val detected = pose.authoring?.detectedJoints?.get(joint)
+                    val nextOffsets = if (detected != null) {
+                        (pose.authoring?.manualOffsets.orEmpty() + (joint to JointPoint(point.x - detected.x, point.y - detected.y)))
+                    } else {
+                        pose.authoring?.manualOffsets.orEmpty()
+                    }
+                    pose.copy(
+                        joints = pose.joints + (joint to point),
+                        authoring = pose.authoring?.copy(manualOffsets = nextOffsets),
+                    )
+                },
+            ),
+        )
+    }
+
+    fun attachReferenceImage(phaseId: String, imageUri: String) = mutateReadyDraft { current ->
+        current.copy(
+            skeletonTemplate = current.skeletonTemplate.copy(
+                phasePoses = current.skeletonTemplate.phasePoses.map { pose ->
+                    if (pose.phaseId == phaseId) {
+                        pose.copy(
+                            authoring = (pose.authoring ?: PhasePoseAuthoring()).copy(
+                                sourceType = PhasePoseSourceType.IMAGE,
+                                sourceImageUri = imageUri,
+                            ),
+                        )
+                    } else {
+                        pose
+                    }
+                },
+            ),
+        )
+    }
+
+    fun clearReferenceImage(phaseId: String) = mutateReadyDraft { current ->
+        current.copy(
+            skeletonTemplate = current.skeletonTemplate.copy(
+                phasePoses = current.skeletonTemplate.phasePoses.map { pose ->
+                    if (pose.phaseId == phaseId) {
+                        pose.copy(
+                            authoring = (pose.authoring ?: PhasePoseAuthoring()).copy(
+                                sourceType = PhasePoseSourceType.MANUAL,
+                                sourceImageUri = null,
+                                detectedJoints = emptyMap(),
+                                jointConfidence = emptyMap(),
+                                manualOffsets = emptyMap(),
+                                qualityScore = null,
+                            ),
+                        )
+                    } else {
+                        pose
+                    }
+                },
+            ),
+        )
+    }
+
+    fun applyDetectedImagePose(
+        phaseId: String,
+        normalizedJoints: Map<String, JointPoint>,
+        jointConfidence: Map<String, Float>,
+        qualityScore: Float,
+    ) = mutateReadyDraft { current ->
+        current.copy(
+            skeletonTemplate = current.skeletonTemplate.copy(
+                phasePoses = current.skeletonTemplate.phasePoses.map { pose ->
+                    if (pose.phaseId != phaseId) return@map pose
+                    pose.copy(
+                        joints = DrillStudioPoseUtils.normalizeJointNames(normalizedJoints),
+                        authoring = (pose.authoring ?: PhasePoseAuthoring()).copy(
+                            sourceType = PhasePoseSourceType.IMAGE,
+                            detectedJoints = DrillStudioPoseUtils.normalizeJointNames(normalizedJoints),
+                            jointConfidence = jointConfidence,
+                            manualOffsets = emptyMap(),
+                            qualityScore = qualityScore,
+                        ),
+                    )
+                },
+            ),
+        )
+    }
+
+    fun resetImageDetection(phaseId: String) = mutateReadyDraft { current ->
+        current.copy(
+            skeletonTemplate = current.skeletonTemplate.copy(
+                phasePoses = current.skeletonTemplate.phasePoses.map { pose ->
+                    if (pose.phaseId != phaseId) return@map pose
+                    val detected = pose.authoring?.detectedJoints.orEmpty()
+                    if (detected.isEmpty()) return@map pose
+                    pose.copy(
+                        joints = detected,
+                        authoring = pose.authoring?.copy(manualOffsets = emptyMap()),
+                    )
+                },
+            ),
+        )
+    }
+
+    fun resetJointCorrection(phaseId: String, joint: String) = mutateReadyDraft { current ->
+        current.copy(
+            skeletonTemplate = current.skeletonTemplate.copy(
+                phasePoses = current.skeletonTemplate.phasePoses.map { pose ->
+                    if (pose.phaseId != phaseId) return@map pose
+                    val detected = pose.authoring?.detectedJoints?.get(joint) ?: return@map pose
+                    pose.copy(
+                        joints = pose.joints + (joint to detected),
+                        authoring = pose.authoring?.copy(manualOffsets = pose.authoring.manualOffsets - joint),
+                    )
+                },
+            ),
+        )
+    }
+
+    fun resetAllCorrections(phaseId: String) = resetImageDetection(phaseId)
+
+    fun updatePhaseGuides(phaseId: String, guides: PhaseBoundaryGuides) = mutateReadyDraft { current ->
+        current.copy(
+            skeletonTemplate = current.skeletonTemplate.copy(
+                phasePoses = current.skeletonTemplate.phasePoses.map { pose ->
+                    if (pose.phaseId == phaseId) {
+                        pose.copy(authoring = (pose.authoring ?: PhasePoseAuthoring()).copy(guides = guides))
+                    } else {
+                        pose
+                    }
+                },
+            ),
+        )
+    }
+
+    fun savePhasePose(phaseId: String) = mutateReadyDraft { current ->
+        current.copy(
+            skeletonTemplate = current.skeletonTemplate.copy(
+                phasePoses = current.skeletonTemplate.phasePoses.map { pose ->
+                    if (pose.phaseId == phaseId) {
+                        pose.copy(joints = DrillStudioPoseUtils.normalizeJointNames(pose.joints))
+                    } else {
+                        pose
+                    }
+                },
             ),
         )
     }
@@ -764,6 +907,25 @@ internal fun DrillTemplate.encodeStudioPayload(): String {
                     put("holdDurationMs", pose.holdDurationMs)
                     put("transitionDurationMs", pose.transitionDurationMs)
                     put("joints", JSONObject(pose.joints.mapValues { (_, p) -> JSONArray().put(p.x).put(p.y) }))
+                    pose.authoring?.let { authoring ->
+                        put("authoring", JSONObject().apply {
+                            put("sourceType", authoring.sourceType.name)
+                            put("sourceImageUri", authoring.sourceImageUri)
+                            put("detectedJoints", JSONObject(authoring.detectedJoints.mapValues { (_, p) -> JSONArray().put(p.x).put(p.y) }))
+                            put("jointConfidence", JSONObject(authoring.jointConfidence))
+                            put("manualOffsets", JSONObject(authoring.manualOffsets.mapValues { (_, p) -> JSONArray().put(p.x).put(p.y) }))
+                            put("qualityScore", authoring.qualityScore)
+                            put("guides", JSONObject().apply {
+                                put("showFrameGuides", authoring.guides.showFrameGuides)
+                                put("showFloorLine", authoring.guides.showFloorLine)
+                                put("floorLineY", authoring.guides.floorLineY)
+                                put("showWallLine", authoring.guides.showWallLine)
+                                put("wallLineX", authoring.guides.wallLineX)
+                                put("showBarLine", authoring.guides.showBarLine)
+                                put("barLineY", authoring.guides.barLineY)
+                            })
+                        })
+                    }
                 })
             }
         })
@@ -822,6 +984,39 @@ internal fun decodeStudioPayload(cueConfigJson: String): PersistedStudioPayload?
                 joints = joints,
                 holdDurationMs = item.optInt("holdDurationMs").takeIf { it > 0 },
                 transitionDurationMs = item.optInt("transitionDurationMs", 700),
+                authoring = item.optJSONObject("authoring")?.let { authoring ->
+                    val detectedJoints = authoring.optJSONObject("detectedJoints")?.keys()?.asSequence()?.associateWith { key ->
+                        val point = authoring.getJSONObject("detectedJoints").getJSONArray(key)
+                        JointPoint(point.getDouble(0).toFloat(), point.getDouble(1).toFloat())
+                    }.orEmpty()
+                    val manualOffsets = authoring.optJSONObject("manualOffsets")?.keys()?.asSequence()?.associateWith { key ->
+                        val point = authoring.getJSONObject("manualOffsets").getJSONArray(key)
+                        JointPoint(point.getDouble(0).toFloat(), point.getDouble(1).toFloat())
+                    }.orEmpty()
+                    val guidesJson = authoring.optJSONObject("guides")
+                    val guides = PhaseBoundaryGuides(
+                        showFrameGuides = guidesJson?.optBoolean("showFrameGuides", true) ?: true,
+                        showFloorLine = guidesJson?.optBoolean("showFloorLine", false) ?: false,
+                        floorLineY = guidesJson?.optDouble("floorLineY", 0.9)?.toFloat() ?: 0.9f,
+                        showWallLine = guidesJson?.optBoolean("showWallLine", false) ?: false,
+                        wallLineX = guidesJson?.optDouble("wallLineX", 0.1)?.toFloat() ?: 0.1f,
+                        showBarLine = guidesJson?.optBoolean("showBarLine", false) ?: false,
+                        barLineY = guidesJson?.optDouble("barLineY", 0.18)?.toFloat() ?: 0.18f,
+                    )
+                    PhasePoseAuthoring(
+                        sourceType = authoring.optString("sourceType").takeIf { it.isNotBlank() }?.let {
+                            runCatching { PhasePoseSourceType.valueOf(it) }.getOrDefault(PhasePoseSourceType.MANUAL)
+                        } ?: PhasePoseSourceType.MANUAL,
+                        sourceImageUri = authoring.optString("sourceImageUri").ifBlank { null },
+                        detectedJoints = detectedJoints,
+                        jointConfidence = authoring.optJSONObject("jointConfidence")?.keys()?.asSequence()?.associateWith { key ->
+                            authoring.getJSONObject("jointConfidence").getDouble(key).toFloat()
+                        }.orEmpty(),
+                        manualOffsets = manualOffsets,
+                        qualityScore = authoring.optDouble("qualityScore").takeIf { !it.isNaN() }?.toFloat(),
+                        guides = guides,
+                    )
+                },
             )
         }
     } ?: emptyList()

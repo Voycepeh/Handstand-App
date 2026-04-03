@@ -8,7 +8,6 @@ flowchart LR
     STUDIO[DrillStudioViewModel]
     DRILLS[drills/* domain]
     MOVE[movementprofile/* domain]
-    CAL[profile/* domain]
     POSEML[On-device Pose ML + landmarks]
     ANALYSIS[motion + biomechanics + drill scoring]
     RECORD[recording/* export pipeline]
@@ -22,19 +21,16 @@ flowchart LR
     UI --> STUDIO
 
     LIVE --> POSEML --> ANALYSIS
-    LIVE --> CAL
     LIVE --> RECORD
 
     UPLOAD --> MOVE
     UPLOAD --> POSEML --> ANALYSIS
     UPLOAD --> RECORD
-    UPLOAD --> CAL
 
     STUDIO --> DRILLS
 
     DRILLS --> REPO
     MOVE --> REPO
-    CAL --> REPO
     LIVE --> REPO
     UPLOAD --> REPO
 

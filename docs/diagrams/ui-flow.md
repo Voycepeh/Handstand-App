@@ -6,12 +6,13 @@ flowchart TD
     WELCOME[First-launch Welcome Dialog]
     START[Start Drill]
     LIVE[Live Session]
+    OWNERSHIP[Attempt Ownership + Stale Recovery Guard]
     SHORT[Session Too Short]
     RESULTS[Results]
     HISTORY[Results / Session History]
 
     MANAGE[Manage Drills]
-    STUDIO[Drill Studio]
+    STUDIO[Drill Studio\nImage-per-phase Authoring]
     WORKSPACE[Drill Workspace]
 
     UPLOAD[Upload / Reference Training]
@@ -22,16 +23,17 @@ flowchart TD
     WELCOME -->|Open recording settings| SETTINGS
 
     HOME --> START --> LIVE
-    LIVE --> RESULTS
+    LIVE --> OWNERSHIP --> RESULTS
     LIVE --> SHORT --> HOME
 
     HOME --> MANAGE --> STUDIO --> MANAGE
+    STUDIO -->|Export/Import Drill Package| MANAGE
     HOME --> START --> WORKSPACE
     WORKSPACE --> LIVE
     WORKSPACE --> UPLOAD
     WORKSPACE --> HISTORY
 
-    HOME --> UPLOAD --> RESULTS
+    HOME --> UPLOAD --> OWNERSHIP --> RESULTS
     HOME --> HISTORY
     HISTORY --> RESULTS
 

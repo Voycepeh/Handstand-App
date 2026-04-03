@@ -373,6 +373,11 @@ data class SessionRecord(
     val rawPersistStatus: RawPersistStatus = RawPersistStatus.NOT_STARTED,
     val rawPersistFailureReason: String? = null,
     val annotatedExportStatus: AnnotatedExportStatus = AnnotatedExportStatus.NOT_STARTED,
+    val activeProcessingAttemptId: String? = null,
+    val processingOwnerType: String? = null,
+    val processingOwnerId: String? = null,
+    val processingStartedAtMs: Long? = null,
+    val processingLastProgressAtMs: Long? = null,
     val annotatedExportFailureReason: String? = null,
     val annotatedExportFailureDetail: String? = null,
     val annotatedExportElapsedMs: Long? = null,
@@ -426,16 +431,6 @@ data class UserProfileRecord(
     val createdAtMs: Long,
     val updatedAtMs: Long,
     val isArchived: Boolean = false,
-)
-
-@Entity(tableName = "body_profile_records")
-data class BodyProfileRecord(
-    @PrimaryKey val id: String,
-    val userProfileId: String,
-    val version: Int,
-    val payloadJson: String,
-    val createdAtMs: Long,
-    val updatedAtMs: Long,
 )
 
 @Entity(tableName = "frame_metric_records")

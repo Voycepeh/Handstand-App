@@ -10,23 +10,21 @@ This document is the top-level architecture map for the current CaliVision imple
 - **Live Session** (`Route.Live`)
 - **Upload / Reference Training** (`Route.UploadVideo`, `Route.UploadVideoForDrill`)
 - **Results / Session History** (`Route.Results`, `Route.SessionHistory`, `Route.ProgressOverview`)
-- **Profiles** (`Route.Profile`)
 
 ## Runtime layers
 
 1. **UI and navigation**: `app/ui/**`
 2. **Workflow orchestration**: live/upload/drill studio view models and route args
-3. **Domain**: `drills/**`, `movementprofile/**`, `profile/**`
+3. **Domain**: `drills/**`, `movementprofile/**`
 4. **Analysis**: `pose/**`, `motion/**`, `biomechanics/**`
 5. **Media/replay/export**: `recording/**`, `media/**`, `camera/**`, `overlay/**`
 6. **Persistence**: `storage/db/**`, `storage/repository/**`, `SessionBlobStorage`
 
 ## Key boundaries
 
-- `SessionRepository` is the persistence boundary for sessions, drills, templates, profiles, and media status.
+- `SessionRepository` is the persistence boundary for sessions, drills, templates, and media status.
 - `SessionMediaResolver` resolves replay source from verified media candidates.
 - `AnnotatedExportPipeline` handles annotated replay generation.
-- `RuntimeBodyProfileResolver` supplies active profile context across live and upload analysis.
 - `UploadedVideoAnalyzer` + `UploadVideoViewModel` drive upload/reference analysis flow.
 
 ## Rules for contributors
@@ -34,7 +32,7 @@ This document is the top-level architecture map for the current CaliVision imple
 - Keep drill-centric flow integrity intact.
 - Prefer one clear path for drill creation/editing outcomes.
 - Do not silently break drill metadata/catalog schema.
-- Do not silently break replay/export/upload/profile flows.
+- Do not silently break replay/export/upload flows.
 - Keep naming aligned with current UX terms.
 - Any PR that changes workflows, navigation, architecture, terminology, or media flow must update docs and diagrams in the same PR.
 
@@ -45,7 +43,6 @@ This document is the top-level architecture map for the current CaliVision imple
 - [`docs/architecture/session-lifecycle.md`](docs/architecture/session-lifecycle.md)
 - [`docs/architecture/video-pipeline.md`](docs/architecture/video-pipeline.md)
 - [`docs/architecture/replay-and-fallback.md`](docs/architecture/replay-and-fallback.md)
-- [`docs/architecture/profile-and-scoring.md`](docs/architecture/profile-and-scoring.md)
 - [`docs/architecture/overlay-rendering.md`](docs/architecture/overlay-rendering.md)
 - [`docs/architecture/movement-profile-architecture.md`](docs/architecture/movement-profile-architecture.md)
 
