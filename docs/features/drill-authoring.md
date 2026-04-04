@@ -55,8 +55,15 @@ The phase editor now treats pose authoring as a dedicated viewport surface:
 
 - Reference image rendering is clipped to the pose canvas only (no parent-card/background bleed).
 - Pose overlay, joints, guides, and hit-testing use the same mapped image bounds inside the viewport.
-- Authoring controls are grouped below the viewport to avoid overlap and unstable wrapping on narrow screens.
+- Overlay framing is always based on the actively displayed image rect (including letterbox/pillarbox fit), so drag targets and skeleton placement stay aligned after image attach/capture.
+- Authoring controls are grouped into clearer sections (reference image, detection, edit pose, advanced editing, save) to reduce dense button clusters on narrow screens.
 - The viewport keeps a stable portrait aspect ratio whether a reference image is attached or not.
+
+### Camera capture behavior
+
+- **Take photo** now validates camera availability before launch and uses a FileProvider-backed temp capture URI under app cache.
+- Capture result handling logs launch/success/failure/cancel paths for easier regression diagnosis.
+- Cancel, missing camera app, URI creation failure, and denied permission are surfaced safely as user-visible status text (no silent no-op).
 
 ### Boundary and environment guides
 

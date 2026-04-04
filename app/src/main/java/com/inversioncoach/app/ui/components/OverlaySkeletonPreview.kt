@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -72,6 +73,7 @@ fun OverlaySkeletonPreview(
     joints: Map<String, JointPoint>,
     modifier: Modifier = Modifier,
     style: OverlaySkeletonPreviewStyle = OverlaySkeletonPreviewDefaults.DefaultStyle,
+    resolveOverlayBounds: ((Size) -> Rect)? = null,
     highlightedJoint: String? = null,
     showBackground: Boolean = true,
     overlayContent: DrawScope.() -> Unit = {},
@@ -115,12 +117,12 @@ fun OverlaySkeletonPreview(
         overlayContent()
 
         val minDimension = minOf(size.width, size.height)
-        val padding = minDimension * style.contentPaddingFraction
-        val contentRect = Rect(
-            left = padding,
-            top = padding,
-            right = (size.width - padding).coerceAtLeast(padding + 1f),
-            bottom = (size.height - padding).coerceAtLeast(padding + 1f),
+        val fallbackPadding = minDimension * style.contentPaddingFraction
+        val contentRect = resolveOverlayBounds?.invoke(size) ?: Rect(
+            left = fallbackPadding,
+            top = fallbackPadding,
+            right = (size.width - fallbackPadding).coerceAtLeast(fallbackPadding + 1f),
+            bottom = (size.height - fallbackPadding).coerceAtLeast(fallbackPadding + 1f),
         )
 
         OverlayFrameRenderer.drawAndroid(
