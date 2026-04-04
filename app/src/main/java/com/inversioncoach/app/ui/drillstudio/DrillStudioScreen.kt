@@ -58,9 +58,11 @@ import com.inversioncoach.app.drills.catalog.DrillTemplate
 import com.inversioncoach.app.drills.catalog.JointPoint
 import com.inversioncoach.app.drills.catalog.PhaseBoundaryGuides
 import com.inversioncoach.app.drills.catalog.PhasePoseTemplate
+import com.inversioncoach.app.overlay.jointStyle
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.DropdownOption
 import com.inversioncoach.app.ui.components.MultiSelectChipsField
+import com.inversioncoach.app.ui.components.OverlaySkeletonPreviewDefaults
 import com.inversioncoach.app.ui.components.OverlaySkeletonPreview
 import com.inversioncoach.app.ui.components.OverlaySkeletonPreviewStyle
 import com.inversioncoach.app.ui.components.ReliableDropdownField
@@ -71,6 +73,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private val baseJointColor = Color(0xFF7CF0A9)
 
 @Composable
 fun DrillStudioScreen(
