@@ -12,7 +12,7 @@ flowchart TD
     HISTORY[Results / Session History]
 
     MANAGE[Manage Drills]
-    STUDIO[Drill Studio\nPose Viewport + Camera/Device Image Seeding]
+    STUDIO[Drill Studio\nUnified Skeleton Preview + Pose Viewport\nCamera/Device Image Seeding]
     WORKSPACE[Drill Workspace]
 
     UPLOAD[Upload / Reference Training]

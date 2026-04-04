@@ -22,6 +22,7 @@ Overlay responsibilities are intentionally split between live coaching UI and ex
 
 ## Shared preview/authoring renderer contract
 
-- Drill catalog cards, Drill Studio motion preview, and Drill Studio pose authoring now reuse the same base skeleton drawing path as live/upload overlays.
-- Preview/authoring surfaces route normalized joint maps through `OverlayFrameRenderer` sizing/color/joint styling (including nose/hip emphasis) instead of a separate “green blob” preview painter.
-- Pose authoring may layer edit affordances (selected-joint highlight and drag hit testing) on top of the shared renderer, but the underlying skeleton style should stay aligned with live coaching and upload analysis/export overlays.
+- Drill Studio motion preview is the source-of-truth surface for drill skeleton visuals.
+- Drill catalog cards, Drill Studio motion preview, and Drill Studio pose authoring now reuse the same base skeleton drawing path via `OverlaySkeletonPreview` -> `OverlayFrameRenderer`.
+- Preview/authoring surfaces route normalized joint maps through one shared joint alias mapping, connection list, scale-to-canvas fit policy, centering/content-padding policy, and joint/bone style treatment (including nose/hip emphasis).
+- Pose authoring may layer edit affordances (selected-joint highlight and drag hit testing) on top of the shared renderer, but it should not replace full-skeleton rendering with handle-only markers.
