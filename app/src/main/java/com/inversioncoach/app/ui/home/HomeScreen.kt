@@ -22,8 +22,8 @@ import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SportsMartialArts
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -64,10 +64,10 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
-    onStart: () -> Unit,
     onStartFreestyle: () -> Unit,
     onHistory: () -> Unit,
     onDrills: () -> Unit,
+    onManageDrills: () -> Unit,
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
 ) {
@@ -97,10 +97,10 @@ fun HomeScreen(
     ScaffoldedScreen(title = "CaliVision") { padding ->
         Content(
             padding = padding,
-            onStart = onStart,
             onStartFreestyle = onStartFreestyle,
             onHistory = onHistory,
             onDrills = onDrills,
+            onManageDrills = onManageDrills,
             onSettings = onSettings,
             onUploadVideo = onUploadVideo,
             sessionSummaries = sessions,
@@ -165,10 +165,10 @@ private enum class FirstLaunchOnboardingGate {
 @Composable
 private fun Content(
     padding: PaddingValues,
-    onStart: () -> Unit,
     onStartFreestyle: () -> Unit,
     onHistory: () -> Unit,
     onDrills: () -> Unit,
+    onManageDrills: () -> Unit,
     onSettings: () -> Unit,
     onUploadVideo: () -> Unit,
     sessionSummaries: List<SessionRecord>,
@@ -190,19 +190,24 @@ private fun Content(
             hero = true,
         )
         ActionTile(
-            label = "Choose Drill",
-            subtitle = "Pick a drill and start training",
-            icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-            onClick = onStart,
-        )
-        ActionTile(
             label = "Upload Video",
             subtitle = "Analyze a recorded video with pose overlay",
             icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
             onClick = onUploadVideo,
         )
+        ActionTile(
+            label = "Drills",
+            subtitle = "Browse drills for training and open Drill Workspace",
+            icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+            onClick = onDrills,
+        )
+        ActionTile(
+            label = "Manage Drills",
+            subtitle = "Create, edit, import, export, or delete drills",
+            icon = { Icon(Icons.Default.Build, contentDescription = null) },
+            onClick = onManageDrills,
+        )
         HistorySummaryCard(summary = historySummary, onClick = onHistory, label = "History")
-        ActionTile("Drills", "Browse drills and open workspace", { Icon(Icons.Default.SportsMartialArts, contentDescription = null) }, onDrills)
 
         ActionTile(
             label = "Settings",

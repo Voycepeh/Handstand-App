@@ -62,6 +62,11 @@ fun ManageDrillsScreen(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            Text(
+                "Create and edit drills here. Open a drill to continue in Drill Studio.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Button(onClick = onCreateDrill, modifier = Modifier.fillMaxWidth()) { Text("New Drill") }
             OutlinedButton(onClick = { importPicker.launch(arrayOf("application/json")) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Import Drill Package")

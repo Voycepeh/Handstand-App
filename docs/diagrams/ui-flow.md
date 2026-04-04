@@ -4,14 +4,14 @@
 flowchart TD
     HOME[Home / Drill Hub]
     WELCOME[First-launch Welcome Dialog]
-    START[Start Drill]
+    DRILLS[Drills\nBrowse for usage]
     LIVE[Live Session]
     OWNERSHIP[Attempt Ownership + Stale Recovery Guard]
     SHORT[Session Too Short]
     RESULTS[Results]
     HISTORY[Results / Session History]
 
-    MANAGE[Manage Drills]
+    MANAGE[Manage Drills\nAuthoring/Admin]
     STUDIO[Drill Studio\nUnified Skeleton Preview + Pose Viewport\nReliable Camera/Device Image Seeding\nGrouped Pose Authoring Actions]
     WORKSPACE[Drill Workspace]
 
@@ -22,14 +22,13 @@ flowchart TD
     WELCOME -->|Use recommended settings| HOME
     WELCOME -->|Open recording settings| SETTINGS
 
-    HOME --> START --> LIVE
+    HOME --> DRILLS --> WORKSPACE
+    WORKSPACE --> LIVE
     LIVE --> OWNERSHIP --> RESULTS
     LIVE --> SHORT --> HOME
 
     HOME --> MANAGE --> STUDIO --> MANAGE
     STUDIO -->|Export/Import Drill Package| MANAGE
-    HOME --> START --> WORKSPACE
-    WORKSPACE --> LIVE
     WORKSPACE --> UPLOAD
     WORKSPACE --> HISTORY
 

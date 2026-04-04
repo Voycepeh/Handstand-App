@@ -105,7 +105,9 @@ fun DrillWorkspaceScreen(
         ) {
             Text(selectedDrill?.name ?: "Drill", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(
-                text = selectedDrill?.description.orEmpty().ifBlank { "Practice this drill, upload attempts, and review session history." },
+                text = selectedDrill?.description.orEmpty().ifBlank {
+                    "Operational drill use hub: run coaching, upload attempts, and review session history."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

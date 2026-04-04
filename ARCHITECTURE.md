@@ -5,8 +5,10 @@ This document is the top-level architecture map for the current CaliVision imple
 ## Product workflow anchors
 
 - **Home / Drill Hub** (`Route.Home`)
-- **Manage Drills** (`Route.ManageDrills`)
+- **Drills (usage path)** (`Route.Start` with workspace destination -> `Route.DrillWorkspace`)
+- **Manage Drills (create/edit path)** (`Route.ManageDrills`)
 - **Drill Studio** (`Route.DrillStudio`)
+- **Drill Workspace** (`Route.DrillWorkspace`)
 - **Live Session** (`Route.Live`)
 - **Upload / Reference Training** (`Route.UploadVideo`, `Route.UploadVideoForDrill`)
 - **Results / Session History** (`Route.Results`, `Route.SessionHistory`, `Route.ProgressOverview`)

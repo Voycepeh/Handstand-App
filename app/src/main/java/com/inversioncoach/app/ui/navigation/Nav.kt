@@ -105,10 +105,10 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
     NavHost(navController = navController, startDestination = Route.Home.value, modifier = modifier) {
         composable(Route.Home.value) {
             HomeScreen(
-                onStart = { navController.navigate(Route.Start.create(StartDrillDestination.LIVE)) },
                 onStartFreestyle = { navController.navigate(Route.Live.create(DrillType.FREESTYLE, LiveSessionOptions.freestyleDefaults())) },
                 onHistory = { navController.navigate(Route.ProgressOverview.value) },
                 onDrills = { navController.navigate(Route.Start.create(StartDrillDestination.WORKSPACE)) },
+                onManageDrills = { navController.navigate(Route.ManageDrills.value) },
                 onSettings = { navController.navigate(Route.Settings.value) },
                 onUploadVideo = { navController.navigate(Route.UploadVideo.value) },
             )

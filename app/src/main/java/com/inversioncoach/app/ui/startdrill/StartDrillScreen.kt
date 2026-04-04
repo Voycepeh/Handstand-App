@@ -90,10 +90,14 @@ fun StartDrillScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(if (destination == StartDrillDestination.WORKSPACE) "Drill catalog" else "Choose your flow", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                if (destination == StartDrillDestination.WORKSPACE) "Drills for training" else "Choose your flow",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
             Text(
                 text = if (destination == StartDrillDestination.WORKSPACE) {
-                    "Tap a drill to open its workspace for coaching, uploads, comparison, and history."
+                    "Tap a drill to open Drill Workspace for live coaching, attempt uploads, session history, and comparisons. Use Manage Drills for editing."
                 } else {
                     "Tap a drill to select it, then start coaching."
                 },

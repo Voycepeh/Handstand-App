@@ -59,9 +59,11 @@ flowchart TB
 
 CaliVision keeps users in drill context from start to review:
 
-- **Home / Drill Hub**: launch point for practice and navigation.
-- **Manage Drills**: maintain drill catalog entries.
+- **Home / Drill Hub**: launch point for practice and navigation (Start Live Coaching, Upload Video, Drills, Manage Drills, History, Settings).
+- **Drills**: user-facing drill browsing path for operational use. Selecting a drill opens **Drill Workspace**.
+- **Manage Drills**: create/edit path for drill packages (new/import/open to Drill Studio/export/delete).
 - **Drill Studio**: create/edit drill definitions and templates.
+- **Drill Workspace**: per-drill usage hub for coaching, upload attempts, and session review.
 - **Live Session**: countdown-gated real-time coaching with overlays.
 - **Upload / Reference Training**: analyze imported clips and optionally produce drill-linked references.
 - **Results / Session History**: inspect outcomes and replay assets.
@@ -71,7 +73,8 @@ CaliVision keeps users in drill context from start to review:
 ```mermaid
 flowchart TD
     HOME[Home / Drill Hub]
-    START[Start Drill]
+    DRILLS[Drills]
+    WORKSPACE[Drill Workspace]
     LIVE[Live Session]
     FINALIZE[Finalize + Export]
     RESULTS[Results]
@@ -80,7 +83,7 @@ flowchart TD
     STUDIO[Drill Studio]
     UPLOAD[Upload / Reference Training]
 
-    HOME --> START --> LIVE --> FINALIZE --> RESULTS
+    HOME --> DRILLS --> WORKSPACE --> LIVE --> FINALIZE --> RESULTS
     RESULTS --> HISTORY
     HISTORY --> RESULTS
 

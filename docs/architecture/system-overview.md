@@ -5,7 +5,9 @@ CaliVision is a drill-centric coaching system with connected live, upload, and r
 ## Workflow surfaces
 
 - **Home / Drill Hub**: primary navigation and launch surface.
-- **Manage Drills**: drill catalog maintenance.
+- **Drills**: user-facing drill usage path into Drill Workspace.
+- **Manage Drills**: drill catalog authoring/admin path into Drill Studio.
+- **Drill Workspace**: per-drill usage hub for coaching/uploads/sessions.
 - **Drill Studio**: create/edit drill definitions.
 - **Live Session**: countdown-gated real-time coaching.
 - **Upload / Reference Training**: imported clip analysis and optional drill-linked reference creation.
