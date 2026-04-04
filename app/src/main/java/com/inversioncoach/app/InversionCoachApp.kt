@@ -8,9 +8,6 @@ import com.inversioncoach.app.movementprofile.SeededReferenceTemplateSeeder
 import com.inversioncoach.app.movementprofile.toRecord
 import com.inversioncoach.app.history.RetentionCleanupWorker
 import com.inversioncoach.app.storage.ServiceLocator
-import com.inversioncoach.app.model.UploadJobStatus
-import com.inversioncoach.app.upload.UploadProcessingNotifications
-import com.inversioncoach.app.upload.UploadQueueCoordinator
 import com.inversioncoach.app.ui.live.ExportWorkOwnership
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +23,6 @@ class InversionCoachApp : Application(), Configuration.Provider {
         RetentionCleanupWorker.enqueuePeriodic(this)
         appScope.launch {
             val repo = ServiceLocator.repository(this@InversionCoachApp)
-            UploadProcessingNotifications(this@InversionCoachApp).ensureChannel()
             val now = System.currentTimeMillis()
             val existingDrills = repo.getAllDrills().first()
             val catalog = runCatching { DrillCatalogRepository(this@InversionCoachApp).loadCatalog() }.getOrNull()
@@ -45,14 +41,9 @@ class InversionCoachApp : Application(), Configuration.Provider {
                     }
                 }
             }
-            val coordinator = UploadQueueCoordinator.get(this@InversionCoachApp)
-            coordinator.reconcileAndKickoff("app_start")
-            val activeQueueJob = ServiceLocator.uploadQueueRepository(this@InversionCoachApp)
-                .getActiveJob()
-                ?.status == UploadJobStatus.RUNNING
             repo.reconcileActiveUploadJobs(
-                hasActiveWorker = activeQueueJob,
-                reason = "app_start_queue_reconcile",
+                hasActiveWorker = false,
+                reason = "app_start_in_app_upload",
             )
             repo.recoverStaleAnnotatedExports(
                 activeExportSessionIds = ExportWorkOwnership.activeSessionIds(),

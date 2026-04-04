@@ -7,7 +7,6 @@ sequenceDiagram
     participant VM as UploadVideoViewModel
     participant Normalize as UploadVideoInputNormalizer
     participant Analyzer as UploadedVideoAnalyzer
-    participant Coordinator as UploadedVideoAnalysisCoordinator
     participant Export as AnnotatedExportPipeline
     participant Resolver as SessionMediaResolver
     participant Repo as SessionRepository
@@ -18,7 +17,7 @@ sequenceDiagram
     Normalize-->>VM: Working media uri + canonical specs
     VM->>Analyzer: Analyze sampled frames
     Analyzer-->>VM: Metrics + timeline + candidate
-    VM->>Coordinator: Persist candidate analysis
+    VM->>Repo: Persist candidate analysis
 
     opt Reference training enabled
       VM->>Repo: create/update reference template links

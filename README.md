@@ -119,7 +119,7 @@ Detailed diagrams live in [`docs/diagrams/`](docs/diagrams).
 - Room database + blob/media storage
 - ML Kit on-device pose detection (landmark extraction)
 - Custom on-device motion analysis, biomechanics, and drill scoring modules
-- WorkManager-backed upload queue processing
+- In-app upload analysis owned by `UploadVideoViewModel` (non-durable; fails safe on process death)
 
 ## ML + movement analysis (current state)
 

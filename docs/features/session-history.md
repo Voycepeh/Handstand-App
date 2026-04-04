@@ -13,6 +13,7 @@ Session History is the persisted record of drill-linked outcomes from live and u
 
 - Show prior sessions in drill-relevant context.
 - Open replay using resolved best media source.
+- Uploaded sessions become Results-navigable only after terminal completion (`ANNOTATED_READY` or raw-only terminal fallback).
 - Preserve truthful status when annotated export failed but raw replay exists.
 
 ## Cross-workflow role

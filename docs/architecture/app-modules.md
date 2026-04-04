@@ -28,7 +28,7 @@ This file maps current package boundaries to responsibilities.
 ## Persistence
 
 - `storage/db/**`: Room entities/DAO/migrations.
-- `storage/repository/**`: repository boundaries and queue repository.
+- `storage/repository/**`: repository boundaries for sessions/settings/media metadata.
 - `storage/SessionBlobStorage.kt`: raw/annotated media persistence.
 - `storage/ServiceLocator.kt`: app-wide wiring.
 

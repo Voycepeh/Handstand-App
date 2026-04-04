@@ -38,6 +38,7 @@ import com.inversioncoach.app.model.RawPersistStatus
 import com.inversioncoach.app.media.SessionMediaOwnership
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.storage.repository.resolvedDrillId
+import com.inversioncoach.app.ui.common.canOpenResultsRoute
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
@@ -218,7 +219,7 @@ fun DrillSessionsSection(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onOpenSession(session.id) },
+                        .clickable(enabled = session.canOpenResultsRoute()) { onOpenSession(session.id) },
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -236,6 +237,12 @@ fun DrillSessionsSection(
                         Text("Body model: ${if (session.usedDefaultBodyModel) "default" else "custom"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                         Text(status, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (!session.canOpenResultsRoute()) {
+                            Text(
+                                "Upload still incomplete. Results open after terminal completion.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         if (comparedSessionIds.contains(session.id)) {
                             Text("Reference comparison saved", color = MaterialTheme.colorScheme.primary)
                             latestComparisonScores[session.id]?.let { score ->
