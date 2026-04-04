@@ -37,6 +37,7 @@ import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.UserSettings
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.computeSessionDurationMs
+import com.inversioncoach.app.ui.common.canOpenResultsRoute
 import com.inversioncoach.app.ui.common.formatPrimaryPerformance
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
@@ -272,8 +273,9 @@ private fun SessionSummaryRow(session: SessionRecord, onOpenSession: (Long) -> U
             Text("Started: ${formatSessionDateTime(session.startedAtMs)}")
             Text("Duration: ${formatSessionDuration(durationMs)}")
             Text(formatPrimaryPerformance(session), style = MaterialTheme.typography.bodySmall)
-            OutlinedButton(onClick = { onOpenSession(session.id) }) {
-                Text("Open session details / video")
+            val canOpen = session.canOpenResultsRoute()
+            OutlinedButton(onClick = { onOpenSession(session.id) }, enabled = canOpen) {
+                Text(if (canOpen) "Open session details / video" else "Upload still processing")
             }
         }
     }
