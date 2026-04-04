@@ -1475,17 +1475,6 @@ class UploadVideoViewModel(
                     hasActiveWorker = false,
                     reason = "upload_screen_init_in_app",
                 )
-                if (observedSessionId == null) {
-                    val restored = repo.observeSessions().first().firstOrNull { session ->
-                        session.sessionSource == SessionSource.UPLOADED_VIDEO &&
-                            session.annotatedExportStatus in setOf(
-                                AnnotatedExportStatus.VALIDATING_INPUT,
-                                AnnotatedExportStatus.PROCESSING,
-                                AnnotatedExportStatus.PROCESSING_SLOW,
-                            )
-                    }
-                    if (restored != null) observedSessionId = restored.id
-                }
                 repo.observeSessions().collectLatest { sessions ->
                     val sessionId = observedSessionId ?: return@collectLatest
                     val session = sessions.firstOrNull { it.id == sessionId } ?: return@collectLatest
@@ -2055,10 +2044,6 @@ fun UploadVideoScreen(
                     OutlinedButton(onClick = { onOpenDrillStudio(state.selectedDrillId!!, state.selectedReferenceTemplateId) }, modifier = Modifier.fillMaxWidth()) {
                         Text("Open Drill Studio")
                     }
-                }
-            } else if (resultSessionId != null) {
-                OutlinedButton(onClick = { onOpenResults(resultSessionId) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("View session")
                 }
             }
         }
