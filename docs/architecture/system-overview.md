@@ -11,7 +11,9 @@ CaliVision is a drill-centric coaching system with connected live, upload, and r
 - **Drill Studio**: create/edit drill definitions.
 - **Live Session**: countdown-gated real-time coaching.
 - **Upload / Reference Training**: imported clip analysis and optional drill-linked reference creation.
-- **Results / Session History**: persisted outcomes and replay access.
+- **History Overview**: top-level Home history landing page for at-a-glance review.
+- **Session History**: drill-aware detailed history and compare surface.
+- **Results**: persisted per-session outcomes and replay access.
 
 ## Runtime subsystems
 

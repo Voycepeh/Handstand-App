@@ -66,7 +66,9 @@ CaliVision keeps users in drill context from start to review:
 - **Drill Workspace**: per-drill usage hub for coaching, upload attempts, and session review.
 - **Live Session**: countdown-gated real-time coaching with overlays.
 - **Upload / Reference Training**: analyze imported clips and optionally produce drill-linked references.
-- **Results / Session History**: inspect outcomes and replay assets.
+- **History Overview**: top-level history landing page from Home for at-a-glance review.
+- **Session History (History screen)**: drill-aware detailed history, filtering, and compare flows.
+- **Results**: inspect per-session outcomes and replay assets.
 
 ## Core workflows
 
@@ -78,12 +80,15 @@ flowchart TD
     LIVE[Live Session]
     FINALIZE[Finalize + Export]
     RESULTS[Results]
+    OVERVIEW[History Overview]
     HISTORY[Session History]
     MANAGE[Manage Drills]
     STUDIO[Drill Studio]
     UPLOAD[Upload / Reference Training]
 
     HOME --> DRILLS --> WORKSPACE --> LIVE --> FINALIZE --> RESULTS
+    HOME --> OVERVIEW --> RESULTS
+    OVERVIEW --> HISTORY
     RESULTS --> HISTORY
     HISTORY --> RESULTS
 
