@@ -2,8 +2,9 @@ package com.inversioncoach.app.ui.drillstudio
 
 import android.Manifest
 import android.content.Context
-import android.net.Uri
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,6 +31,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -88,6 +90,7 @@ import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private val drillStudioSkeletonPolicy = SeededSkeletonPreviewDefaults.DefaultPolicy
+private const val CAMERA_CAPTURE_TAG = "DrillStudioCameraCapture"
 
 @Composable
 fun DrillStudioScreen(
@@ -243,33 +246,61 @@ private fun DrillStudioEditor(
         }
     }
     val takePhotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        Log.d(CAMERA_CAPTURE_TAG, "TakePicture result success=$success pendingUri=$pendingCameraUri")
         val capturedUri = pendingCameraUri
         pendingCameraUri = null
         if (!success || capturedUri == null) {
             detectionStatus = "Photo capture cancelled"
+            Log.d(CAMERA_CAPTURE_TAG, "Capture cancelled or missing pending URI")
             return@rememberLauncherForActivityResult
         }
         scope.launch {
             runCatching { imageStore.persistCapturedImage(capturedUri) }
                 .onSuccess { stableUri ->
+                    Log.d(CAMERA_CAPTURE_TAG, "Capture persisted and attached for phase=$selectedPhaseId uri=$stableUri")
                     workingImageUri = Uri.parse(stableUri)
                     onAttachReferenceImage(selectedPhaseId, stableUri)
                     detectionStatus = "Reference image attached"
                 }
-                .onFailure { detectionStatus = "Failed to persist photo: ${it.message}" }
+                .onFailure {
+                    Log.e(CAMERA_CAPTURE_TAG, "Failed to persist captured image", it)
+                    detectionStatus = "Failed to persist photo: ${it.message}"
+                }
         }
     }
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        Log.d(CAMERA_CAPTURE_TAG, "Camera permission granted=$granted")
         if (!granted) {
             detectionStatus = "Camera permission denied"
             return@rememberLauncherForActivityResult
         }
-        val outputUri = createCameraCaptureUri(context) ?: run {
-            detectionStatus = "Camera unavailable"
-            return@rememberLauncherForActivityResult
+        launchCameraCapture(
+            context = context,
+            createOutputUri = { createCameraCaptureUri(context) },
+            onPrepared = { pendingCameraUri = it },
+            launch = { takePhotoLauncher.launch(it) },
+            onFailure = { detectionStatus = it },
+        )
+    }
+    fun launchImagePicker() {
+        runCatching { imagePicker.launch(arrayOf("image/*")) }
+            .onFailure {
+                Log.e(CAMERA_CAPTURE_TAG, "Image picker launch failed", it)
+                detectionStatus = "Image picker unavailable"
+            }
+    }
+    fun requestCameraCapture() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            launchCameraCapture(
+                context = context,
+                createOutputUri = { createCameraCaptureUri(context) },
+                onPrepared = { pendingCameraUri = it },
+                launch = { takePhotoLauncher.launch(it) },
+                onFailure = { detectionStatus = it },
+            )
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
-        pendingCameraUri = outputUri
-        takePhotoLauncher.launch(outputUri)
     }
     val orderedPhases = draft.phases.sortedBy { it.order }
     val selectedPhaseTemplate = orderedPhases.firstOrNull { it.id == selectedPhaseId }
@@ -428,47 +459,55 @@ private fun DrillStudioEditor(
                     style = MaterialTheme.typography.bodySmall,
                 )
                 detectionStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
-                PoseActionRow {
-                    Button(onClick = { showImageSourceDialog = true }, modifier = Modifier.heightIn(min = 44.dp)) { Text("Add reference image") }
-                    OutlinedButton(
-                        onClick = { onClearReferenceImage(currentPose.phaseId); workingImageUri = null },
-                        modifier = Modifier.heightIn(min = 44.dp),
-                    ) { Text("Clear image") }
-                }
-                PoseActionRow {
-                    Button(onClick = {
-                        val uri = imageUri ?: return@Button
-                        scope.launch {
-                            detectionStatus = "Running pose detection…"
-                            runCatching { detector.detect(context, uri) }
-                                .onSuccess {
-                                    onApplyDetectedPose(currentPose.phaseId, it.normalizedJoints, it.jointConfidence, it.qualityScore)
-                                    detectionStatus = "Pose detected"
-                                }
-                                .onFailure { detectionStatus = "Pose detection failed: ${it.message}" }
-                        }
-                    }, enabled = imageUri != null, modifier = Modifier.heightIn(min = 44.dp)) { Text("Detect pose") }
-                    OutlinedButton(onClick = { onResetImageDetection(currentPose.phaseId) }, modifier = Modifier.heightIn(min = 44.dp)) { Text("Reset detection") }
-                }
-                PoseActionRow {
-                    OutlinedButton(onClick = { onCopyPreviousPose(currentPose.phaseId) }, modifier = Modifier.heightIn(min = 44.dp)) { Text("Copy previous") }
-                    OutlinedButton(onClick = { onMirrorPose(currentPose.phaseId) }, modifier = Modifier.heightIn(min = 44.dp)) { Text("Mirror") }
-                    OutlinedButton(onClick = { onResetPose(currentPose.phaseId) }, modifier = Modifier.heightIn(min = 44.dp)) { Text("Reset") }
-                }
-                PoseActionRow {
-                    OutlinedButton(
-                        onClick = { selectedJoint?.let { onResetJointCorrection(currentPose.phaseId, it) } },
-                        enabled = selectedJoint != null,
-                        modifier = Modifier.heightIn(min = 44.dp),
-                    ) {
-                        Text("Reset selected joint")
+                PoseActionGroup(title = "1) Reference image") {
+                    PoseActionRow(maxItemsInEachRow = 2) {
+                        Button(onClick = { showImageSourceDialog = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Add reference image") }
+                        OutlinedButton(
+                            onClick = { onClearReferenceImage(currentPose.phaseId); workingImageUri = null },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                        ) { Text("Clear image") }
                     }
-                    OutlinedButton(
-                        onClick = { onResetAllCorrections(currentPose.phaseId) },
-                        modifier = Modifier.heightIn(min = 44.dp),
-                    ) { Text("Reset all corrections") }
                 }
-                PoseActionRow {
+                PoseActionGroup(title = "2) Detection") {
+                    PoseActionRow(maxItemsInEachRow = 2) {
+                        Button(onClick = {
+                            val uri = imageUri ?: return@Button
+                            scope.launch {
+                                detectionStatus = "Running pose detection…"
+                                runCatching { detector.detect(context, uri) }
+                                    .onSuccess {
+                                        onApplyDetectedPose(currentPose.phaseId, it.normalizedJoints, it.jointConfidence, it.qualityScore)
+                                        detectionStatus = "Pose detected"
+                                    }
+                                    .onFailure { detectionStatus = "Pose detection failed: ${it.message}" }
+                            }
+                        }, enabled = imageUri != null, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Detect pose") }
+                        OutlinedButton(onClick = { onResetImageDetection(currentPose.phaseId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Reset detection") }
+                    }
+                }
+                PoseActionGroup(title = "3) Edit pose") {
+                    PoseActionRow(maxItemsInEachRow = 3) {
+                        OutlinedButton(onClick = { onCopyPreviousPose(currentPose.phaseId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Copy previous") }
+                        OutlinedButton(onClick = { onMirrorPose(currentPose.phaseId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Mirror") }
+                        OutlinedButton(onClick = { onResetPose(currentPose.phaseId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Reset") }
+                    }
+                }
+                PoseActionGroup(title = "Advanced editing") {
+                    PoseActionRow(maxItemsInEachRow = 2) {
+                        OutlinedButton(
+                            onClick = { selectedJoint?.let { onResetJointCorrection(currentPose.phaseId, it) } },
+                            enabled = selectedJoint != null,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                        ) {
+                            Text("Reset selected joint")
+                        }
+                        OutlinedButton(
+                            onClick = { onResetAllCorrections(currentPose.phaseId) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                        ) { Text("Reset all corrections") }
+                    }
+                }
+                PoseActionGroup(title = "4) Save") {
                     Button(onClick = { onSavePhasePose(currentPose.phaseId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Save phase pose") }
                 }
                 PoseGuideToggles(guides = guides) { updated -> onUpdatePhaseGuides(currentPose.phaseId, updated) }
@@ -480,18 +519,7 @@ private fun DrillStudioEditor(
                         confirmButton = {
                             Button(onClick = {
                                 showImageSourceDialog = false
-                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                                    val outputUri = createCameraCaptureUri(context)
-                                    if (outputUri != null) {
-                                        pendingCameraUri = outputUri
-                                        runCatching { takePhotoLauncher.launch(outputUri) }
-                                            .onFailure { detectionStatus = "Camera app unavailable" }
-                                    } else {
-                                        detectionStatus = "Camera unavailable"
-                                    }
-                                } else {
-                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                                }
+                                requestCameraCapture()
                             }) {
                                 Text("Take photo")
                             }
@@ -500,8 +528,7 @@ private fun DrillStudioEditor(
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(onClick = {
                                     showImageSourceDialog = false
-                                    runCatching { imagePicker.launch(arrayOf("image/*")) }
-                                        .onFailure { detectionStatus = "Image picker unavailable" }
+                                    launchImagePicker()
                                 }) {
                                     Text("Choose from device")
                                 }
@@ -659,6 +686,16 @@ private fun PoseAuthoringViewport(
         OverlaySkeletonPreview(
             joints = renderPose,
             style = previewStyle,
+            resolveOverlayBounds = { canvasSize ->
+                val contentRect = previewContentRect(canvasSize, previewStyle.contentPaddingFraction)
+                val imageBounds = resolveImageBounds(canvasSize, referenceImage, contentRect)
+                Rect(
+                    left = imageBounds.left,
+                    top = imageBounds.top,
+                    right = imageBounds.left + imageBounds.width,
+                    bottom = imageBounds.top + imageBounds.height,
+                )
+            },
             highlightedJoint = activeJoint,
             showBackground = false,
         ) {
@@ -731,15 +768,34 @@ private fun PoseAuthoringViewport(
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun PoseActionRow(content: @Composable () -> Unit) {
+private fun PoseActionRow(
+    maxItemsInEachRow: Int = 2,
+    content: @Composable () -> Unit,
+) {
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        maxItemsInEachRow = 2,
+        maxItemsInEachRow = maxItemsInEachRow,
     )
     {
         content()
+    }
+}
+
+@Composable
+private fun PoseActionGroup(
+    title: String,
+    content: @Composable () -> Unit,
+) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.labelLarge)
+            content()
+        }
     }
 }
 
@@ -866,13 +922,43 @@ private fun IntSize.toSize(): Size = Size(width.toFloat(), height.toFloat())
 
 private fun createCameraCaptureUri(context: Context): Uri? {
     return runCatching {
+        val captureDirectory = context.cacheDir.resolve("recordings").apply { mkdirs() }
         val file = kotlin.io.path.createTempFile(
-            directory = context.cacheDir.toPath(),
+            directory = captureDirectory.toPath(),
             prefix = "drill_studio_capture_",
             suffix = ".jpg",
         ).toFile()
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     }.getOrNull()
+}
+
+private fun launchCameraCapture(
+    context: Context,
+    createOutputUri: () -> Uri?,
+    onPrepared: (Uri) -> Unit,
+    launch: (Uri) -> Unit,
+    onFailure: (String) -> Unit,
+) {
+    val captureIntent = Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
+    if (captureIntent.resolveActivity(context.packageManager) == null) {
+        Log.w(CAMERA_CAPTURE_TAG, "No camera app available for ACTION_IMAGE_CAPTURE")
+        onFailure("No camera app available")
+        return
+    }
+    val outputUri = createOutputUri()
+    if (outputUri == null) {
+        Log.e(CAMERA_CAPTURE_TAG, "Failed to create camera output URI")
+        onFailure("Camera unavailable")
+        return
+    }
+    runCatching {
+        onPrepared(outputUri)
+        Log.d(CAMERA_CAPTURE_TAG, "Launching camera capture uri=$outputUri")
+        launch(outputUri)
+    }.onFailure {
+        Log.e(CAMERA_CAPTURE_TAG, "Camera launch failed", it)
+        onFailure("Camera launch failed")
+    }
 }
 
 private fun String.pretty(): String = lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
