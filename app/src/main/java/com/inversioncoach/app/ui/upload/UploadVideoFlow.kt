@@ -186,7 +186,7 @@ data class UploadFlowResult(
     val referenceTemplateId: String? = null,
 )
 
-private data class OverlayCoverageDiagnostics(
+internal data class OverlayCoverageDiagnostics(
     val densityPerSecond: Float,
     val coverageRatio: Float,
     val isDegraded: Boolean,
@@ -1283,7 +1283,7 @@ class DefaultUploadVideoAnalysisRunner(
             SessionDiagnostics.record(
                 sessionId = sessionId,
                 stage = SessionDiagnostics.Stage.SESSION_FINALIZE,
-                status = if (wasCancelled) SessionDiagnostics.Status.CANCELLED else SessionDiagnostics.Status.FAILED,
+                status = if (wasCancelled) SessionDiagnostics.Status.SKIPPED else SessionDiagnostics.Status.FAILED,
                 message = if (wasCancelled) "Uploaded workflow cancelled" else "Uploaded workflow failed",
                 errorCode = error.message ?: AnnotatedExportFailureReason.UNKNOWN_EXCEPTION.name,
                 throwable = error,

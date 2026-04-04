@@ -680,7 +680,7 @@ private fun PoseAuthoringViewport(
             joints = renderPose,
             policy = drillStudioSkeletonPolicy,
             resolveOverlayBounds = { canvasSize ->
-                resolveImageBounds(canvasSize, referenceImage)
+                resolveImageBounds(canvasSize, referenceImage).toRect()
             },
             highlightedJoint = activeJoint,
             showBackground = false,
@@ -850,6 +850,13 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
 }
 
 private data class ImageBounds(val left: Float, val top: Float, val width: Float, val height: Float)
+
+private fun ImageBounds.toRect(): Rect = Rect(
+    left = left,
+    top = top,
+    right = left + width,
+    bottom = top + height,
+)
 
 private fun resolveImageBounds(canvasSize: Size, referenceImage: ImageBitmap?): ImageBounds {
     val rect = SkeletonRenderContract.displayedImageBounds(
