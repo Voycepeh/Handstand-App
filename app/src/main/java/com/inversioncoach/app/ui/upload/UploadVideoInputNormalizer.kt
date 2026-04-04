@@ -53,11 +53,11 @@ interface UploadVideoInputNormalizer {
     suspend fun normalize(sourceUri: Uri): UploadVideoNormalizationResult
 }
 
-internal interface UploadVideoFormatInspector {
+interface UploadVideoFormatInspector {
     fun inspect(sourceUri: Uri): UploadVideoFormatDetails
 }
 
-internal interface UploadVideoTranscoder {
+interface UploadVideoTranscoder {
     suspend fun transcodeToCanonical(sourceUri: Uri, source: UploadVideoFormatDetails, target: CanonicalVideoSpec): Uri?
 }
 
