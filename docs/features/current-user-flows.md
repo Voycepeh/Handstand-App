@@ -8,7 +8,8 @@ This document captures the current end-to-end app workflows and route surfaces.
 - `start` -> Start Drill selector
 - `live/...` -> Live Session
 - `results/{sessionId}` -> Results
-- `history` + `session-history?...` -> Results / Session History surfaces
+- `history` -> History Overview (top-level home history landing page)
+- `session-history?...` -> Session History (drill-aware detailed history / compare surface)
 - `manage-drills` -> Manage Drills
 - `drill-studio?...` -> Drill Studio
 - `drill-workspace/{drillId}` -> Drill Workspace
@@ -72,10 +73,11 @@ For drill-specific context:
 4. Export/verify replay candidates.
 5. Resolve replay source and open Results.
 
-## 7) Results / Session History
+## 7) Results / History split
 
-- Results: immediate per-session outcome surface.
-- Session History: ongoing list/compare/reopen surface.
+- **History Overview (`history`)**: top-level landing page opened from Home's History action.
+- **Session History (`session-history?...`)**: deeper drill-aware list/compare/reopen surface.
+- **Results**: immediate per-session outcome surface.
 - Replay uses resolver output (annotated preferred, raw fallback).
 
 ## Maintenance rule

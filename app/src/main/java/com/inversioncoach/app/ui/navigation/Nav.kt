@@ -1,14 +1,6 @@
 package com.inversioncoach.app.ui.navigation
 
 import android.net.Uri
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
-import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -23,14 +15,13 @@ import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.LiveSessionOptions
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.common.canOpenResultsRoute
-import com.inversioncoach.app.ui.drilldetail.DrillDetailScreen
 import com.inversioncoach.app.ui.drills.ManageDrillsScreen
 import com.inversioncoach.app.ui.drillstudio.DrillStudioInitRequest
 import com.inversioncoach.app.ui.drillstudio.DrillStudioScreen
 import com.inversioncoach.app.ui.history.HistoryScreen
 import com.inversioncoach.app.ui.home.HomeScreen
 import com.inversioncoach.app.ui.live.LiveCoachingScreen
-import com.inversioncoach.app.ui.progress.HomeHistoryScreen
+import com.inversioncoach.app.ui.historyoverview.HistoryOverviewScreen
 import com.inversioncoach.app.ui.reference.DrillWorkspaceScreen
 import com.inversioncoach.app.ui.results.ResultsScreen
 import com.inversioncoach.app.ui.results.SessionTooShortScreen
@@ -42,17 +33,11 @@ import com.inversioncoach.app.ui.upload.UploadVideoScreen
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
-fun parseDrillTypeOrDefault(rawValue: String?, fallback: DrillType): DrillType =
-    rawValue?.let(DrillType::fromStoredName) ?: fallback
-
 sealed class Route(val value: String) {
     data object Home : Route("home")
     data object Start : Route("start?destination={destination}") {
         fun create(destination: StartDrillDestination = StartDrillDestination.LIVE): String =
             "start?destination=${destination.name.lowercase()}"
-    }
-    data object DrillDetail : Route("drillDetail/{drill}") {
-        fun create(drillType: DrillType): String = "drillDetail/${drillType.name}"
     }
     data object Live : Route("live/{drill}/{voice}/{record}/{skeleton}/{idealLine}/{showCenterOfGravity}/{zoomOutCamera}/{drillCameraSide}/{effectiveView}?selectedDrillId={selectedDrillId}") {
         fun create(drillType: DrillType, options: LiveSessionOptions): String =
@@ -66,7 +51,7 @@ sealed class Route(val value: String) {
         fun create(drillId: String? = null, mode: SessionHistoryMode = SessionHistoryMode.HISTORY): String =
             SessionHistoryRoutes.create(drillId = drillId, mode = mode)
     }
-    data object ProgressOverview : Route("history")
+    data object HistoryOverview : Route("history")
     data object DrillStudio : Route("drill-studio?mode={mode}&drillId={drillId}&templateId={templateId}") {
         fun createNew(): String = "drill-studio?mode=create&drillId=&templateId="
         fun createForDrill(drillId: String): String = "drill-studio?mode=drill&drillId=${Uri.encode(drillId)}&templateId="
@@ -82,7 +67,6 @@ sealed class Route(val value: String) {
     }
     data object DrillWorkspace : Route("drill-workspace/{drillId}") { fun create(drillId: String) = "drill-workspace/${Uri.encode(drillId)}" }
     data object ManageDrills : Route("manage-drills")
-    data object DrillPackageDetail : Route("drill-package-detail/{drillId}") { fun create(drillId: String) = "drill-package-detail/${Uri.encode(drillId)}" }
 }
 
 @Composable
@@ -106,7 +90,7 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
         composable(Route.Home.value) {
             HomeScreen(
                 onStartFreestyle = { navController.navigate(Route.Live.create(DrillType.FREESTYLE, LiveSessionOptions.freestyleDefaults())) },
-                onHistory = { navController.navigate(Route.ProgressOverview.value) },
+                onHistory = { navController.navigate(Route.HistoryOverview.value) },
                 onDrills = { navController.navigate(Route.Start.create(StartDrillDestination.WORKSPACE)) },
                 onManageDrills = { navController.navigate(Route.ManageDrills.value) },
                 onSettings = { navController.navigate(Route.Settings.value) },
@@ -121,10 +105,6 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
                 destination = destination,
                 onOpenWorkspace = { drillId -> navController.navigate(Route.DrillWorkspace.create(drillId)) },
             )
-        }
-        composable(Route.DrillDetail.value, arguments = listOf(navArgument("drill") { type = NavType.StringType })) {
-            val drill = parseDrillTypeOrDefault(it.arguments?.getString("drill"), DrillType.STANDING_POSTURE_HOLD)
-            DrillDetailScreen(drillType = drill, onBack = { navController.popBackStack() }, onEditDrill = { selected -> navController.navigate(Route.DrillStudio.createForDrill(selected.name)) })
         }
         composable(Route.Live.value, arguments = listOf(
             navArgument("drill") { type = NavType.StringType },
@@ -163,7 +143,7 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
                 comparisonMode = mode == SessionHistoryMode.COMPARE,
             )
         }
-        composable(Route.ProgressOverview.value) { HomeHistoryScreen(onBack = { navController.popBackStack() }, onOpenSession = openResultsIfAllowed) }
+        composable(Route.HistoryOverview.value) { HistoryOverviewScreen(onBack = { navController.popBackStack() }, onOpenSession = openResultsIfAllowed) }
         composable(Route.DrillStudio.value, arguments = listOf(
             navArgument("mode") { type = NavType.StringType; defaultValue = "drill" },
             navArgument("drillId") { type = NavType.StringType; defaultValue = "" },
@@ -243,39 +223,6 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
                 onCreateDrill = { navController.navigate(Route.DrillStudio.createNew()) },
                 onOpenDrill = { drillId -> navController.navigate(Route.DrillStudio.createForDrill(drillId)) },
             )
-        }
-        composable(Route.DrillPackageDetail.value, arguments = listOf(navArgument("drillId") { type = NavType.StringType })) {
-            val drillId = it.arguments?.getString("drillId").orEmpty()
-            DrillPackageDetailUnavailableScreen(
-                drillId = drillId,
-                onBack = { navController.popBackStack() },
-                onOpenDrillWorkspace = { navController.navigate(Route.DrillWorkspace.create(drillId)) },
-                onUploadAttempt = { navController.navigate(Route.UploadVideoForDrill.create(drillId, null, false)) },
-            )
-        }
-    }
-}
-
-
-@Composable
-private fun DrillPackageDetailUnavailableScreen(
-    drillId: String,
-    onBack: () -> Unit,
-    onOpenDrillWorkspace: () -> Unit,
-    onUploadAttempt: () -> Unit,
-) {
-    com.inversioncoach.app.ui.components.ScaffoldedScreen(title = "Drill Package Detail", onBack = onBack) { padding ->
-        androidx.compose.foundation.layout.Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text("Drill package detail is temporarily unavailable for drill: $drillId")
-            Text("TODO: Restore dedicated DrillPackageDetail screen behavior without rerouting product flow.")
-            Button(onClick = onUploadAttempt, modifier = Modifier.fillMaxWidth()) { Text("Upload Attempt") }
-            Button(onClick = onOpenDrillWorkspace, modifier = Modifier.fillMaxWidth()) { Text("Open Drill Workspace") }
         }
     }
 }

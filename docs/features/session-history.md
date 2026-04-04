@@ -1,6 +1,12 @@
 # Feature: Session History
 
-Session History is the persisted record of drill-linked outcomes from live and upload workflows.
+Session History is the drill-aware detailed history surface (`session-history?...`) and persisted record of drill-linked outcomes from live and upload workflows.
+
+## Scope boundary vs History Overview
+
+- **History Overview (`history`)** is the top-level at-a-glance landing page from Home.
+- **Session History (`session-history?...`)** is the deeper detailed/compare page (`HistoryScreen`).
+- Drill-filtered history and compare mode belong to Session History, not History Overview.
 
 ## What history stores
 

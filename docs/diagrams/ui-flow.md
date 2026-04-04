@@ -9,7 +9,8 @@ flowchart TD
     OWNERSHIP[Attempt Ownership + Stale Recovery Guard]
     SHORT[Session Too Short]
     RESULTS[Results]
-    HISTORY[Results / Session History]
+    OVERVIEW[History Overview]
+    HISTORY[Session History]
 
     MANAGE[Manage Drills\nAuthoring/Admin]
     STUDIO[Drill Studio\nUnified Skeleton Preview + Pose Viewport\nCamera Capture with Device Fallback + Clear Status States\nCompact Authoring Sections + Intentional Empty Canvas]
@@ -33,7 +34,9 @@ flowchart TD
     WORKSPACE --> HISTORY
 
     HOME --> UPLOAD --> OWNERSHIP --> RESULTS
-    HOME --> HISTORY
+    HOME --> OVERVIEW
+    OVERVIEW --> RESULTS
+    OVERVIEW --> HISTORY
     HISTORY --> RESULTS
 
     HOME --> SETTINGS --> HOME

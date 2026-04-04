@@ -1,4 +1,4 @@
-package com.inversioncoach.app.ui.progress
+package com.inversioncoach.app.ui.historyoverview
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -56,7 +56,7 @@ private enum class HeatmapZoom(val label: String, val blockHours: Int) {
 }
 
 @Composable
-fun HomeHistoryScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
+fun HistoryOverviewScreen(onBack: () -> Unit, onOpenSession: (Long) -> Unit) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
     val sessions by repository.observeSessions().collectAsState(initial = emptyList())

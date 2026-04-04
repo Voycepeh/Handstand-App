@@ -11,7 +11,7 @@ This document is the top-level architecture map for the current CaliVision imple
 - **Drill Workspace** (`Route.DrillWorkspace`)
 - **Live Session** (`Route.Live`)
 - **Upload / Reference Training** (`Route.UploadVideo`, `Route.UploadVideoForDrill`)
-- **Results / Session History** (`Route.Results`, `Route.SessionHistory`, `Route.ProgressOverview`)
+- **Results / History** (`Route.Results`, `Route.HistoryOverview`, `Route.SessionHistory`)
 
 ## Runtime layers
 

@@ -9,7 +9,7 @@ This file maps current package boundaries to responsibilities.
 - `ui/drills`, `ui/drillstudio`, `ui/reference`: drill management/workspace/authoring.
 - `ui/live`: live coaching screen + view model.
 - `ui/upload`: upload/reference analysis flow.
-- `ui/results`, `ui/history`, `ui/progress`: result and session history experiences.
+- `ui/results`, `ui/history`, `ui/historyoverview`: results plus detailed and overview history experiences.
 - `ui/settings`: settings and developer tuning surfaces.
 
 ## Domain and analysis
