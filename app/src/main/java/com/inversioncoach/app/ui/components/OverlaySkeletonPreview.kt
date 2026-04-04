@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.dp
@@ -73,6 +74,7 @@ fun OverlaySkeletonPreview(
     style: OverlaySkeletonPreviewStyle = OverlaySkeletonPreviewDefaults.DefaultStyle,
     highlightedJoint: String? = null,
     showBackground: Boolean = true,
+    overlayContent: DrawScope.() -> Unit = {},
 ) {
     val normalizedJoints = remember(joints) { OverlaySkeletonPreviewDefaults.normalizeJointNames(joints) }
     val renderModel = remember(normalizedJoints) {
@@ -110,6 +112,8 @@ fun OverlaySkeletonPreview(
                 },
             ),
     ) {
+        overlayContent()
+
         val minDimension = minOf(size.width, size.height)
         val padding = minDimension * style.contentPaddingFraction
         val contentRect = Rect(
