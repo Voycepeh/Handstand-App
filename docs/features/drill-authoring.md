@@ -38,12 +38,23 @@ For repo-level rationale, see [ADR-004](../decisions/adr-004-product-workflow-si
 
 Drill Studio now supports **single-image phase seeding** directly inside phase editing:
 
-- Attach one reference image per phase.
+- Attach one reference image per phase via **Add reference image** with source chooser:
+  - Take photo
+  - Choose from device
 - Run on-device pose detection on that image.
 - View skeleton overlay directly on top of the image canvas.
 - Apply constrained per-joint correction offsets (drag and reset flows).
 - Save canonical normalized phase joints plus authoring metadata into drill persistence.
 - Selected authoring images are copied into app-managed storage so phase editing survives restart/provider URI churn.
+
+### Pose authoring viewport contract
+
+The phase editor now treats pose authoring as a dedicated viewport surface:
+
+- Reference image rendering is clipped to the pose canvas only (no parent-card/background bleed).
+- Pose overlay, joints, guides, and hit-testing use the same mapped image bounds inside the viewport.
+- Authoring controls are grouped below the viewport to avoid overlap and unstable wrapping on narrow screens.
+- The viewport keeps a stable portrait aspect ratio whether a reference image is attached or not.
 
 ### Boundary and environment guides
 

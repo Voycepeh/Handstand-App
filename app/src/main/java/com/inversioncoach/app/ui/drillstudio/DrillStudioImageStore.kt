@@ -23,6 +23,14 @@ class DrillStudioImageStore(private val context: Context) {
         Uri.fromFile(target).toString()
     }
 
+    suspend fun persistCapturedImage(uri: Uri): String = withContext(Dispatchers.IO) {
+        val target = File(imageDir, "phase_image_${UUID.randomUUID()}.jpg")
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            target.outputStream().use { output -> input.copyTo(output) }
+        } ?: error("Unable to read captured image")
+        Uri.fromFile(target).toString()
+    }
+
     private fun extensionForUri(uri: Uri): String {
         val mime = context.contentResolver.getType(uri).orEmpty()
         return when {
