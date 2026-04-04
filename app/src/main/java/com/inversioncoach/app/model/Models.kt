@@ -126,6 +126,7 @@ enum class AnnotatedExportStatus {
     ANNOTATED_READY,
     ANNOTATED_FAILED,
     SKIPPED,
+    CANCELLED,
 }
 
 enum class CompressionStatus {
