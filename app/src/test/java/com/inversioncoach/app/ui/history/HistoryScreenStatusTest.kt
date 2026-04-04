@@ -36,6 +36,20 @@ class HistoryScreenStatusTest {
         assertEquals(1f, uploadProgress(session))
     }
 
+    @Test
+    fun annotatedReadyButRawSelectedShowsTruthfulRawPreferredStatus() {
+        val session = baseSession.copy(
+            rawPersistStatus = RawPersistStatus.SUCCEEDED,
+            annotatedExportStatus = AnnotatedExportStatus.ANNOTATED_READY,
+            rawVideoUri = "file:///raw.mp4",
+            annotatedVideoUri = "file:///annotated.mp4",
+            bestPlayableUri = "file:///raw.mp4",
+        )
+
+        assertEquals("Raw replay ready (annotated available)", videoStatus(session))
+        assertEquals(1f, uploadProgress(session))
+    }
+
     private val baseSession = SessionRecord(
         id = 1L,
         title = "Uploaded Video Analysis",

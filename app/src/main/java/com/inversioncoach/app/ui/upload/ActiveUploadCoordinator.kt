@@ -65,7 +65,7 @@ class ActiveUploadCoordinator(
     private var activeJob: Job? = null
 
     fun start(request: ActiveUploadRequest): ActiveUploadStartResult {
-        if (activeJob?.isActive == true || _state.value.activeSession?.isTerminal == false) {
+        if (hasActiveUpload()) {
             val message = "Another upload is already in progress."
             _state.update { it.copy(blockedMessage = message) }
             return ActiveUploadStartResult.Blocked(message)
@@ -174,6 +174,14 @@ class ActiveUploadCoordinator(
 
     fun cancelActiveUpload() {
         activeJob?.cancel()
+    }
+
+    fun hasActiveUpload(): Boolean {
+        if (activeJob?.isActive != true) return false
+        val active = _state.value.activeSession ?: return false
+        if (active.isTerminal) return false
+        if (active.ownerToken.isBlank()) return false
+        return true
     }
 
     fun clearTerminalSession() {

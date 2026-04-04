@@ -162,7 +162,7 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             trigger = "results_hydration",
         )
         repository.reconcileActiveUploadJobs(
-            hasActiveWorker = false,
+            hasActiveWorker = ServiceLocator.activeUploadCoordinator(context).hasActiveUpload(),
             reason = "results_screen_load_in_app_upload",
         )
     }

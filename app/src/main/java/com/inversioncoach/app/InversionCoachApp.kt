@@ -42,7 +42,7 @@ class InversionCoachApp : Application(), Configuration.Provider {
                 }
             }
             repo.reconcileActiveUploadJobs(
-                hasActiveWorker = false,
+                hasActiveWorker = ServiceLocator.activeUploadCoordinator(this@InversionCoachApp).hasActiveUpload(),
                 reason = "app_start_in_app_upload",
             )
             repo.recoverStaleAnnotatedExports(

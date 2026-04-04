@@ -107,9 +107,9 @@ private const val UPLOAD_ANALYSIS_CANDIDATE_FPS_DELTA = 2
 private const val MAX_UPLOAD_ANALYSIS_CANDIDATE_FPS = 10
 private const val ENABLE_ADAPTIVE_UPLOAD_SAMPLING = true
 private const val DEFAULT_UPLOAD_FRAME_RATE = 30
-private const val MIN_OVERLAY_DENSITY_PER_SECOND = 1.2f
-private const val MIN_OVERLAY_COVERAGE_RATIO = 0.35f
-private const val MIN_OVERLAY_ACCEPTED_FRAMES = 12
+private const val MIN_OVERLAY_DENSITY_PER_SECOND = 0.5f
+private const val MIN_OVERLAY_COVERAGE_RATIO = 0.2f
+private const val MIN_OVERLAY_ACCEPTED_FRAMES = 8
 
 enum class UploadStage(val label: String) {
     IDLE("Idle"),
@@ -1088,10 +1088,14 @@ class DefaultUploadVideoAnalysisRunner(
             logStage("VERIFYING_OUTPUT", "annotatedUri=${export.persistedUri.orEmpty()} verified=${!export.persistedUri.isNullOrBlank()}")
 
             val now = System.currentTimeMillis()
-            val replayUri = export.persistedUri ?: persistedRawUri
             val isAnnotatedReady = !export.persistedUri.isNullOrBlank()
             val degradedOverlay = overlayDiagnostics.isDegraded
             val shouldTreatAsRawOnly = degradedOverlay || !isAnnotatedReady
+            val replayUri = selectReplayUriForUpload(
+                shouldTreatAsRawOnly = shouldTreatAsRawOnly,
+                annotatedUri = export.persistedUri,
+                rawUri = persistedRawUri,
+            )
             if (isAnnotatedReady) {
                 SessionDiagnostics.record(
                     sessionId = sessionId,
@@ -1223,28 +1227,49 @@ class DefaultUploadVideoAnalysisRunner(
             } else {
                 export.failureReason ?: AnnotatedExportFailureReason.EXPORT_NOT_STARTED.name
             }
-            repository.updateAnnotatedExportStatus(
-                sessionId,
-                AnnotatedExportStatus.ANNOTATED_FAILED,
-                attemptId = processingAttemptId,
-                ownerType = "UPLOAD_PIPELINE",
-                ownerId = ownerToken,
-            )
-            repository.updateAnnotatedExportFailureReason(
-                sessionId,
-                failureReason,
-                attemptId = processingAttemptId,
-                ownerType = "UPLOAD_PIPELINE",
-                ownerId = ownerToken,
-            )
+            if (isAnnotatedReady && degradedOverlay) {
+                repository.updateAnnotatedExportStatus(
+                    sessionId,
+                    AnnotatedExportStatus.ANNOTATED_READY,
+                    attemptId = processingAttemptId,
+                    ownerType = "UPLOAD_PIPELINE",
+                    ownerId = ownerToken,
+                )
+                repository.updateAnnotatedExportFailureReason(
+                    sessionId,
+                    failureReason,
+                    attemptId = processingAttemptId,
+                    ownerType = "UPLOAD_PIPELINE",
+                    ownerId = ownerToken,
+                )
+            } else {
+                repository.updateAnnotatedExportStatus(
+                    sessionId,
+                    AnnotatedExportStatus.ANNOTATED_FAILED,
+                    attemptId = processingAttemptId,
+                    ownerType = "UPLOAD_PIPELINE",
+                    ownerId = ownerToken,
+                )
+                repository.updateAnnotatedExportFailureReason(
+                    sessionId,
+                    failureReason,
+                    attemptId = processingAttemptId,
+                    ownerType = "UPLOAD_PIPELINE",
+                    ownerId = ownerToken,
+                )
+            }
             repository.updateAnnotatedExportProgress(
                 sessionId = sessionId,
-                stage = AnnotatedExportStage.FAILED,
+                stage = if (isAnnotatedReady && degradedOverlay) AnnotatedExportStage.COMPLETED else AnnotatedExportStage.FAILED,
                 percent = 100,
                 etaSeconds = 0,
                 elapsedMs = now - startedAt,
                 failureReason = failureReason,
-                failureDetail = "Raw ready, annotated export failed during ${currentStage.name}",
+                failureDetail = if (isAnnotatedReady && degradedOverlay) {
+                    "Raw selected because overlay density/coverage was degraded."
+                } else {
+                    "Raw ready, annotated export failed during ${currentStage.name}"
+                },
                 attemptId = processingAttemptId,
                 ownerType = "UPLOAD_PIPELINE",
                 ownerId = ownerToken,
@@ -1260,20 +1285,31 @@ class DefaultUploadVideoAnalysisRunner(
             repository.markUploadJobTerminal(
                 sessionId = sessionId,
                 status = UploadJobStatus.COMPLETED,
-                outcome = "raw_ready_annotated_failed",
-                failureReason = failureReason,
+                outcome = if (isAnnotatedReady && degradedOverlay) "raw_preferred_overlay_low" else "raw_ready_annotated_failed",
+                failureReason = if (isAnnotatedReady && degradedOverlay) null else failureReason,
             )
             currentStage = UploadStage.COMPLETED_RAW_ONLY
-            onProgress(UploadProgress(currentStage, 1f, etaMs = 0L, detail = "Raw replay ready; annotated export failed"))
-            log("complete annotatedReady=false reason=$failureReason")
+            onProgress(
+                UploadProgress(
+                    currentStage,
+                    1f,
+                    etaMs = 0L,
+                    detail = if (isAnnotatedReady && degradedOverlay) {
+                        "Raw replay selected; annotated replay also available"
+                    } else {
+                        "Raw replay ready; annotated export failed"
+                    },
+                ),
+            )
+            log("complete annotatedReady=$isAnnotatedReady reason=$failureReason replayUri=$replayUri")
             logStage("COMPLETED", "replaySource=raw")
             SessionDiagnostics.persistReport(sessionId, repository.observeSession(sessionId).first(), repository)
             UploadFlowResult(
                 sessionId = sessionId,
                 replayUri = replayUri,
                 rawReady = true,
-                annotatedReady = false,
-                exportFailureReason = failureReason,
+                annotatedReady = isAnnotatedReady,
+                exportFailureReason = if (isAnnotatedReady && degradedOverlay) null else failureReason,
                 finalStage = UploadStage.COMPLETED_RAW_ONLY,
                 drillId = drillId,
                 referenceTemplateId = templateId,
@@ -1605,7 +1641,7 @@ class UploadVideoViewModel(
         if (repo != null) {
             viewModelScope.launch {
                 repo.reconcileActiveUploadJobs(
-                    hasActiveWorker = false,
+                    hasActiveWorker = coordinator.hasActiveUpload(),
                     reason = "upload_screen_init_in_app",
                 )
                 repo.observeSessions().collectLatest { sessions ->
@@ -1847,9 +1883,9 @@ internal fun assessOverlayCoverage(
         0L
     }
     val coverage = if (sourceDurationMs > 0L) spanMs.toFloat() / sourceDurationMs.toFloat() else 0f
-    val isDegraded = acceptedOverlayCount < MIN_OVERLAY_ACCEPTED_FRAMES ||
-        density < MIN_OVERLAY_DENSITY_PER_SECOND ||
-        coverage < MIN_OVERLAY_COVERAGE_RATIO
+    val isSeverelySparse = acceptedOverlayCount < MIN_OVERLAY_ACCEPTED_FRAMES
+    val isLowDensityAndCoverage = density < MIN_OVERLAY_DENSITY_PER_SECOND && coverage < MIN_OVERLAY_COVERAGE_RATIO
+    val isDegraded = isSeverelySparse || isLowDensityAndCoverage
     val warning = if (isDegraded) {
         "Overlay density/coverage too low for reliable annotated replay."
     } else {
@@ -1862,6 +1898,12 @@ internal fun assessOverlayCoverage(
         warning = warning,
     )
 }
+
+internal fun selectReplayUriForUpload(
+    shouldTreatAsRawOnly: Boolean,
+    annotatedUri: String?,
+    rawUri: String?,
+): String? = if (shouldTreatAsRawOnly) rawUri else (annotatedUri ?: rawUri)
 
 internal fun canonicalizeUploadUriForAnalysis(context: Context?, sourceUri: Uri): Uri {
     if (context == null) return sourceUri
@@ -1896,6 +1938,9 @@ internal fun deriveUploadStage(session: SessionRecord): UploadStage = when {
     session.rawPersistStatus == RawPersistStatus.PROCESSING -> UploadStage.IMPORTING_RAW_VIDEO
     session.rawPersistStatus == RawPersistStatus.FAILED -> UploadStage.FAILED
     session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE") -> UploadStage.FAILED
+    session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY &&
+        rawReplayPlayableForStage(session) &&
+        SessionMediaOwnership.canonicalRawUri(session) == session.bestPlayableUri -> UploadStage.COMPLETED_RAW_ONLY
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> UploadStage.COMPLETED_ANNOTATED
     session.annotatedExportStatus in setOf(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportStatus.CANCELLED, AnnotatedExportStatus.SKIPPED) &&
         rawReplayPlayableForStage(session) -> UploadStage.COMPLETED_RAW_ONLY

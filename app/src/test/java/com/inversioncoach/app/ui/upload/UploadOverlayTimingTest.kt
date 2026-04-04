@@ -2,6 +2,8 @@ package com.inversioncoach.app.ui.upload
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class UploadOverlayTimingTest {
@@ -38,6 +40,30 @@ class UploadOverlayTimingTest {
     }
 
     @Test
+    fun overlayCoverageDoesNotDegradeModerateAcceptedFrames() {
+        val diagnostics = assessOverlayCoverage(
+            sourceDurationMs = 10_000L,
+            acceptedOverlayCount = 11,
+            firstOverlayTimestampMs = 500L,
+            lastOverlayTimestampMs = 8_500L,
+        )
+
+        assertFalse(diagnostics.isDegraded)
+    }
+
+    @Test
+    fun elevenAcceptedFramesAtPointSixtySevenDensityIsNotDegraded() {
+        val diagnostics = assessOverlayCoverage(
+            sourceDurationMs = 16_418L,
+            acceptedOverlayCount = 11,
+            firstOverlayTimestampMs = 1_000L,
+            lastOverlayTimestampMs = 9_000L,
+        )
+
+        assertFalse(diagnostics.isDegraded)
+    }
+
+    @Test
     fun longUploadsUseLowerAnalysisSamplingFps() {
         val fps = resolveUploadAnalysisSampleFps(
             sourceDurationMs = 200_000L,
@@ -56,5 +82,35 @@ class UploadOverlayTimingTest {
 
         assertEquals(6, policy.analysisFps)
         assertEquals(8, policy.candidateDecodeFps)
+    }
+
+    @Test
+    fun degradedOverlaySelectsRawReplay() {
+        val selected = selectReplayUriForUpload(
+            shouldTreatAsRawOnly = true,
+            annotatedUri = "file:///annotated.mp4",
+            rawUri = "file:///raw.mp4",
+        )
+
+        assertEquals("file:///raw.mp4", selected)
+    }
+
+    @Test
+    fun replaySelectionHandlesMissingUris() {
+        assertEquals(
+            "file:///raw.mp4",
+            selectReplayUriForUpload(
+                shouldTreatAsRawOnly = false,
+                annotatedUri = null,
+                rawUri = "file:///raw.mp4",
+            ),
+        )
+        assertNull(
+            selectReplayUriForUpload(
+                shouldTreatAsRawOnly = true,
+                annotatedUri = "file:///annotated.mp4",
+                rawUri = null,
+            ),
+        )
     }
 }

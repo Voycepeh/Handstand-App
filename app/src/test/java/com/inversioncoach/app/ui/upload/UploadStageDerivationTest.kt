@@ -35,6 +35,21 @@ class UploadStageDerivationTest {
     }
 
     @Test
+    fun annotatedReadyButRawSelectedMapsToRawOnlyTerminal() {
+        val stage = deriveUploadStage(
+            base.copy(
+                rawPersistStatus = RawPersistStatus.SUCCEEDED,
+                rawVideoUri = "file:///raw.mp4",
+                annotatedVideoUri = "file:///annotated.mp4",
+                bestPlayableUri = "file:///raw.mp4",
+                annotatedExportStatus = AnnotatedExportStatus.ANNOTATED_READY,
+                annotatedExportFailureReason = "OVERLAY_DENSITY_TOO_LOW",
+            ),
+        )
+        assertEquals(UploadStage.COMPLETED_RAW_ONLY, stage)
+    }
+
+    @Test
     fun incompleteUploadedSessionHydratesToSafeIdleState() {
         val stage = deriveUploadStage(
             base.copy(

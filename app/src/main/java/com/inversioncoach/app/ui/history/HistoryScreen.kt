@@ -271,6 +271,9 @@ internal fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): S
     session.rawPersistStatus == RawPersistStatus.FAILED -> "Failed"
     session.rawPersistStatus == RawPersistStatus.PROCESSING -> "Copying raw video"
     session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE") -> "Raw replay unavailable (${session.rawPersistFailureReason})"
+    session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY &&
+        rawReplayPlayableForUi(session) &&
+        SessionMediaOwnership.canonicalRawUri(session) == session.bestPlayableUri -> "Raw replay ready (annotated available)"
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> "Ready"
     session.annotatedExportStatus in setOf(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportStatus.CANCELLED) -> "Failed"
     session.annotatedExportStatus in setOf(AnnotatedExportStatus.VALIDATING_INPUT, AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) -> {
