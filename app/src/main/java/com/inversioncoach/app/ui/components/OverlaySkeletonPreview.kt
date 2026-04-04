@@ -22,25 +22,9 @@ import com.inversioncoach.app.overlay.OverlayDrawingFrame
 import com.inversioncoach.app.overlay.OverlayFrameRenderer
 import com.inversioncoach.app.overlay.OverlayRenderModel
 import com.inversioncoach.app.overlay.OverlayRenderTarget
-import com.inversioncoach.app.overlay.OverlaySkeletonSpec
 import com.inversioncoach.app.pose.PoseScaleMode
 
-data class OverlaySkeletonPreviewStyle(
-    val aspectRatio: Float,
-    val contentPaddingFraction: Float,
-    val styleScaleMultiplier: Float,
-)
-
 object OverlaySkeletonPreviewDefaults {
-    const val PORTRAIT_ASPECT_RATIO: Float = 3f / 4f
-    const val CONTENT_PADDING_FRACTION: Float = 0.12f
-
-    val DefaultStyle = OverlaySkeletonPreviewStyle(
-        aspectRatio = PORTRAIT_ASPECT_RATIO,
-        contentPaddingFraction = CONTENT_PADDING_FRACTION,
-        styleScaleMultiplier = 1f,
-    )
-
     private val jointAliases = mapOf(
         "head" to "nose",
         "shoulder_left" to "left_shoulder",
@@ -57,10 +41,7 @@ object OverlaySkeletonPreviewDefaults {
         "ankle_right" to "right_ankle",
     )
 
-    val canonicalBones: List<Pair<String, String>> =
-        OverlaySkeletonSpec.sideConnections("left") +
-            OverlaySkeletonSpec.sideConnections("right") +
-            OverlaySkeletonSpec.bilateralConnectors
+    val canonicalBones: List<Pair<String, String>> = SkeletonRenderContract.SharedPolicy.canonicalBones
 
     fun normalizeJointNames(joints: Map<String, JointPoint>): Map<String, JointPoint> = joints.entries
         .associate { (name, point) -> (jointAliases[name] ?: name) to point }
@@ -68,11 +49,15 @@ object OverlaySkeletonPreviewDefaults {
     fun normalizeJointName(name: String): String = jointAliases[name] ?: name
 }
 
+/**
+ * Cross-surface consistency guardrail:
+ * pass [SkeletonPreviewPolicies.*] unless introducing an explicitly reviewed global policy change.
+ */
 @Composable
 fun OverlaySkeletonPreview(
     joints: Map<String, JointPoint>,
     modifier: Modifier = Modifier,
-    style: OverlaySkeletonPreviewStyle = OverlaySkeletonPreviewDefaults.DefaultStyle,
+    policy: SkeletonRenderPolicy = SkeletonPreviewPolicies.canonical,
     resolveOverlayBounds: ((Size) -> Rect)? = null,
     highlightedJoint: String? = null,
     showBackground: Boolean = true,
@@ -105,7 +90,7 @@ fun OverlaySkeletonPreview(
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(style.aspectRatio)
+            .aspectRatio(policy.aspectRatio)
             .then(
                 if (showBackground) {
                     Modifier.background(Color(0x10101822), RoundedCornerShape(14.dp))
@@ -117,13 +102,7 @@ fun OverlaySkeletonPreview(
         overlayContent()
 
         val minDimension = minOf(size.width, size.height)
-        val fallbackPadding = minDimension * style.contentPaddingFraction
-        val contentRect = resolveOverlayBounds?.invoke(size) ?: Rect(
-            left = fallbackPadding,
-            top = fallbackPadding,
-            right = (size.width - fallbackPadding).coerceAtLeast(fallbackPadding + 1f),
-            bottom = (size.height - fallbackPadding).coerceAtLeast(fallbackPadding + 1f),
-        )
+        val contentRect = resolveOverlayBounds?.invoke(size) ?: SkeletonRenderContract.contentRect(size, policy)
 
         OverlayFrameRenderer.drawAndroid(
             canvas = drawContext.canvas.nativeCanvas,
@@ -142,7 +121,9 @@ fun OverlaySkeletonPreview(
                 scaleMode = PoseScaleMode.FIT,
                 renderTarget = OverlayRenderTarget.LIVE_PREVIEW,
                 coordinateSpace = OverlayCoordinateSpace.UPRIGHT_NORMALIZED,
-                styleScaleMultiplier = style.styleScaleMultiplier,
+                styleScaleMultiplier = policy.styleScaleMultiplier,
+                jointRadiusScaleMultiplier = policy.jointRadiusScaleMultiplier,
+                strokeWidthScaleMultiplier = policy.strokeWidthScaleMultiplier,
             ),
         )
 

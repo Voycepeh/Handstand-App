@@ -24,6 +24,8 @@ data class OverlayDrawingFrame(
     val renderTarget: OverlayRenderTarget = OverlayRenderTarget.LIVE_PREVIEW,
     val coordinateSpace: OverlayCoordinateSpace,
     val styleScaleMultiplier: Float = 1f,
+    val jointRadiusScaleMultiplier: Float = 1f,
+    val strokeWidthScaleMultiplier: Float = 1f,
     val unreliableJointNames: Set<String> = emptySet(),
 )
 
@@ -164,10 +166,12 @@ object OverlayFrameRenderer {
             OverlayRenderTarget.LIVE_PREVIEW -> normalizedScale
             OverlayRenderTarget.ANNOTATED_EXPORT -> (normalizedScale * 0.72f).coerceAtMost(1f)
         } * frame.styleScaleMultiplier.coerceIn(0.5f, 2f)
+        val strokeScale = frame.strokeWidthScaleMultiplier.coerceIn(0.5f, 2f)
+        val jointScale = frame.jointRadiusScaleMultiplier.coerceIn(0.5f, 2f)
         return OverlayStrokeStyle(
-            skeletonStrokeWidth = (4.5f * targetScale).coerceAtLeast(2f),
-            idealLineStrokeWidth = (1.6f * targetScale).coerceAtLeast(1f),
-            jointRadius = (4.8f * targetScale).coerceAtLeast(2.4f),
+            skeletonStrokeWidth = (4.5f * targetScale * strokeScale).coerceAtLeast(2f),
+            idealLineStrokeWidth = (1.6f * targetScale * strokeScale).coerceAtLeast(1f),
+            jointRadius = (4.8f * targetScale * jointScale).coerceAtLeast(2.4f),
         )
     }
 

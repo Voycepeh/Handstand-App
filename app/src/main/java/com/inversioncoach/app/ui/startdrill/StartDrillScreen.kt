@@ -40,7 +40,7 @@ import com.inversioncoach.app.overlay.EffectiveView
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.components.SeededSkeletonPreview
-import com.inversioncoach.app.ui.components.SeededSkeletonPreviewDefaults
+import com.inversioncoach.app.ui.components.SkeletonPreviewPolicies
 import com.inversioncoach.app.ui.components.rememberSeededSkeletonPreviewProgress
 
 private val defaultSessionOptions = LiveSessionOptions(
@@ -223,7 +223,7 @@ private fun DrillSkeletonPreview(drill: SelectableDrill) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(SeededSkeletonPreviewDefaults.PORTRAIT_ASPECT_RATIO)
+                .aspectRatio(SkeletonPreviewPolicies.chooseDrillPreview.aspectRatio)
                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(14.dp)),
         ) {
             Text(

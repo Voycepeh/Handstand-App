@@ -78,18 +78,18 @@ import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.DropdownOption
 import com.inversioncoach.app.ui.components.MultiSelectChipsField
 import com.inversioncoach.app.ui.components.OverlaySkeletonPreview
-import com.inversioncoach.app.ui.components.OverlaySkeletonPreviewStyle
 import com.inversioncoach.app.ui.components.ReliableDropdownField
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.components.SeededSkeletonPreview
-import com.inversioncoach.app.ui.components.SeededSkeletonPreviewDefaults
+import com.inversioncoach.app.ui.components.SkeletonPreviewPolicies
+import com.inversioncoach.app.ui.components.SkeletonRenderContract
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-private val drillStudioSkeletonPolicy = SeededSkeletonPreviewDefaults.DefaultPolicy
+private val drillStudioSkeletonPolicy = SkeletonPreviewPolicies.poseAuthoring
 private const val CAMERA_CAPTURE_TAG = "DrillStudioCameraCapture"
 
 @Composable
@@ -642,22 +642,16 @@ private fun PoseAuthoringViewport(
             fallback = DrillStudioPosePresets.neutralUpright.joints,
         )
     }
-    val previewStyle = OverlaySkeletonPreviewStyle(
-        aspectRatio = drillStudioSkeletonPolicy.aspectRatio,
-        contentPaddingFraction = drillStudioSkeletonPolicy.contentPaddingFraction,
-        styleScaleMultiplier = drillStudioSkeletonPolicy.styleScaleMultiplier,
-    )
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(previewStyle.aspectRatio)
+            .aspectRatio(drillStudioSkeletonPolicy.aspectRatio)
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .pointerInput(phasePose.phaseId, phasePose.joints, referenceImage, previewStyle.contentPaddingFraction) {
+            .pointerInput(phasePose.phaseId, phasePose.joints, referenceImage, drillStudioSkeletonPolicy) {
                 detectDragGestures(
                     onDragStart = { start ->
-                        val contentRect = previewContentRect(size.toSize(), previewStyle.contentPaddingFraction)
-                        val imageBounds = resolveImageBounds(size.toSize(), referenceImage, contentRect)
+                        val imageBounds = resolveImageBounds(size.toSize(), referenceImage)
                         val touch = toNormalizedPoint(start, imageBounds)
                         activeJoint = DrillStudioPoseUtils.nearestJointWithinRadius(
                             joints = renderPose,
@@ -667,8 +661,7 @@ private fun PoseAuthoringViewport(
                     },
                     onDrag = { change, _ ->
                         val joint = activeJoint ?: return@detectDragGestures
-                        val contentRect = previewContentRect(size.toSize(), previewStyle.contentPaddingFraction)
-                        val imageBounds = resolveImageBounds(size.toSize(), referenceImage, contentRect)
+                        val imageBounds = resolveImageBounds(size.toSize(), referenceImage)
                         val normalized = toNormalizedPoint(change.position, imageBounds)
                         val constrained = DrillStudioPoseUtils.applyAnatomicalGuardrails(
                             pose = renderPose,
@@ -685,22 +678,14 @@ private fun PoseAuthoringViewport(
     ) {
         OverlaySkeletonPreview(
             joints = renderPose,
-            style = previewStyle,
+            policy = drillStudioSkeletonPolicy,
             resolveOverlayBounds = { canvasSize ->
-                val contentRect = previewContentRect(canvasSize, previewStyle.contentPaddingFraction)
-                val imageBounds = resolveImageBounds(canvasSize, referenceImage, contentRect)
-                Rect(
-                    left = imageBounds.left,
-                    top = imageBounds.top,
-                    right = imageBounds.left + imageBounds.width,
-                    bottom = imageBounds.top + imageBounds.height,
-                )
+                resolveImageBounds(canvasSize, referenceImage)
             },
             highlightedJoint = activeJoint,
             showBackground = false,
         ) {
-            val contentRect = previewContentRect(size, previewStyle.contentPaddingFraction)
-            val imageBounds = resolveImageBounds(size, referenceImage, contentRect)
+            val imageBounds = resolveImageBounds(size, referenceImage)
             if (referenceImage != null) {
                 drawImage(
                     image = referenceImage,
@@ -846,7 +831,7 @@ private fun PreviewCard(drill: DrillTemplate, progress: Float) {
     SeededSkeletonPreview(
         template = drill.skeletonTemplate,
         progress = progress,
-        policy = drillStudioSkeletonPolicy,
+        policy = SkeletonPreviewPolicies.motionPreview,
     )
 }
 
@@ -864,50 +849,16 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
     }
 }
 
-private data class ImageBounds(
-    val left: Float,
-    val top: Float,
-    val width: Float,
-    val height: Float,
-)
+private data class ImageBounds(val left: Float, val top: Float, val width: Float, val height: Float)
 
-private fun resolveImageBounds(canvasSize: Size, referenceImage: ImageBitmap?, contentRect: Rect): ImageBounds {
-    if (contentRect.width <= 0f || contentRect.height <= 0f) {
-        return ImageBounds(0f, 0f, canvasSize.width, canvasSize.height)
-    }
-    if (referenceImage == null || referenceImage.width <= 0 || referenceImage.height <= 0) {
-        return ImageBounds(contentRect.left, contentRect.top, contentRect.width, contentRect.height)
-    }
-    val imageAspect = referenceImage.width.toFloat() / referenceImage.height.toFloat()
-    val canvasAspect = if (contentRect.height == 0f) 1f else contentRect.width / contentRect.height
-    return if (imageAspect > canvasAspect) {
-        val height = contentRect.width / imageAspect
-        ImageBounds(
-            left = contentRect.left,
-            top = contentRect.top + (contentRect.height - height) / 2f,
-            width = contentRect.width,
-            height = height,
-        )
-    } else {
-        val width = contentRect.height * imageAspect
-        ImageBounds(
-            left = contentRect.left + (contentRect.width - width) / 2f,
-            top = contentRect.top,
-            width = width,
-            height = contentRect.height,
-        )
-    }
-}
-
-private fun previewContentRect(canvasSize: Size, contentPaddingFraction: Float): Rect {
-    val minDimension = minOf(canvasSize.width, canvasSize.height)
-    val padding = minDimension * contentPaddingFraction.coerceAtLeast(0f)
-    return Rect(
-        left = padding,
-        top = padding,
-        right = (canvasSize.width - padding).coerceAtLeast(padding + 1f),
-        bottom = (canvasSize.height - padding).coerceAtLeast(padding + 1f),
+private fun resolveImageBounds(canvasSize: Size, referenceImage: ImageBitmap?): ImageBounds {
+    val rect = SkeletonRenderContract.displayedImageBounds(
+        canvasSize = canvasSize,
+        imageWidth = referenceImage?.width,
+        imageHeight = referenceImage?.height,
+        policy = drillStudioSkeletonPolicy,
     )
+    return ImageBounds(rect.left, rect.top, rect.width, rect.height)
 }
 
 private fun toNormalizedPoint(position: Offset, bounds: ImageBounds): JointPoint {
