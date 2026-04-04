@@ -12,6 +12,11 @@ import com.inversioncoach.app.calibration.storage.RoomDrillMovementProfileReposi
 import com.inversioncoach.app.storage.db.DatabaseMigrations
 import com.inversioncoach.app.storage.db.InversionCoachDatabase
 import com.inversioncoach.app.storage.repository.SessionRepository
+import com.inversioncoach.app.ui.upload.ActiveUploadCoordinator
+import com.inversioncoach.app.ui.upload.DefaultUploadVideoAnalysisRunner
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 object ServiceLocator {
     @Volatile
@@ -22,6 +27,9 @@ object ServiceLocator {
     private var calibrationProvider: CalibrationProfileProvider? = null
     @Volatile
     private var drillMovementProfileRepository: DrillMovementProfileRepository? = null
+    @Volatile
+    private var activeUploadCoordinator: ActiveUploadCoordinator? = null
+    private val appScope: CoroutineScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
 
     fun db(context: Context): InversionCoachDatabase {
         return db ?: synchronized(this) {
@@ -74,6 +82,18 @@ object ServiceLocator {
                 dao = db(context).calibrationDao(),
                 json = DrillMovementProfileJson(),
             ).also { drillMovementProfileRepository = it }
+        }
+    }
+
+    fun activeUploadCoordinator(context: Context): ActiveUploadCoordinator {
+        return activeUploadCoordinator ?: synchronized(this) {
+            activeUploadCoordinator ?: ActiveUploadCoordinator(
+                scope = appScope,
+                runner = DefaultUploadVideoAnalysisRunner(
+                    context = context.applicationContext,
+                    repository = repository(context),
+                ),
+            ).also { activeUploadCoordinator = it }
         }
     }
 

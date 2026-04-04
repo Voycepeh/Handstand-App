@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -507,6 +508,117 @@ class UploadVideoViewModelTest {
         kotlinx.coroutines.Dispatchers.resetMain()
     }
 
+    @Test
+    fun uiCanReattachToActiveUploadSession() = runTest(dispatcher) {
+        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val sharedCoordinator = ActiveUploadCoordinator(
+            scope = TestScope(dispatcher),
+            runner = object : UploadVideoAnalysisRunner {
+                override suspend fun run(
+                    uri: Uri,
+                    ownerToken: String,
+                    trackingMode: UploadTrackingMode,
+                    selectedDrillId: String?,
+                    selectedReferenceTemplateId: String?,
+                    isReferenceUpload: Boolean,
+                    createDrillFromReferenceUpload: Boolean,
+                    pendingDrillName: String?,
+                    onSessionCreated: (Long) -> Unit,
+                    onProgress: (UploadProgress) -> Unit,
+                    onLog: (String) -> Unit,
+                ): UploadFlowResult {
+                    onSessionCreated(555L)
+                    onProgress(UploadProgress(UploadStage.ANALYZING_VIDEO, 0.5f, detail = "Analyzing movement"))
+                    gate.await()
+                    return UploadFlowResult(555L, null, rawReady = true, annotatedReady = false, finalStage = UploadStage.COMPLETED_RAW_ONLY)
+                }
+            },
+        )
+        val vmA = UploadVideoViewModel(
+            appContext = null,
+            repository = null,
+            selectedDrillId = null,
+            selectedReferenceTemplateId = null,
+            isReferenceUpload = false,
+            createDrillFromReferenceUpload = false,
+            queueCoordinator = sharedCoordinator,
+            customRunner = noOpRunner(),
+        )
+        vmA.onTrackingModeSelected(UploadTrackingMode.HOLD_BASED)
+        vmA.analyze(Uri.parse("content://video"))
+        advanceUntilIdle()
+        val vmB = UploadVideoViewModel(
+            appContext = null,
+            repository = null,
+            selectedDrillId = null,
+            selectedReferenceTemplateId = null,
+            isReferenceUpload = false,
+            createDrillFromReferenceUpload = false,
+            queueCoordinator = sharedCoordinator,
+            customRunner = noOpRunner(),
+        )
+        advanceUntilIdle()
+
+        assertEquals(555L, vmB.state.value.sessionId)
+        assertEquals(UploadStage.ANALYZING_VIDEO, vmB.state.value.stage)
+        gate.complete(Unit)
+        kotlinx.coroutines.Dispatchers.resetMain()
+    }
+
+    @Test
+    fun clearingUploadScreenViewModelDoesNotCancelSharedCoordinatorWork() = runTest(dispatcher) {
+        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val sharedCoordinator = ActiveUploadCoordinator(
+            scope = TestScope(dispatcher),
+            runner = object : UploadVideoAnalysisRunner {
+                override suspend fun run(
+                    uri: Uri,
+                    ownerToken: String,
+                    trackingMode: UploadTrackingMode,
+                    selectedDrillId: String?,
+                    selectedReferenceTemplateId: String?,
+                    isReferenceUpload: Boolean,
+                    createDrillFromReferenceUpload: Boolean,
+                    pendingDrillName: String?,
+                    onSessionCreated: (Long) -> Unit,
+                    onProgress: (UploadProgress) -> Unit,
+                    onLog: (String) -> Unit,
+                ): UploadFlowResult {
+                    onSessionCreated(901L)
+                    onProgress(UploadProgress(UploadStage.ANALYZING_VIDEO, 0.4f, detail = "Analyzing movement"))
+                    gate.await()
+                    return UploadFlowResult(901L, null, rawReady = true, annotatedReady = false, finalStage = UploadStage.COMPLETED_RAW_ONLY)
+                }
+            },
+        )
+        val vmA = TestableUploadVideoViewModel(
+            queueCoordinator = sharedCoordinator,
+            runner = noOpRunner(),
+        )
+        vmA.onTrackingModeSelected(UploadTrackingMode.HOLD_BASED)
+        vmA.analyze(Uri.parse("content://video"))
+        advanceUntilIdle()
+        vmA.clearForTest()
+
+        val vmB = UploadVideoViewModel(
+            appContext = null,
+            repository = null,
+            selectedDrillId = null,
+            selectedReferenceTemplateId = null,
+            isReferenceUpload = false,
+            createDrillFromReferenceUpload = false,
+            queueCoordinator = sharedCoordinator,
+            customRunner = noOpRunner(),
+        )
+        advanceUntilIdle()
+        assertEquals(901L, vmB.state.value.sessionId)
+        assertEquals(UploadStage.ANALYZING_VIDEO, vmB.state.value.stage)
+        gate.complete(Unit)
+        kotlinx.coroutines.Dispatchers.resetMain()
+    }
+
     private fun noOpRunner() = object : UploadVideoAnalysisRunner {
         override suspend fun run(
             uri: Uri,
@@ -523,4 +635,20 @@ class UploadVideoViewModelTest {
         ): UploadFlowResult = UploadFlowResult(1L, null, rawReady = false, annotatedReady = false, finalStage = UploadStage.FAILED)
     }
 
+}
+
+private class TestableUploadVideoViewModel(
+    queueCoordinator: ActiveUploadCoordinator,
+    runner: UploadVideoAnalysisRunner,
+) : UploadVideoViewModel(
+    appContext = null,
+    repository = null,
+    selectedDrillId = null,
+    selectedReferenceTemplateId = null,
+    isReferenceUpload = false,
+    createDrillFromReferenceUpload = false,
+    queueCoordinator = queueCoordinator,
+    customRunner = runner,
+) {
+    fun clearForTest() = onCleared()
 }

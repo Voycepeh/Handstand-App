@@ -86,7 +86,6 @@ import com.inversioncoach.app.ui.live.SessionDiagnostics
 import com.inversioncoach.app.pose.PoseScaleMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
@@ -96,15 +95,18 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
-import java.util.UUID
 import java.io.File
 
 private const val TAG = "UploadVideoFlow"
 private const val ANALYSIS_PROGRESS_UPDATE_FRAME_INTERVAL = 1
 private const val ANALYSIS_PROGRESS_UPDATE_MS = 100L
 private const val UPLOADED_ANALYSIS_SAMPLE_FPS = 6
+private const val MIN_UPLOADED_ANALYSIS_SAMPLE_FPS = 3
 private const val ENABLE_ADAPTIVE_UPLOAD_SAMPLING = true
 private const val DEFAULT_UPLOAD_FRAME_RATE = 30
+private const val MIN_OVERLAY_DENSITY_PER_SECOND = 1.2f
+private const val MIN_OVERLAY_COVERAGE_RATIO = 0.35f
+private const val MIN_OVERLAY_ACCEPTED_FRAMES = 12
 
 enum class UploadStage(val label: String) {
     IDLE("Idle"),
@@ -179,6 +181,13 @@ data class UploadFlowResult(
     val finalStage: UploadStage,
     val drillId: String? = null,
     val referenceTemplateId: String? = null,
+)
+
+private data class OverlayCoverageDiagnostics(
+    val densityPerSecond: Float,
+    val coverageRatio: Float,
+    val isDegraded: Boolean,
+    val warning: String? = null,
 )
 
 interface UploadVideoAnalysisRunner {
@@ -488,7 +497,12 @@ class DefaultUploadVideoAnalysisRunner(
                 detail = "Preparing uploaded analysis",
             )
             onProgress(UploadProgress(currentStage, 0.2f, detail = "Preparing uploaded analysis"))
-            val frameSource = frameSourceFactory(context.applicationContext, UPLOADED_ANALYSIS_SAMPLE_FPS)
+            val resolvedSampleFps = resolveUploadAnalysisSampleFps(
+                sourceDurationMs = sourceDurationMs,
+                sourceFrameRate = metadata.frameRate,
+            )
+            log("analysis_sampling_config sourceDurationMs=$sourceDurationMs sourceFrameRate=${metadata.frameRate} sampleFps=$resolvedSampleFps")
+            val frameSource = frameSourceFactory(context.applicationContext, resolvedSampleFps)
             val analyzer = analyzerFactory(frameSource)
 
             SessionDiagnostics.record(
@@ -496,7 +510,7 @@ class DefaultUploadVideoAnalysisRunner(
                 stage = SessionDiagnostics.Stage.OVERLAY_CAPTURE,
                 status = SessionDiagnostics.Status.STARTED,
                 message = "Uploaded frame analysis started",
-                metrics = mapOf("analysisFps" to UPLOADED_ANALYSIS_SAMPLE_FPS.toString()),
+                metrics = mapOf("analysisFps" to resolvedSampleFps.toString()),
             )
             currentStage = UploadStage.ANALYZING_VIDEO
             logStage("ANALYZING_UPLOADED_VIDEO", "analysis_started=true")
@@ -894,23 +908,48 @@ class DefaultUploadVideoAnalysisRunner(
 
             val overlaySampleIntervalMs = estimateTimelineSampleIntervalMs(
                 timestampsMs = analysis.overlayTimeline.map { it.timestampMs },
-                fallbackFps = UPLOADED_ANALYSIS_SAMPLE_FPS,
+                fallbackFps = resolvedSampleFps,
             )
-            val overlayTimeline = OverlayTimeline(
+            val rawOverlayTimeline = OverlayTimeline(
                 startedAtMs = 0L,
                 sampleIntervalMs = overlaySampleIntervalMs,
                 frames = overlayFrames.map { it.toTimelineFrame(sessionId = sessionId, sessionStartedAtMs = 0L) },
             )
+            val frozenOverlaySnapshot = exportPipelineFactory().freezeSnapshotForExport(
+                overlayTimeline = rawOverlayTimeline,
+                rawDurationMsHint = sourceDurationMs,
+                preset = preset,
+            )
+            val overlayTimeline = frozenOverlaySnapshot.overlayTimeline
+            val firstOverlayTimestampMs = overlayTimeline.frames.firstOrNull()?.timestampMs
+            val lastOverlayTimestampMs = overlayTimeline.frames.lastOrNull()?.timestampMs
+            val overlayDiagnostics = assessOverlayCoverage(
+                sourceDurationMs = sourceDurationMs,
+                acceptedOverlayCount = frozenOverlaySnapshot.usableOverlayFrameCount,
+                firstOverlayTimestampMs = firstOverlayTimestampMs,
+                lastOverlayTimestampMs = lastOverlayTimestampMs,
+            )
+            val estimatedSourceFrames = ((sourceDurationMs / 1000f) * metadata.frameRate.toFloat()).toInt().coerceAtLeast(0)
+            val sampledFrameCount = (analysis.telemetry["adaptive_sampled_frames"] ?: analysis.telemetry["total_frames_processed"] ?: 0L).toInt()
+            val decodedFrameCount = (analysis.telemetry["total_frames_processed"] ?: sampledFrameCount.toLong()).toInt()
+            val poseSuccessCount = analysis.overlayTimeline.size
+            log(
+                "timing_diagnostics sourceDurationMs=$sourceDurationMs estimatedSourceFrames=$estimatedSourceFrames decodedFrameCount=$decodedFrameCount " +
+                    "sampledFrameCount=$sampledFrameCount poseSuccessCount=$poseSuccessCount overlayAcceptedCount=${frozenOverlaySnapshot.usableOverlayFrameCount} " +
+                    "overlayDensityPerSecond=${"%.2f".format(overlayDiagnostics.densityPerSecond)} firstOverlayTimestampMs=${firstOverlayTimestampMs ?: -1L} " +
+                    "lastOverlayTimestampMs=${lastOverlayTimestampMs ?: -1L} normalizationProducedNewAsset=${normalization.normalizationSucceeded} " +
+                    "normalizationUsesMetadataCompensation=${(!normalization.normalizationSucceeded && normalization.normalizationRequired)}",
+            )
             val overlayTimelineUri = repository.saveOverlayTimeline(sessionId, OverlayTimelineJson.encode(overlayTimeline))
             repository.updateMediaPipelineState(sessionId) { session ->
                 session.copy(
-                    overlayFrameCount = overlayFrames.size,
+                    overlayFrameCount = overlayTimeline.frames.size,
                     overlayTimelineUri = overlayTimelineUri,
                     rawVideoUri = persistedRawUri,
                     bestPlayableUri = persistedRawUri,
                 )
             }
-            log("repo_write overlay timeline uri=$overlayTimelineUri frames=${overlayFrames.size}")
+            log("repo_write overlay timeline uri=$overlayTimelineUri frames=${overlayTimeline.frames.size}")
 
             repository.updateAnnotatedExportStatus(
                 sessionId,
@@ -966,7 +1005,7 @@ class DefaultUploadVideoAnalysisRunner(
                 status = SessionDiagnostics.Status.STARTED,
                 message = "Annotated export started for uploaded video",
                 metrics = mapOf(
-                    "overlayFrameCount" to overlayFrames.size.toString(),
+                    "overlayFrameCount" to overlayTimeline.frames.size.toString(),
                     "overlayTimelineUri" to overlayTimelineUri,
                 ),
             )
@@ -990,6 +1029,15 @@ class DefaultUploadVideoAnalysisRunner(
                 },
             )
             log("export_done started=${export.started} failure=${export.failureReason.orEmpty()} uri=${export.persistedUri.orEmpty()}")
+            val exportDurationMs = export.telemetry?.let { telemetry ->
+                (telemetry.exportCompletedAtMs ?: System.currentTimeMillis()) - telemetry.exportStartedAtMs
+            } ?: 0L
+            val exportFps = if (exportDurationMs > 0L) {
+                ((export.telemetry?.renderedFrameCount ?: 0).toFloat() * 1000f) / exportDurationMs.toFloat()
+            } else {
+                0f
+            }
+            log("export_diagnostics fps=${"%.2f".format(exportFps)} durationMs=$exportDurationMs")
 
             currentStage = UploadStage.VERIFYING_OUTPUT
             onProgress(UploadProgress(currentStage, 0.93f, detail = "Verifying media files"))
@@ -1008,6 +1056,8 @@ class DefaultUploadVideoAnalysisRunner(
             val now = System.currentTimeMillis()
             val replayUri = export.persistedUri ?: persistedRawUri
             val isAnnotatedReady = !export.persistedUri.isNullOrBlank()
+            val degradedOverlay = overlayDiagnostics.isDegraded
+            val shouldTreatAsRawOnly = degradedOverlay || !isAnnotatedReady
             if (isAnnotatedReady) {
                 SessionDiagnostics.record(
                     sessionId = sessionId,
@@ -1047,7 +1097,7 @@ class DefaultUploadVideoAnalysisRunner(
                     completedAtMs = startedAt + sourceDurationMs,
                     overallScore = ((analysis.overlayTimeline.map { it.metrics["alignment_score"] ?: 0f }.average()) * 100f).toInt().coerceIn(0, 100),
                     strongestArea = "Alignment",
-                    limitingFactor = if (isAnnotatedReady) "Consistency" else "Annotated export unavailable",
+                    limitingFactor = if (shouldTreatAsRawOnly) "Annotated export unavailable" else "Consistency",
                     wins = "Processed uploaded video",
                     issues = if (analysis.droppedFrames > 0) "Dropped ${analysis.droppedFrames} low-confidence frames" else "",
                     calibrationProfileVersion = resolvedCalibrationProfile?.profileVersion,
@@ -1062,6 +1112,12 @@ class DefaultUploadVideoAnalysisRunner(
                             "invalidFrames" to analysis.droppedFrames.toString(),
                             "totalJobTimeMs" to (now - startedAt).toString(),
                             "sessionTrackedMs" to sourceDurationMs.toString(),
+                            "overlayDensityPerSecond" to overlayDiagnostics.densityPerSecond.toString(),
+                            "overlayCoverageRatio" to overlayDiagnostics.coverageRatio.toString(),
+                            "overlayQualityDegraded" to overlayDiagnostics.isDegraded.toString(),
+                            "overlayQualityWarning" to overlayDiagnostics.warning.orEmpty(),
+                            "exportFps" to exportFps.toString(),
+                            "exportDurationMs" to exportDurationMs.toString(),
                         ),
                     ),
                     bestPlayableUri = replayUri,
@@ -1074,7 +1130,7 @@ class DefaultUploadVideoAnalysisRunner(
             logStage("BUILDING_UPLOAD_SUMMARY", "summary_written=true")
             log("repo_write final replayUri=$replayUri annotatedReady=$isAnnotatedReady")
 
-            if (isAnnotatedReady) {
+            if (isAnnotatedReady && !degradedOverlay) {
                 repository.updateAnnotatedExportStatus(
                     sessionId,
                     AnnotatedExportStatus.ANNOTATED_READY,
@@ -1128,7 +1184,11 @@ class DefaultUploadVideoAnalysisRunner(
                 )
             }
 
-            val failureReason = export.failureReason ?: AnnotatedExportFailureReason.EXPORT_NOT_STARTED.name
+            val failureReason = if (degradedOverlay) {
+                AnnotatedExportFailureReason.OVERLAY_DENSITY_TOO_LOW.name
+            } else {
+                export.failureReason ?: AnnotatedExportFailureReason.EXPORT_NOT_STARTED.name
+            }
             repository.updateAnnotatedExportStatus(
                 sessionId,
                 AnnotatedExportStatus.ANNOTATED_FAILED,
@@ -1185,18 +1245,19 @@ class DefaultUploadVideoAnalysisRunner(
                 referenceTemplateId = templateId,
             )
         } catch (error: Throwable) {
+            val wasCancelled = error is kotlinx.coroutines.CancellationException
             SessionDiagnostics.record(
                 sessionId = sessionId,
                 stage = SessionDiagnostics.Stage.SESSION_FINALIZE,
-                status = SessionDiagnostics.Status.FAILED,
-                message = "Uploaded workflow failed",
+                status = if (wasCancelled) SessionDiagnostics.Status.CANCELLED else SessionDiagnostics.Status.FAILED,
+                message = if (wasCancelled) "Uploaded workflow cancelled" else "Uploaded workflow failed",
                 errorCode = error.message ?: AnnotatedExportFailureReason.UNKNOWN_EXCEPTION.name,
                 throwable = error,
             )
             repository.updateRawPersistStatus(sessionId, if (persistedRawUri.isNullOrBlank()) RawPersistStatus.FAILED else RawPersistStatus.SUCCEEDED)
             repository.updateAnnotatedExportStatus(
                 sessionId,
-                AnnotatedExportStatus.ANNOTATED_FAILED,
+                if (wasCancelled) AnnotatedExportStatus.CANCELLED else AnnotatedExportStatus.ANNOTATED_FAILED,
                 attemptId = processingAttemptId,
                 ownerType = "UPLOAD_PIPELINE",
                 ownerId = ownerToken,
@@ -1218,12 +1279,12 @@ class DefaultUploadVideoAnalysisRunner(
             )
             repository.updateAnnotatedExportProgress(
                 sessionId = sessionId,
-                stage = AnnotatedExportStage.FAILED,
+                stage = if (wasCancelled) AnnotatedExportStage.FAILED else AnnotatedExportStage.FAILED,
                 percent = 100,
                 etaSeconds = null,
                 elapsedMs = System.currentTimeMillis() - startedAt,
-                failureReason = mappedFailure,
-                failureDetail = "Upload workflow failed during ${currentStage.name}",
+                failureReason = if (wasCancelled) AnnotatedExportFailureReason.EXPORT_CANCELLED.name else mappedFailure,
+                failureDetail = if (wasCancelled) "Upload workflow cancelled during ${currentStage.name}" else "Upload workflow failed during ${currentStage.name}",
                 attemptId = processingAttemptId,
                 ownerType = "UPLOAD_PIPELINE",
                 ownerId = ownerToken,
@@ -1231,14 +1292,14 @@ class DefaultUploadVideoAnalysisRunner(
             repository.releaseProcessingAttempt(sessionId, processingAttemptId)
             repository.updateUploadPipelineProgress(
                 sessionId = sessionId,
-                stageLabel = "Failed",
-                detail = "Upload workflow failed",
+                stageLabel = if (wasCancelled) "Cancelled" else "Failed",
+                detail = if (wasCancelled) "Upload workflow cancelled" else "Upload workflow failed",
             )
             repository.markUploadJobTerminal(
                 sessionId = sessionId,
-                status = if (error is kotlinx.coroutines.CancellationException) UploadJobStatus.CANCELLED else UploadJobStatus.FAILED,
-                outcome = if (error is kotlinx.coroutines.CancellationException) "cancelled" else "failed",
-                failureReason = error.message ?: mappedFailure,
+                status = if (wasCancelled) UploadJobStatus.CANCELLED else UploadJobStatus.FAILED,
+                outcome = if (wasCancelled) "cancelled" else "failed",
+                failureReason = if (wasCancelled) AnnotatedExportFailureReason.EXPORT_CANCELLED.name else (error.message ?: mappedFailure),
             )
             repository.updateMediaPipelineState(sessionId) { session ->
                 session.copy(
@@ -1246,10 +1307,10 @@ class DefaultUploadVideoAnalysisRunner(
                     bestPlayableUri = persistedRawUri,
                     rawVideoUri = persistedRawUri ?: session.rawVideoUri,
                     annotatedVideoUri = null,
-                    limitingFactor = "Upload processing failed",
+                    limitingFactor = if (wasCancelled) "Upload cancelled" else "Upload processing failed",
                 )
             }
-            logStage("FAILED", "reason=${error.message ?: mappedFailure}")
+            logStage(if (wasCancelled) "CANCELLED" else "FAILED", "reason=${error.message ?: mappedFailure}")
             SessionDiagnostics.persistReport(sessionId, repository.observeSession(sessionId).first(), repository)
             throw error
         }
@@ -1405,6 +1466,7 @@ class UploadVideoViewModel(
     private val isReferenceUpload: Boolean,
     private val createDrillFromReferenceUpload: Boolean,
     private val pendingDrillName: String? = null,
+    private val queueCoordinator: ActiveUploadCoordinator? = null,
     private val customRunner: UploadVideoAnalysisRunner? = null,
     private val resolveCanonicalUploadUri: suspend (Uri) -> Uri = { uri ->
         canonicalizeUploadUriForAnalysis(appContext, uri)
@@ -1423,13 +1485,15 @@ class UploadVideoViewModel(
         ),
     )
     val state: StateFlow<UploadVideoUiState> = _state.asStateFlow()
-    private var runningJob: Job? = null
     private var observedSessionId: Long? = null
     private val runner: UploadVideoAnalysisRunner by lazy {
         customRunner ?: DefaultUploadVideoAnalysisRunner(
             context = requireNotNull(appContext) { "Application context is required when no custom upload runner is provided." }.applicationContext,
             repository = requireNotNull(repository) { "SessionRepository is required when no custom upload runner is provided." },
         )
+    }
+    private val coordinator: ActiveUploadCoordinator by lazy {
+        queueCoordinator ?: ActiveUploadCoordinator(viewModelScope, runner)
     }
 
     constructor(runner: UploadVideoAnalysisRunner) : this(
@@ -1440,6 +1504,7 @@ class UploadVideoViewModel(
         isReferenceUpload = false,
         createDrillFromReferenceUpload = false,
         pendingDrillName = null,
+        queueCoordinator = null,
         customRunner = runner,
     )
 
@@ -1469,6 +1534,40 @@ class UploadVideoViewModel(
             }
         }
         val repo = repository
+        viewModelScope.launch {
+            coordinator.state.collectLatest { coordinatorState ->
+                val active = coordinatorState.activeSession
+                if (active != null) {
+                    observedSessionId = active.sessionId ?: observedSessionId
+                    _state.update { current ->
+                        current.copy(
+                            selectedVideoUri = active.selectedVideoUri,
+                            stage = active.stage,
+                            currentProcessingStage = active.stage,
+                            stageText = active.stageText,
+                            errorMessage = active.errorMessage ?: coordinatorState.blockedMessage,
+                            sessionId = active.sessionId ?: current.sessionId,
+                            replayUri = active.replayUri,
+                            canCancel = !active.isTerminal,
+                            progressPercent = active.progressPercent,
+                            etaMs = active.etaMs,
+                            technicalLog = active.technicalLog,
+                            analysisPhaseLabel = active.analysisPhaseLabel,
+                            analysisProcessedFrames = active.analysisProcessedFrames,
+                            analysisTotalFrames = active.analysisTotalFrames,
+                            analysisPhasePercent = active.analysisPhasePercent,
+                        )
+                    }
+                } else if (!coordinatorState.blockedMessage.isNullOrBlank()) {
+                    _state.update { current ->
+                        current.copy(
+                            stageText = coordinatorState.blockedMessage,
+                            errorMessage = coordinatorState.blockedMessage,
+                        )
+                    }
+                }
+            }
+        }
         if (repo != null) {
             viewModelScope.launch {
                 repo.reconcileActiveUploadJobs(
@@ -1539,15 +1638,6 @@ class UploadVideoViewModel(
     }
 
     fun analyze(uri: Uri) {
-        if (runningJob?.isActive == true) {
-            _state.update {
-                it.copy(
-                    stageText = "Another upload is already in progress.",
-                    errorMessage = "Please wait for the active upload to finish before starting a new one.",
-                )
-            }
-            return
-        }
         val trackingMode = _state.value.effectiveMovementType
         if (trackingMode == null) {
             _state.update {
@@ -1573,141 +1663,38 @@ class UploadVideoViewModel(
             }
             return
         }
-        runningJob = viewModelScope.launch(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.Default) {
             val canonicalUri = runCatching { resolveCanonicalUploadUri(uri) }
                 .onFailure { error -> Log.e(TAG, "upload_intake_copy_failed uri=$uri", error) }
                 .getOrElse { throw IllegalStateException("UPLOAD_INTAKE_COPY_FAILED: ${it.message}", it) }
             val usedCopiedLocalSource = canonicalUri.toString() != uri.toString()
-            _state.update {
-                it.copy(
+            val intakeLog = "upload_intake originalUri=$uri localUri=$canonicalUri usedLocal=$usedCopiedLocalSource"
+            _state.update { current ->
+                current.copy(
                     selectedVideoUri = canonicalUri,
                     stage = UploadStage.VIDEO_SELECTED,
                     currentProcessingStage = UploadStage.VIDEO_SELECTED,
                     stageText = UploadStage.VIDEO_SELECTED.label,
                     errorMessage = null,
-                    sessionId = null,
-                    replayUri = null,
-                    canCancel = true,
-                    technicalLog = "",
-                    rawVideoStatus = RawPersistStatus.PROCESSING,
-                    annotatedVideoStatus = AnnotatedExportStatus.NOT_STARTED,
-                    analysisPhaseLabel = "",
-                    analysisProcessedFrames = 0,
-                    analysisTotalFrames = 0,
-                    analysisPhasePercent = null,
+                    technicalLog = if (current.technicalLog.isBlank()) intakeLog else "${current.technicalLog}\n$intakeLog",
                 )
             }
-            runCatching {
-                val ownerToken = UUID.randomUUID().toString()
-                val intakeLog = "upload_intake originalUri=$uri localUri=$canonicalUri usedLocal=$usedCopiedLocalSource"
-                _state.update { current ->
-                    current.copy(
-                        technicalLog = if (current.technicalLog.isBlank()) intakeLog else "${current.technicalLog}\n$intakeLog",
-                    )
-                }
-                runner.run(
-                    uri = canonicalUri,
-                    ownerToken = ownerToken,
-                    trackingMode = trackingMode,
-                    selectedDrillId = selectedDrillId,
-                    selectedReferenceTemplateId = selectedReferenceTemplateId,
-                    isReferenceUpload = isReferenceUpload,
-                    createDrillFromReferenceUpload = createDrillFromReferenceUpload,
-                    pendingDrillName = _state.value.pendingDrillName,
-                    onSessionCreated = { sessionId ->
-                        observedSessionId = sessionId
-                        _state.update { current -> current.copy(sessionId = sessionId) }
-                    },
-                    onProgress = { progress ->
-                        _state.update { current ->
-                            val rawStatus = if (progress.stage.ordinal >= UploadStage.RAW_IMPORT_COMPLETE.ordinal) {
-                                RawPersistStatus.SUCCEEDED
-                            } else {
-                                current.rawVideoStatus
-                            }
-                            val annotatedStatus = when (progress.stage) {
-                                UploadStage.PREPARING_ANALYSIS,
-                                UploadStage.ANALYZING_VIDEO,
-                                UploadStage.RENDERING_OVERLAY,
-                                UploadStage.EXPORTING_ANNOTATED_VIDEO,
-                                UploadStage.VERIFYING_OUTPUT,
-                                -> AnnotatedExportStatus.PROCESSING
-
-                                UploadStage.COMPLETED_ANNOTATED -> AnnotatedExportStatus.ANNOTATED_READY
-                                UploadStage.COMPLETED_RAW_ONLY,
-                                UploadStage.FAILED,
-                                -> AnnotatedExportStatus.ANNOTATED_FAILED
-
-                                else -> current.annotatedVideoStatus
-                            }
-                            current.copy(
-                                stage = progress.stage,
-                                currentProcessingStage = progress.stage,
-                                stageText = progress.detail ?: progress.stage.label,
-                                progressPercent = progress.percent.coerceIn(0f, 1f),
-                                etaMs = progress.etaMs,
-                                rawVideoStatus = rawStatus,
-                                annotatedVideoStatus = annotatedStatus,
-                                analysisPhaseLabel = progress.phaseLabel ?: current.analysisPhaseLabel,
-                                analysisProcessedFrames = progress.processedFrames ?: current.analysisProcessedFrames,
-                                analysisTotalFrames = progress.totalFrames ?: current.analysisTotalFrames,
-                                analysisPhasePercent = progress.phasePercent ?: current.analysisPhasePercent,
-                            )
-                        }
-                    },
-                    onLog = { line ->
-                        (_state.value.sessionId ?: observedSessionId)?.let { sessionId ->
-                            repository?.saveSessionDiagnostics(sessionId, (_state.value.technicalLog + "\n" + line).trim())
-                        }
-                        _state.update { current ->
-                            current.copy(
-                                technicalLog = if (current.technicalLog.isBlank()) line else "${current.technicalLog}\n$line",
-                            )
-                        }
-                    },
+            when (
+                val start = coordinator.start(
+                    ActiveUploadRequest(
+                        sourceUri = canonicalUri,
+                        trackingMode = trackingMode,
+                        selectedDrillId = selectedDrillId,
+                        selectedReferenceTemplateId = selectedReferenceTemplateId,
+                        isReferenceUpload = isReferenceUpload,
+                        createDrillFromReferenceUpload = createDrillFromReferenceUpload,
+                        pendingDrillName = _state.value.pendingDrillName,
+                    ),
                 )
-            }.onSuccess { result ->
-                val completionMessage = if (result.annotatedReady) {
-                    "Annotated replay ready"
-                } else {
-                    "Raw replay ready, annotated replay unavailable"
-                }
-                _state.update {
-                    it.copy(
-                        stage = result.finalStage,
-                        currentProcessingStage = result.finalStage,
-                        stageText = completionMessage,
-                        sessionId = result.sessionId,
-                        replayUri = result.replayUri,
-                        selectedDrillId = result.drillId ?: it.selectedDrillId,
-                        selectedReferenceTemplateId = result.referenceTemplateId ?: it.selectedReferenceTemplateId,
-                        errorMessage = result.exportFailureReason?.let { reason -> "Annotated stage failed: $reason" },
-                        progressPercent = 1f,
-                        canCancel = false,
-                        rawVideoStatus = if (result.rawReady) RawPersistStatus.SUCCEEDED else RawPersistStatus.FAILED,
-                        annotatedVideoStatus = if (result.annotatedReady) AnnotatedExportStatus.ANNOTATED_READY else AnnotatedExportStatus.ANNOTATED_FAILED,
-                        analysisPhaseLabel = "",
-                        analysisProcessedFrames = 0,
-                        analysisTotalFrames = 0,
-                        analysisPhasePercent = null,
-                    )
-                }
-            }.onFailure { error ->
-                Log.e(TAG, "analysis_failed uri=$uri", error)
-                _state.update {
-                    it.copy(
-                        stage = UploadStage.FAILED,
-                        currentProcessingStage = UploadStage.FAILED,
-                        stageText = "Upload pipeline failed",
-                        errorMessage = error.message ?: "Unable to process this video.",
-                        progressPercent = if (it.rawVideoStatus == RawPersistStatus.SUCCEEDED) 1f else 0f,
-                        canCancel = false,
-                        annotatedVideoStatus = AnnotatedExportStatus.ANNOTATED_FAILED,
-                        analysisPhaseLabel = "",
-                        analysisProcessedFrames = 0,
-                        analysisTotalFrames = 0,
-                        analysisPhasePercent = null,
-                    )
+            ) {
+                is ActiveUploadStartResult.Started -> Unit
+                is ActiveUploadStartResult.Blocked -> _state.update {
+                    it.copy(stageText = start.message, errorMessage = "Please wait for the active upload to finish before starting a new one.")
                 }
             }
         }
@@ -1720,12 +1707,12 @@ class UploadVideoViewModel(
     }
 
     fun cancel() {
-        runningJob?.cancel()
+        coordinator.cancelActiveUpload()
         Log.i(TAG, "upload_cancel requested sessionId=${_state.value.sessionId ?: -1}")
         _state.value.sessionId?.let { sessionId ->
             viewModelScope.launch {
-                repository?.adminUpdateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.ANNOTATED_FAILED)
-                repository?.adminUpdateAnnotatedExportFailureReason(sessionId, "EXPORT_CANCELLED")
+                repository?.adminUpdateAnnotatedExportStatus(sessionId, AnnotatedExportStatus.CANCELLED)
+                repository?.adminUpdateAnnotatedExportFailureReason(sessionId, AnnotatedExportFailureReason.EXPORT_CANCELLED.name)
                 repository?.markUploadJobTerminal(
                     sessionId = sessionId,
                     status = UploadJobStatus.CANCELLED,
@@ -1749,7 +1736,6 @@ class UploadVideoViewModel(
     }
 
     override fun onCleared() {
-        runningJob?.cancel()
         super.onCleared()
     }
 }
@@ -1774,6 +1760,49 @@ internal fun estimateTimelineSampleIntervalMs(
 }
 
 internal fun sanitizeUploadFrameRate(rawFps: Int): Int = rawFps.takeIf { it in 1..120 } ?: DEFAULT_UPLOAD_FRAME_RATE
+
+internal fun resolveUploadAnalysisSampleFps(
+    sourceDurationMs: Long,
+    sourceFrameRate: Int,
+): Int {
+    val boundedSourceFps = sanitizeUploadFrameRate(sourceFrameRate)
+    val durationAdjusted = when {
+        sourceDurationMs >= 180_000L -> MIN_UPLOADED_ANALYSIS_SAMPLE_FPS
+        sourceDurationMs >= 90_000L -> 4
+        else -> UPLOADED_ANALYSIS_SAMPLE_FPS
+    }
+    return durationAdjusted.coerceAtMost(boundedSourceFps).coerceIn(MIN_UPLOADED_ANALYSIS_SAMPLE_FPS, UPLOADED_ANALYSIS_SAMPLE_FPS)
+}
+
+internal fun assessOverlayCoverage(
+    sourceDurationMs: Long,
+    acceptedOverlayCount: Int,
+    firstOverlayTimestampMs: Long?,
+    lastOverlayTimestampMs: Long?,
+): OverlayCoverageDiagnostics {
+    val sourceDurationSec = (sourceDurationMs.coerceAtLeast(1L) / 1000f).coerceAtLeast(0.001f)
+    val density = acceptedOverlayCount.toFloat() / sourceDurationSec
+    val spanMs = if (firstOverlayTimestampMs != null && lastOverlayTimestampMs != null) {
+        (lastOverlayTimestampMs - firstOverlayTimestampMs).coerceAtLeast(0L)
+    } else {
+        0L
+    }
+    val coverage = if (sourceDurationMs > 0L) spanMs.toFloat() / sourceDurationMs.toFloat() else 0f
+    val isDegraded = acceptedOverlayCount < MIN_OVERLAY_ACCEPTED_FRAMES ||
+        density < MIN_OVERLAY_DENSITY_PER_SECOND ||
+        coverage < MIN_OVERLAY_COVERAGE_RATIO
+    val warning = if (isDegraded) {
+        "Overlay density/coverage too low for reliable annotated replay."
+    } else {
+        null
+    }
+    return OverlayCoverageDiagnostics(
+        densityPerSecond = density,
+        coverageRatio = coverage,
+        isDegraded = isDegraded,
+        warning = warning,
+    )
+}
 
 internal fun canonicalizeUploadUriForAnalysis(context: Context?, sourceUri: Uri): Uri {
     if (context == null) return sourceUri
@@ -1865,6 +1894,7 @@ fun UploadVideoScreen(
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
+    val queueCoordinator = remember { ServiceLocator.activeUploadCoordinator(context) }
     val defaultDraftName = remember(selectedDrillId) {
         selectedDrillId?.substringAfterLast("_")
             ?.replace(Regex("[_-]+"), " ")
@@ -1880,6 +1910,7 @@ fun UploadVideoScreen(
             isReferenceUpload,
             createDrillFromReferenceUpload,
             pendingDrillName = defaultDraftName,
+            queueCoordinator = queueCoordinator,
         )
     }
     val state by viewModel.state.collectAsState()

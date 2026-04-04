@@ -5,6 +5,7 @@ sequenceDiagram
     actor User
     participant UI as UploadVideoScreen
     participant VM as UploadVideoViewModel
+    participant Coord as ActiveUploadCoordinator
     participant Normalize as UploadVideoInputNormalizer
     participant Analyzer as UploadedVideoAnalyzer
     participant Export as AnnotatedExportPipeline
@@ -13,19 +14,21 @@ sequenceDiagram
 
     User->>UI: Select video + drill context
     UI->>VM: Start upload analysis
-    VM->>Normalize: Inspect + normalize input media
-    Normalize-->>VM: Working media uri + canonical specs
-    VM->>Analyzer: Analyze sampled frames
-    Analyzer-->>VM: Metrics + timeline + candidate
-    VM->>Repo: Persist candidate analysis
+    VM->>Coord: Start or block single active upload
+    Coord->>Normalize: Inspect + normalize input media
+    Normalize-->>Coord: Working media uri + canonical specs
+    Coord->>Analyzer: Analyze sampled frames
+    Analyzer-->>Coord: Metrics + timeline + candidate
+    Coord->>Repo: Persist candidate analysis
 
     opt Reference training enabled
-      VM->>Repo: create/update reference template links
+      Coord->>Repo: create/update reference template links
     end
 
-    VM->>Export: Export annotated replay
-    Export-->>VM: success/failure
-    VM->>Resolver: Resolve best replay asset
-    VM->>Repo: Persist session + media outcome
-    VM-->>UI: Open Results
+    Coord->>Export: Export annotated replay
+    Export-->>Coord: success/failure/degraded quality gate
+    Coord->>Resolver: Resolve best replay asset
+    Coord->>Repo: Persist session + media outcome
+    Coord-->>VM: Active session state stream
+    VM-->>UI: render progress / reattach / open Results
 ```

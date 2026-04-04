@@ -89,7 +89,7 @@ fun AnnotatedOverlayFrame.toTimelineFrame(sessionId: Long, sessionStartedAtMs: L
 }
 
 fun OverlayTimelineFrame.toAnnotatedOverlayFrame(): AnnotatedOverlayFrame = AnnotatedOverlayFrame(
-    timestampMs = relativeTimestampMs,
+    timestampMs = timestampMs,
     landmarks = landmarks,
     smoothedLandmarks = smoothedLandmarks,
     confidence = confidence,
