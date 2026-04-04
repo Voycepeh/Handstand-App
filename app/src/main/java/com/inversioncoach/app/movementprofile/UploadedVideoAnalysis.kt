@@ -173,7 +173,7 @@ class UploadedVideoAnalyzer(
                                 detail = "Skipped low-confidence edge frame",
                             ),
                         )
-                        continue
+                        return
                     }
                     dropped += 1
                     progressObserver?.onProgress(
@@ -185,6 +185,7 @@ class UploadedVideoAnalyzer(
                             timestampMs = frame.timestampMs,
                         ),
                     )
+                    return
                 } else {
                     val postProcessMs: Long
                     val alignment: Float
