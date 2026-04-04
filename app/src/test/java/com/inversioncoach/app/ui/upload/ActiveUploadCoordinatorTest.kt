@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -158,5 +159,69 @@ class ActiveUploadCoordinatorTest {
         assertTrue(coordinator.state.value.activeSession?.isTerminal == true)
         coordinator.clearTerminalSession()
         assertNull(coordinator.state.value.activeSession)
+    }
+
+    @Test
+    fun hasActiveUploadReflectsLifecycle() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val coordinator = ActiveUploadCoordinator(
+            scope = TestScope(dispatcher),
+            runner = object : UploadVideoAnalysisRunner {
+                override suspend fun run(
+                    uri: Uri,
+                    ownerToken: String,
+                    trackingMode: UploadTrackingMode,
+                    selectedDrillId: String?,
+                    selectedReferenceTemplateId: String?,
+                    isReferenceUpload: Boolean,
+                    createDrillFromReferenceUpload: Boolean,
+                    pendingDrillName: String?,
+                    onSessionCreated: (Long) -> Unit,
+                    onProgress: (UploadProgress) -> Unit,
+                    onLog: (String) -> Unit,
+                ): UploadFlowResult {
+                    onSessionCreated(19L)
+                    gate.await()
+                    return UploadFlowResult(19L, "file:///raw.mp4", rawReady = true, annotatedReady = false, finalStage = UploadStage.COMPLETED_RAW_ONLY)
+                }
+            },
+        )
+        val request = ActiveUploadRequest(Uri.parse("content://video"), UploadTrackingMode.HOLD_BASED, null, null, false, false, null)
+        coordinator.start(request)
+        assertTrue(coordinator.hasActiveUpload())
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(coordinator.hasActiveUpload())
+    }
+
+    @Test
+    fun hasActiveUploadIsFalseWhenNoRunningJobBacksSessionState() = runTest(dispatcher) {
+        val coordinator = ActiveUploadCoordinator(
+            scope = TestScope(dispatcher),
+            runner = object : UploadVideoAnalysisRunner {
+                override suspend fun run(
+                    uri: Uri,
+                    ownerToken: String,
+                    trackingMode: UploadTrackingMode,
+                    selectedDrillId: String?,
+                    selectedReferenceTemplateId: String?,
+                    isReferenceUpload: Boolean,
+                    createDrillFromReferenceUpload: Boolean,
+                    pendingDrillName: String?,
+                    onSessionCreated: (Long) -> Unit,
+                    onProgress: (UploadProgress) -> Unit,
+                    onLog: (String) -> Unit,
+                ): UploadFlowResult {
+                    onSessionCreated(55L)
+                    onProgress(UploadProgress(UploadStage.ANALYZING_VIDEO, 0.4f))
+                    return UploadFlowResult(55L, null, rawReady = true, annotatedReady = false, finalStage = UploadStage.COMPLETED_RAW_ONLY)
+                }
+            },
+        )
+        val request = ActiveUploadRequest(Uri.parse("content://video"), UploadTrackingMode.HOLD_BASED, null, null, false, false, null)
+        coordinator.start(request)
+        advanceUntilIdle()
+
+        assertFalse(coordinator.hasActiveUpload())
     }
 }

@@ -560,14 +560,16 @@ class SessionRepository(
         detail: String? = null,
     ) {
         val session = sessionDao.getById(sessionId) ?: return
+        val now = System.currentTimeMillis()
         sessionDao.upsert(
-            session.copy(
-                uploadPipelineStageLabel = stageLabel,
-                uploadAnalysisProcessedFrames = processedFrames.coerceAtLeast(0),
-                uploadAnalysisTotalFrames = totalFrames.coerceAtLeast(0),
-                uploadAnalysisTimestampMs = timestampMs,
-                uploadProgressDetail = detail,
-                uploadJobUpdatedAtMs = System.currentTimeMillis(),
+            applyUploadPipelineProgress(
+                session = session,
+                stageLabel = stageLabel,
+                processedFrames = processedFrames,
+                totalFrames = totalFrames,
+                timestampMs = timestampMs,
+                detail = detail,
+                now = now,
             ),
         )
     }
@@ -655,7 +657,7 @@ class SessionRepository(
             UPLOAD_REPO_TAG,
             "reconcile sessionId=${active.id} hasActiveWorker=$hasActiveWorker stale=$stale heartbeatAgeMs=${now - heartbeat} reason=$reason",
         )
-        if (hasActiveWorker || !stale) return active
+        if (!shouldMarkUploadJobStalled(hasActiveWorker = hasActiveWorker, isHeartbeatStale = stale)) return active
         Log.w(UPLOAD_REPO_TAG, "stall_detected sessionId=${active.id} reason=$reason")
         sessionDao.upsert(
             active.copy(
@@ -971,3 +973,26 @@ internal fun buildNewTemplateRecord(
         createdAtMs = now,
     )
 }
+
+internal fun shouldMarkUploadJobStalled(
+    hasActiveWorker: Boolean,
+    isHeartbeatStale: Boolean,
+): Boolean = !hasActiveWorker && isHeartbeatStale
+
+internal fun applyUploadPipelineProgress(
+    session: SessionRecord,
+    stageLabel: String?,
+    processedFrames: Int,
+    totalFrames: Int,
+    timestampMs: Long?,
+    detail: String?,
+    now: Long,
+): SessionRecord = session.copy(
+    uploadPipelineStageLabel = stageLabel,
+    uploadAnalysisProcessedFrames = processedFrames.coerceAtLeast(0),
+    uploadAnalysisTotalFrames = totalFrames.coerceAtLeast(0),
+    uploadAnalysisTimestampMs = timestampMs,
+    uploadProgressDetail = detail,
+    uploadJobUpdatedAtMs = now,
+    uploadJobHeartbeatAtMs = now,
+)

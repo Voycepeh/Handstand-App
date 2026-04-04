@@ -2,6 +2,7 @@ package com.inversioncoach.app.ui.upload
 
 import android.net.Uri
 import com.inversioncoach.app.model.AnnotatedExportStatus
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -339,6 +340,76 @@ class UploadVideoViewModelTest {
 
         assertEquals(UploadStage.FAILED, viewModel.state.value.stage)
         assertEquals("not a video", viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun returningToUploadScreenDoesNotStartDuplicateRun() = runTest(dispatcher) {
+        kotlinx.coroutines.Dispatchers.setMain(dispatcher)
+        val gate = CompletableDeferred<Unit>()
+        var runCount = 0
+        val runner = object : UploadVideoAnalysisRunner {
+            override suspend fun run(
+                uri: Uri,
+                ownerToken: String,
+                trackingMode: UploadTrackingMode,
+                selectedDrillId: String?,
+                selectedReferenceTemplateId: String?,
+                isReferenceUpload: Boolean,
+                createDrillFromReferenceUpload: Boolean,
+                pendingDrillName: String?,
+                onSessionCreated: (Long) -> Unit,
+                onProgress: (UploadProgress) -> Unit,
+                onLog: (String) -> Unit,
+            ): UploadFlowResult {
+                runCount += 1
+                onSessionCreated(200L)
+                gate.await()
+                return UploadFlowResult(
+                    sessionId = 200L,
+                    replayUri = "file:///raw.mp4",
+                    rawReady = true,
+                    annotatedReady = false,
+                    finalStage = UploadStage.COMPLETED_RAW_ONLY,
+                )
+            }
+        }
+        val coordinator = ActiveUploadCoordinator(TestScope(dispatcher), runner)
+        val vmA = UploadVideoViewModel(
+            appContext = null,
+            repository = null,
+            selectedDrillId = null,
+            selectedReferenceTemplateId = null,
+            isReferenceUpload = false,
+            createDrillFromReferenceUpload = false,
+            queueCoordinator = coordinator,
+            customRunner = runner,
+            resolveCanonicalUploadUri = { it },
+        )
+        val vmB = UploadVideoViewModel(
+            appContext = null,
+            repository = null,
+            selectedDrillId = null,
+            selectedReferenceTemplateId = null,
+            isReferenceUpload = false,
+            createDrillFromReferenceUpload = false,
+            queueCoordinator = coordinator,
+            customRunner = runner,
+            resolveCanonicalUploadUri = { it },
+        )
+        vmA.onTrackingModeSelected(UploadTrackingMode.HOLD_BASED)
+        vmB.onTrackingModeSelected(UploadTrackingMode.HOLD_BASED)
+
+        vmA.analyze(Uri.parse("content://video"))
+        advanceUntilIdle()
+        vmB.analyze(Uri.parse("content://video"))
+        advanceUntilIdle()
+
+        assertEquals(1, runCount)
+        assertTrue(vmB.state.value.errorMessage?.contains("Please wait", ignoreCase = true) == true)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        kotlinx.coroutines.Dispatchers.resetMain()
     }
 
     @Test

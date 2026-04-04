@@ -12,6 +12,7 @@ sequenceDiagram
     participant Export as AnnotatedExportPipeline
     participant Resolver as SessionMediaResolver
     participant Repo as SessionRepository
+    participant App as App/Results Reconcile
 
     User->>UI: Select video + drill context
     UI->>VM: Start upload analysis
@@ -31,7 +32,9 @@ sequenceDiagram
     Coord->>Export: Export annotated replay
     Export-->>Coord: success/failure/degraded quality gate
     Coord->>Resolver: Resolve best replay asset
-    Coord->>Repo: Persist session + media outcome
+    Coord->>Repo: Persist artifact state + selected replay
+    App->>Coord: Query active upload worker state
+    App->>Repo: Reconcile stalled uploads (worker-aware)
     Coord-->>VM: Active session state stream
     VM-->>UI: render progress / reattach / open Results
 ```
