@@ -60,6 +60,7 @@ private val TERMINAL_EXPORT_STATUSES = setOf(
     AnnotatedExportStatus.ANNOTATED_READY,
     AnnotatedExportStatus.ANNOTATED_FAILED,
     AnnotatedExportStatus.SKIPPED,
+    AnnotatedExportStatus.CANCELLED,
 )
 
 internal fun canMutateAttemptOwnedExportState(

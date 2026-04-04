@@ -1135,7 +1135,8 @@ class LiveCoachingViewModel(
             AnnotatedExportStatus.ANNOTATED_READY,
             AnnotatedExportStatus.SKIPPED,
             AnnotatedExportStatus.NOT_STARTED -> null
-            AnnotatedExportStatus.ANNOTATED_FAILED -> failureReason
+            AnnotatedExportStatus.ANNOTATED_FAILED,
+            AnnotatedExportStatus.CANCELLED -> failureReason
         }
         if (status == AnnotatedExportStatus.ANNOTATED_READY && annotatedVideoUri.isNullOrBlank()) {
             annotatedExportStatus = AnnotatedExportStatus.ANNOTATED_FAILED

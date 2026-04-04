@@ -663,19 +663,27 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
 }
 
 
-private fun canonicalStudioBones(): List<Pair<String, String>> = listOf(
-    "head" to "shoulder_left",
-    "head" to "shoulder_right",
-    "shoulder_left" to "elbow_left",
-    "shoulder_right" to "elbow_right",
-    "elbow_left" to "wrist_left",
-    "elbow_right" to "wrist_right",
-    "shoulder_left" to "hip_left",
-    "shoulder_right" to "hip_right",
-    "hip_left" to "knee_left",
-    "hip_right" to "knee_right",
-    "knee_left" to "ankle_left",
-    "knee_right" to "ankle_right",
-)
+private fun canonicalStudioBones(): List<Pair<String, String>> {
+    val overlayToStudioAliases = mapOf(
+        "nose" to "head",
+        "left_shoulder" to "shoulder_left",
+        "right_shoulder" to "shoulder_right",
+        "left_elbow" to "elbow_left",
+        "right_elbow" to "elbow_right",
+        "left_wrist" to "wrist_left",
+        "right_wrist" to "wrist_right",
+        "left_hip" to "hip_left",
+        "right_hip" to "hip_right",
+        "left_knee" to "knee_left",
+        "right_knee" to "knee_right",
+        "left_ankle" to "ankle_left",
+        "right_ankle" to "ankle_right",
+    )
+    return OverlaySkeletonPreviewDefaults.canonicalBones.mapNotNull { (start, end) ->
+        val from = overlayToStudioAliases[start] ?: return@mapNotNull null
+        val to = overlayToStudioAliases[end] ?: return@mapNotNull null
+        from to to
+    }
+}
 
 private fun String.pretty(): String = lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }

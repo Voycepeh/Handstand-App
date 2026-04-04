@@ -1875,9 +1875,9 @@ internal fun deriveUploadStage(session: SessionRecord): UploadStage = when {
     session.rawPersistStatus == RawPersistStatus.FAILED -> UploadStage.FAILED
     session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE") -> UploadStage.FAILED
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> UploadStage.COMPLETED_ANNOTATED
-    session.annotatedExportStatus in setOf(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportStatus.SKIPPED) &&
+    session.annotatedExportStatus in setOf(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportStatus.CANCELLED, AnnotatedExportStatus.SKIPPED) &&
         rawReplayPlayableForStage(session) -> UploadStage.COMPLETED_RAW_ONLY
-    session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> UploadStage.FAILED
+    session.annotatedExportStatus in setOf(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportStatus.CANCELLED) -> UploadStage.FAILED
     session.annotatedExportStatus in setOf(AnnotatedExportStatus.VALIDATING_INPUT, AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) -> when (session.annotatedExportStage) {
         AnnotatedExportStage.PREPARING -> UploadStage.PREPARING_ANALYSIS
         AnnotatedExportStage.DECODING_SOURCE -> UploadStage.ANALYZING_VIDEO

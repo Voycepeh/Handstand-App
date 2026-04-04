@@ -265,7 +265,7 @@ internal fun videoStatus(session: com.inversioncoach.app.model.SessionRecord): S
     session.rawPersistStatus == RawPersistStatus.PROCESSING -> "Copying raw video"
     session.rawPersistFailureReason in setOf("RAW_REPLAY_INVALID", "RAW_MEDIA_CORRUPT", "SOURCE_VIDEO_UNREADABLE") -> "Raw replay unavailable (${session.rawPersistFailureReason})"
     session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_READY -> "Ready"
-    session.annotatedExportStatus == AnnotatedExportStatus.ANNOTATED_FAILED -> "Failed"
+    session.annotatedExportStatus in setOf(AnnotatedExportStatus.ANNOTATED_FAILED, AnnotatedExportStatus.CANCELLED) -> "Failed"
     session.annotatedExportStatus in setOf(AnnotatedExportStatus.VALIDATING_INPUT, AnnotatedExportStatus.PROCESSING, AnnotatedExportStatus.PROCESSING_SLOW) -> {
         val stageLabel = when (session.annotatedExportStage) {
             AnnotatedExportStage.QUEUED -> if (session.annotatedExportStatus == AnnotatedExportStatus.VALIDATING_INPUT) "Validating input" else "Queued"

@@ -118,6 +118,7 @@ fun formatPrimaryPerformance(session: SessionRecord): String {
 
             session.annotatedExportStatus in setOf(
                 AnnotatedExportStatus.ANNOTATED_FAILED,
+                AnnotatedExportStatus.CANCELLED,
                 AnnotatedExportStatus.SKIPPED,
             ) -> "Upload analysis did not produce scored attempts."
 
