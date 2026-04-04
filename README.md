@@ -76,49 +76,75 @@ CaliVision keeps users in drill context from start to review:
 flowchart TD
     HOME[Home / Drill Hub]
     DRILLS[Drills]
+    START[Choose / Start Drill]
     WORKSPACE[Drill Workspace]
-    LIVE[Live Session]
-    FINALIZE[Finalize + Export]
+    LIVE[Live Coaching / Live Session]
+    UPLOAD[Upload / Reference Training]
     RESULTS[Results]
     OVERVIEW[History Overview]
     HISTORY[Session History]
     MANAGE[Manage Drills]
     STUDIO[Drill Studio]
-    UPLOAD[Upload / Reference Training]
+    EXPORT[Export / Compare]
 
-    HOME --> DRILLS --> WORKSPACE --> LIVE --> FINALIZE --> RESULTS
-    HOME --> OVERVIEW --> RESULTS
-    OVERVIEW --> HISTORY
-    RESULTS --> HISTORY
-    HISTORY --> RESULTS
+    HOME --> DRILLS --> START --> WORKSPACE
+    WORKSPACE --> LIVE --> RESULTS
+    WORKSPACE --> UPLOAD --> RESULTS
+
+    HOME --> OVERVIEW --> HISTORY --> RESULTS
+    RESULTS --> EXPORT
 
     HOME --> MANAGE --> STUDIO --> MANAGE
-    HOME --> UPLOAD --> RESULTS
 ```
+
+## UI flow
+
+This product-level UI flow mirrors [`docs/diagrams/ui-flow.md`](docs/diagrams/ui-flow.md).
 
 ```mermaid
-sequenceDiagram
-    actor User
-    participant Upload as Upload Video UI
-    participant VM as UploadVideoViewModel
-    participant Normalize as UploadVideoInputNormalizer
-    participant Analyzer as UploadedVideoAnalyzer
-    participant Export as AnnotatedExportPipeline
-    participant Resolver as SessionMediaResolver
+flowchart TD
+    HOME[Home / Drill Hub]
+    WELCOME[First-launch Welcome Dialog]
+    DRILLS[Drills\nBrowse for usage]
+    START[Choose / Start Drill]
+    WORKSPACE[Drill Workspace\nDrill-level usage hub]
+    LIVE[Live Coaching / Live Session]
+    OWNERSHIP[Attempt Ownership + Stale Recovery Guard]
+    SHORT[Session Too Short]
+    RESULTS[Results]
+    OVERVIEW[History Overview]
+    HISTORY[Session History]
 
-    User->>Upload: Select video + drill context
-    Upload->>VM: Start analysis
-    VM->>Normalize: Build canonical working asset/spec
-    Normalize-->>VM: Normalized media + format diagnostics
-    VM->>Analyzer: Analyze sampled frames from normalized media
-    Analyzer-->>VM: Metrics + timeline + template candidate
-    VM->>Export: Export annotated replay
-    Export-->>VM: Success/failure
-    VM->>Resolver: Resolve replay source
-    VM-->>User: Navigate to Results
+    MANAGE[Manage Drills\nAuthoring/Admin]
+    STUDIO[Drill Studio\nCreate/edit drill definitions and templates]
+
+    UPLOAD[Upload / Reference Training]
+    SETTINGS[Settings]
+
+    HOME --> WELCOME
+    WELCOME -->|Use recommended settings| HOME
+    WELCOME -->|Open recording settings| SETTINGS
+
+    HOME --> DRILLS --> START --> WORKSPACE
+    WORKSPACE --> LIVE
+    LIVE --> OWNERSHIP --> RESULTS
+    LIVE --> SHORT --> HOME
+
+    HOME --> MANAGE --> STUDIO --> MANAGE
+    STUDIO -->|Export/Import Drill Package| MANAGE
+    WORKSPACE --> UPLOAD
+    WORKSPACE --> HISTORY
+
+    HOME --> UPLOAD --> OWNERSHIP --> RESULTS
+    HOME --> OVERVIEW
+    OVERVIEW --> RESULTS
+    OVERVIEW --> HISTORY
+    HISTORY --> RESULTS
+
+    HOME --> SETTINGS --> HOME
 ```
 
-Detailed diagrams live in [`docs/diagrams/`](docs/diagrams).
+For detailed technical and sequence diagrams (including import/export internals), see [`docs/diagrams/`](docs/diagrams).
 
 ## Tech stack
 

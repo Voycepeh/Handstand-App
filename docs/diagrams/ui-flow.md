@@ -5,7 +5,9 @@ flowchart TD
     HOME[Home / Drill Hub]
     WELCOME[First-launch Welcome Dialog]
     DRILLS[Drills\nBrowse for usage]
-    LIVE[Live Session]
+    START[Choose / Start Drill]
+    WORKSPACE[Drill Workspace\nDrill-level usage hub]
+    LIVE[Live Coaching / Live Session]
     OWNERSHIP[Attempt Ownership + Stale Recovery Guard]
     SHORT[Session Too Short]
     RESULTS[Results]
@@ -13,8 +15,7 @@ flowchart TD
     HISTORY[Session History]
 
     MANAGE[Manage Drills\nAuthoring/Admin]
-    STUDIO[Drill Studio\nUnified Skeleton Preview + Pose Viewport\nCamera Capture with Device Fallback + Clear Status States\nCompact Authoring Sections + Intentional Empty Canvas]
-    WORKSPACE[Drill Workspace]
+    STUDIO[Drill Studio\nCreate/edit drill definitions and templates]
 
     UPLOAD[Upload / Reference Training]
     SETTINGS[Settings]
@@ -23,7 +24,7 @@ flowchart TD
     WELCOME -->|Use recommended settings| HOME
     WELCOME -->|Open recording settings| SETTINGS
 
-    HOME --> DRILLS --> WORKSPACE
+    HOME --> DRILLS --> START --> WORKSPACE
     WORKSPACE --> LIVE
     LIVE --> OWNERSHIP --> RESULTS
     LIVE --> SHORT --> HOME
