@@ -662,4 +662,20 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
     }
 }
 
+
+private fun canonicalStudioBones(): List<Pair<String, String>> = listOf(
+    "head" to "shoulder_left",
+    "head" to "shoulder_right",
+    "shoulder_left" to "elbow_left",
+    "shoulder_right" to "elbow_right",
+    "elbow_left" to "wrist_left",
+    "elbow_right" to "wrist_right",
+    "shoulder_left" to "hip_left",
+    "shoulder_right" to "hip_right",
+    "hip_left" to "knee_left",
+    "hip_right" to "knee_right",
+    "knee_left" to "ankle_left",
+    "knee_right" to "ankle_right",
+)
+
 private fun String.pretty(): String = lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
