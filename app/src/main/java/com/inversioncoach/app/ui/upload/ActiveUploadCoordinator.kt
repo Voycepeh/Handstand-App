@@ -4,7 +4,6 @@ import android.net.Uri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -165,6 +164,7 @@ class ActiveUploadCoordinator(
                 }
             }
         }
+        activeJob?.invokeOnCompletion { activeJob = null }
         return ActiveUploadStartResult.Started(ownerToken)
     }
 
@@ -176,6 +176,17 @@ class ActiveUploadCoordinator(
         activeJob?.cancel()
     }
 
+    fun clearTerminalSession() {
+        _state.update { current ->
+            val active = current.activeSession
+            if (active != null && active.isTerminal) {
+                current.copy(activeSession = null, blockedMessage = null)
+            } else {
+                current
+            }
+        }
+    }
+
     private fun update(ownerToken: String, mutate: (ActiveUploadSessionState) -> ActiveUploadSessionState) {
         _state.update { current ->
             val active = current.activeSession
@@ -184,5 +195,3 @@ class ActiveUploadCoordinator(
         }
     }
 }
-
-fun appUploadCoordinatorScope(parentScope: CoroutineScope): CoroutineScope = CoroutineScope(parentScope.coroutineContext + SupervisorJob())

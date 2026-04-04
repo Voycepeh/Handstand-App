@@ -25,6 +25,7 @@ The media pipeline is shared by live-session finalization and upload/reference a
 - Upload execution is now owned by an app-scope `ActiveUploadCoordinator`, not the Upload screen lifecycle.
 - Exactly one uploaded-video processing session may run at once; subsequent starts are blocked with a user-facing message.
 - Upload/Home/History/Results can subscribe to the same active-session state (session id, stage, progress, terminal outcome) and safely reattach after navigation.
+- Coordinator exposes terminal-session cleanup (`clearTerminalSession`) so stale completed/cancelled snapshots can be cleared without affecting active work.
 - Work remains in-app runtime only (no durable WorkManager recovery queue reintroduced).
 
 ## Overlay timing alignment and degraded-result gate

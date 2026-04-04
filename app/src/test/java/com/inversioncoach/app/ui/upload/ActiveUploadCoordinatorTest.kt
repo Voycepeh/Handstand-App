@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -126,5 +127,36 @@ class ActiveUploadCoordinatorTest {
         coordinator.cancelActiveUpload()
         advanceUntilIdle()
         assertEquals(UploadStage.CANCELLED, coordinator.state.value.activeSession?.stage)
+    }
+
+    @Test
+    fun clearTerminalSessionRemovesCompletedSnapshot() = runTest(dispatcher) {
+        val coordinator = ActiveUploadCoordinator(
+            scope = TestScope(dispatcher),
+            runner = object : UploadVideoAnalysisRunner {
+                override suspend fun run(
+                    uri: Uri,
+                    ownerToken: String,
+                    trackingMode: UploadTrackingMode,
+                    selectedDrillId: String?,
+                    selectedReferenceTemplateId: String?,
+                    isReferenceUpload: Boolean,
+                    createDrillFromReferenceUpload: Boolean,
+                    pendingDrillName: String?,
+                    onSessionCreated: (Long) -> Unit,
+                    onProgress: (UploadProgress) -> Unit,
+                    onLog: (String) -> Unit,
+                ): UploadFlowResult {
+                    onSessionCreated(12L)
+                    return UploadFlowResult(12L, null, rawReady = true, annotatedReady = false, finalStage = UploadStage.COMPLETED_RAW_ONLY)
+                }
+            },
+        )
+        val request = ActiveUploadRequest(Uri.parse("content://video"), UploadTrackingMode.HOLD_BASED, null, null, false, false, null)
+        coordinator.start(request)
+        advanceUntilIdle()
+        assertTrue(coordinator.state.value.activeSession?.isTerminal == true)
+        coordinator.clearTerminalSession()
+        assertNull(coordinator.state.value.activeSession)
     }
 }
