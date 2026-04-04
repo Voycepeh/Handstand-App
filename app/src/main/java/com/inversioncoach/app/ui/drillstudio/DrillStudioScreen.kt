@@ -2,7 +2,6 @@ package com.inversioncoach.app.ui.drillstudio
 
 import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.util.Log
@@ -90,6 +89,7 @@ import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private val drillStudioSkeletonPolicy = SkeletonPreviewPolicies.poseAuthoring
+private val drillStudioAuthoringPolicy = drillStudioSkeletonPolicy.copy(contentPaddingFraction = 0.04f)
 private const val CAMERA_CAPTURE_TAG = "DrillStudioCameraCapture"
 
 @Composable
@@ -227,6 +227,7 @@ private fun DrillStudioEditor(
         mutableStateOf(phasePoses.firstOrNull { it.phaseId == selectedPhaseId }?.joints?.keys?.firstOrNull())
     }
     var detectionStatus by remember(selectedPhaseId) { mutableStateOf<String?>(null) }
+    var isDetecting by remember(selectedPhaseId) { mutableStateOf(false) }
     var showImageSourceDialog by remember { mutableStateOf(false) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     val scope = rememberCoroutineScope()
@@ -238,7 +239,7 @@ private fun DrillStudioEditor(
             runCatching { imageStore.persistPickedImage(uri) }
                 .onSuccess { stableUri ->
                     onAttachReferenceImage(selectedPhaseId, stableUri)
-                    detectionStatus = "Reference image attached"
+                    detectionStatus = "Image added"
                 }
                 .onFailure { detectionStatus = "Failed to persist image: ${it.message}" }
         }
@@ -248,7 +249,7 @@ private fun DrillStudioEditor(
         val capturedUri = pendingCameraUri
         pendingCameraUri = null
         if (!success || capturedUri == null) {
-            detectionStatus = "Photo capture cancelled"
+            detectionStatus = "Photo capture canceled. You can still choose an image from your device."
             Log.d(CAMERA_CAPTURE_TAG, "Capture cancelled or missing pending URI")
             return@rememberLauncherForActivityResult
         }
@@ -257,7 +258,7 @@ private fun DrillStudioEditor(
                 .onSuccess { stableUri ->
                     Log.d(CAMERA_CAPTURE_TAG, "Capture persisted and attached for phase=$selectedPhaseId uri=$stableUri")
                     onAttachReferenceImage(selectedPhaseId, stableUri)
-                    detectionStatus = "Reference image attached"
+                    detectionStatus = "Photo added"
                 }
                 .onFailure {
                     Log.e(CAMERA_CAPTURE_TAG, "Failed to persist captured image", it)
@@ -268,11 +269,10 @@ private fun DrillStudioEditor(
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         Log.d(CAMERA_CAPTURE_TAG, "Camera permission granted=$granted")
         if (!granted) {
-            detectionStatus = "Camera permission denied"
+            detectionStatus = "Camera permission denied. Use Choose from device."
             return@rememberLauncherForActivityResult
         }
         launchCameraCapture(
-            context = context,
             createOutputUri = { createCameraCaptureUri(context) },
             onPrepared = { pendingCameraUri = it },
             launch = { takePhotoLauncher.launch(it) },
@@ -289,7 +289,6 @@ private fun DrillStudioEditor(
     fun requestCameraCapture() {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             launchCameraCapture(
-                context = context,
                 createOutputUri = { createCameraCaptureUri(context) },
                 onPrepared = { pendingCameraUri = it },
                 launch = { takePhotoLauncher.launch(it) },
@@ -451,47 +450,57 @@ private fun DrillStudioEditor(
                     bodyProfile = bodyProfile,
                     referenceImage = referenceImage,
                     guides = guides,
-                    onJointMoved = { joint, point -> onUpdatePhasePoseJoint(currentPose.phaseId, joint, point) },
+                    onJointMoved = { joint, point ->
+                        onUpdatePhasePoseJoint(currentPose.phaseId, joint, point)
+                    },
                 )
-                Text(
-                    "Image: ${if (imageUri != null && referenceImage != null) "attached" else "none"} • " +
-                        "Detected: ${if (currentPose.authoring?.detectedJoints?.isNotEmpty() == true) "yes" else "no"} • " +
-                        "Corrected joints: ${currentPose.authoring?.manualOffsets?.size ?: 0} • " +
-                        "Quality: ${((currentPose.authoring?.qualityScore ?: 0f) * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                Text(authoringStatusSummary(currentPose, imageUri != null && referenceImage != null, isDetecting), style = MaterialTheme.typography.bodySmall)
                 detectionStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
-                PoseActionGroup(title = "1) Reference image") {
+                PoseActionGroup(title = "Image + detection") {
                     PoseActionRow(maxItemsInEachRow = 2) {
                         Button(onClick = { showImageSourceDialog = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Add reference image") }
                         OutlinedButton(
-                            onClick = { onClearReferenceImage(currentPose.phaseId) },
+                            onClick = {
+                                onClearReferenceImage(currentPose.phaseId)
+                                isDetecting = false
+                                detectionStatus = "Image and detected pose cleared"
+                            },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
                         ) { Text("Clear image") }
                     }
-                }
-                PoseActionGroup(title = "2) Detection") {
                     PoseActionRow(maxItemsInEachRow = 2) {
                         Button(onClick = {
                             val uri = imageUri ?: return@Button
                             scope.launch {
-                                detectionStatus = "Running pose detection…"
+                                isDetecting = true
+                                detectionStatus = "Detecting pose…"
                                 runCatching { detector.detect(context, uri) }
                                     .onSuccess {
+                                        isDetecting = false
                                         onApplyDetectedPose(currentPose.phaseId, it.normalizedJoints, it.jointConfidence, it.qualityScore)
-                                        detectionStatus = "Pose detected"
+                                        detectionStatus = if (it.normalizedJoints.isEmpty()) "No pose detected in image" else "Detected pose applied"
                                     }
-                                    .onFailure { detectionStatus = "Pose detection failed: ${it.message}" }
+                                    .onFailure {
+                                        isDetecting = false
+                                        detectionStatus = "Pose detection failed: ${it.message}"
+                                    }
                             }
                         }, enabled = imageUri != null, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Detect pose") }
-                        OutlinedButton(onClick = { onResetImageDetection(currentPose.phaseId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Reset detection") }
+                        OutlinedButton(onClick = {
+                            onResetImageDetection(currentPose.phaseId)
+                            isDetecting = false
+                            detectionStatus = "Detected pose cleared"
+                        }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Reset detection") }
                     }
                 }
-                PoseActionGroup(title = "3) Edit pose") {
+                PoseActionGroup(title = "Edit pose") {
                     PoseActionRow(maxItemsInEachRow = 3) {
                         OutlinedButton(onClick = { onCopyPreviousPose(currentPose.phaseId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Copy previous") }
                         OutlinedButton(onClick = { onMirrorPose(currentPose.phaseId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Mirror") }
-                        OutlinedButton(onClick = { onResetPose(currentPose.phaseId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Reset") }
+                        OutlinedButton(onClick = {
+                            onResetPose(currentPose.phaseId)
+                            detectionStatus = "Pose reset to neutral preset"
+                        }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Reset") }
                     }
                 }
                 PoseActionGroup(title = "Advanced editing") {
@@ -509,7 +518,7 @@ private fun DrillStudioEditor(
                         ) { Text("Reset all corrections") }
                     }
                 }
-                PoseActionGroup(title = "4) Save") {
+                PoseActionGroup(title = "Save") {
                     Button(onClick = { onSavePhasePose(currentPose.phaseId) }, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) { Text("Save phase pose") }
                 }
                 PoseGuideToggles(guides = guides) { updated -> onUpdatePhaseGuides(currentPose.phaseId, updated) }
@@ -647,10 +656,10 @@ private fun PoseAuthoringViewport(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(drillStudioSkeletonPolicy.aspectRatio)
+            .aspectRatio(drillStudioAuthoringPolicy.aspectRatio)
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .pointerInput(phasePose.phaseId, phasePose.joints, referenceImage, drillStudioSkeletonPolicy) {
+            .pointerInput(phasePose.phaseId, phasePose.joints, referenceImage, drillStudioAuthoringPolicy) {
                 detectDragGestures(
                     onDragStart = { start ->
                         val imageBounds = resolveImageBounds(size.toSize(), referenceImage)
@@ -680,7 +689,7 @@ private fun PoseAuthoringViewport(
     ) {
         OverlaySkeletonPreview(
             joints = renderPose,
-            policy = drillStudioSkeletonPolicy,
+            policy = drillStudioAuthoringPolicy,
             resolveOverlayBounds = { canvasSize ->
                 resolveImageBounds(canvasSize, referenceImage).toRect()
             },
@@ -693,6 +702,12 @@ private fun PoseAuthoringViewport(
                     image = referenceImage,
                     dstOffset = Offset(imageBounds.left, imageBounds.top).toIntOffset(),
                     dstSize = IntSize(imageBounds.width.roundToInt(), imageBounds.height.roundToInt()),
+                )
+            } else {
+                drawRect(
+                    color = Color(0x141E88E5),
+                    topLeft = Offset(imageBounds.left, imageBounds.top),
+                    size = Size(imageBounds.width, imageBounds.height),
                 )
             }
             clipRect(
@@ -749,6 +764,14 @@ private fun PoseAuthoringViewport(
                     )
                 }
             }
+        }
+        if (referenceImage == null) {
+            Text(
+                text = "No reference image loaded",
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -865,7 +888,7 @@ private fun resolveImageBounds(canvasSize: Size, referenceImage: ImageBitmap?): 
         canvasSize = canvasSize,
         imageWidth = referenceImage?.width,
         imageHeight = referenceImage?.height,
-        policy = drillStudioSkeletonPolicy,
+        policy = drillStudioAuthoringPolicy,
     )
     return ImageBounds(rect.left, rect.top, rect.width, rect.height)
 }
@@ -893,18 +916,11 @@ private fun createCameraCaptureUri(context: Context): Uri? {
 }
 
 private fun launchCameraCapture(
-    context: Context,
     createOutputUri: () -> Uri?,
     onPrepared: (Uri) -> Unit,
     launch: (Uri) -> Unit,
     onFailure: (String) -> Unit,
 ) {
-    val captureIntent = Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
-    if (captureIntent.resolveActivity(context.packageManager) == null) {
-        Log.w(CAMERA_CAPTURE_TAG, "No camera app available for ACTION_IMAGE_CAPTURE")
-        onFailure("No camera app available")
-        return
-    }
     val outputUri = createOutputUri()
     if (outputUri == null) {
         Log.e(CAMERA_CAPTURE_TAG, "Failed to create camera output URI")
@@ -917,8 +933,26 @@ private fun launchCameraCapture(
         launch(outputUri)
     }.onFailure {
         Log.e(CAMERA_CAPTURE_TAG, "Camera launch failed", it)
-        onFailure("Camera launch failed")
+        onFailure("Camera capture unavailable on this device. Use Choose from device.")
     }
+}
+
+internal fun authoringStatusSummary(
+    pose: PhasePoseTemplate,
+    imageLoaded: Boolean,
+    isDetecting: Boolean,
+): String {
+    if (!imageLoaded) return "Canvas mode: manual only (no image loaded)"
+    if (isDetecting) return "Image loaded • detecting pose…"
+    val hasDetected = pose.authoring?.detectedJoints?.isNotEmpty() == true
+    val corrections = pose.authoring?.manualOffsets?.size ?: 0
+    val source = when {
+        !hasDetected -> "manual"
+        corrections > 0 -> "detected + adjusted"
+        else -> "detected"
+    }
+    val quality = ((pose.authoring?.qualityScore ?: 0f) * 100).toInt().coerceIn(0, 100)
+    return "Image loaded • source: $source • corrected joints: $corrections • quality: $quality%"
 }
 
 private fun String.pretty(): String = lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }

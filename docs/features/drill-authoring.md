@@ -55,15 +55,17 @@ The phase editor now treats pose authoring as a dedicated viewport surface:
 
 - Reference image rendering is clipped to the pose canvas only (no parent-card/background bleed).
 - Pose overlay, joints, guides, and hit-testing use the same mapped image bounds inside the viewport.
-- Overlay framing is always based on the actively displayed image rect (including letterbox/pillarbox fit), so drag targets and skeleton placement stay aligned after image attach/capture.
-- Authoring controls are grouped into clearer sections (reference image, detection, edit pose, advanced editing, save) to reduce dense button clusters on narrow screens.
+- Overlay framing is always based on the actively displayed image rect, and authoring now uses a tighter portrait-safe content padding policy so imported images occupy more of the available canvas on tall phones.
+- Pose detection normalization uses full image dimensions (not landmark-bounding-box normalization), so the detected skeleton remains anchored to the displayed image geometry.
+- Authoring controls are grouped into compact sections (image+detection, edit, advanced editing, save) to reduce vertical fragmentation on narrow screens.
 - The viewport keeps a stable portrait aspect ratio whether a reference image is attached or not.
+- Empty canvas mode is explicit: when no image is attached, the authoring area shows a deliberate “No reference image loaded” state while keeping manual pose editing available.
 
 ### Camera capture behavior
 
-- **Take photo** now validates camera availability before launch and uses a FileProvider-backed temp capture URI under app cache.
+- **Take photo** uses `ActivityResultContracts.TakePicture` with a FileProvider-backed temp capture URI under app cache.
 - Capture result handling logs launch/success/failure/cancel paths for easier regression diagnosis.
-- Cancel, missing camera app, URI creation failure, and denied permission are surfaced safely as user-visible status text (no silent no-op).
+- Cancel, URI creation failure, permission denial, and launch failures are surfaced as user-visible status text with a direct fallback path to **Choose from device** (no dead button/no silent no-op).
 
 ### Boundary and environment guides
 
@@ -76,7 +78,7 @@ The phase authoring canvas includes lightweight optional visual guides:
 
 These are stored as authoring settings and are intended to be extendable in future phases.
 
-> Current phase-1 note: detection normalization is currently phase-image local (landmark bounding-box based). Cross-phase environment-anchor consistency tightening is planned in a follow-up iteration.
+> Current phase-1 note: Drill Studio keeps image-space normalization and viewport mapping consistent with the shared overlay framing contract used by preview surfaces, while preserving existing live/upload overlay paths.
 
 ### Persistence and compatibility
 

@@ -52,22 +52,11 @@ class DrillStudioImagePoseDetector {
             return@withContext ImagePoseDetectionResult(emptyMap(), emptyMap(), 0f)
         }
 
-        val xs = raw.values.mapNotNull { it?.position3D?.x?.toFloat() ?: it?.position?.x }
-        val ys = raw.values.mapNotNull { it?.position3D?.y?.toFloat() ?: it?.position?.y }
-        val minX = xs.minOrNull() ?: 0f
-        val maxX = xs.maxOrNull() ?: 1f
-        val minY = ys.minOrNull() ?: 0f
-        val maxY = ys.maxOrNull() ?: 1f
-        val rangeX = (maxX - minX).coerceAtLeast(0.1f)
-        val rangeY = (maxY - minY).coerceAtLeast(0.1f)
-
         val joints = raw.mapValues { (_, lm) ->
-            val point = lm?.position3D
-            val x = point?.x?.toFloat() ?: lm?.position?.x ?: 0f
-            val y = point?.y?.toFloat() ?: lm?.position?.y ?: 0f
-            JointPoint(
-                x = ((x - minX) / rangeX).coerceIn(0f, 1f),
-                y = ((y - minY) / rangeY).coerceIn(0f, 1f),
+            normalizeLandmarkToImageSpace(
+                landmark = lm,
+                imageWidth = input.width,
+                imageHeight = input.height,
             )
         }
 
@@ -80,6 +69,30 @@ class DrillStudioImagePoseDetector {
             qualityScore = quality,
         )
     }
+}
+
+internal fun normalizeLandmarkToImageSpace(
+    landmark: PoseLandmark?,
+    imageWidth: Int,
+    imageHeight: Int,
+): JointPoint {
+    val x = landmark?.position?.x ?: landmark?.position3D?.x ?: 0f
+    val y = landmark?.position?.y ?: landmark?.position3D?.y ?: 0f
+    return normalizePointToImageSpace(x = x, y = y, imageWidth = imageWidth, imageHeight = imageHeight)
+}
+
+internal fun normalizePointToImageSpace(
+    x: Float,
+    y: Float,
+    imageWidth: Int,
+    imageHeight: Int,
+): JointPoint {
+    val safeWidth = imageWidth.coerceAtLeast(1)
+    val safeHeight = imageHeight.coerceAtLeast(1)
+    return JointPoint(
+        x = (x / safeWidth.toFloat()).coerceIn(0f, 1f),
+        y = (y / safeHeight.toFloat()).coerceIn(0f, 1f),
+    )
 }
 
 private suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { continuation ->
