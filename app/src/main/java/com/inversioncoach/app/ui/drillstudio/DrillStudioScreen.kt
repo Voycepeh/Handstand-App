@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -49,12 +48,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -77,7 +75,8 @@ import com.inversioncoach.app.drills.catalog.PhasePoseTemplate
 import com.inversioncoach.app.storage.ServiceLocator
 import com.inversioncoach.app.ui.components.DropdownOption
 import com.inversioncoach.app.ui.components.MultiSelectChipsField
-import com.inversioncoach.app.ui.components.OverlaySkeletonPreviewDefaults
+import com.inversioncoach.app.ui.components.OverlaySkeletonPreview
+import com.inversioncoach.app.ui.components.OverlaySkeletonPreviewStyle
 import com.inversioncoach.app.ui.components.ReliableDropdownField
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.components.SeededSkeletonPreview
@@ -610,47 +609,61 @@ private fun PoseAuthoringViewport(
     onJointMoved: (String, JointPoint) -> Unit,
 ) {
     var activeJoint by remember(phasePose.phaseId) { mutableStateOf<String?>(null) }
-    val viewportAspectRatio = SeededSkeletonPreviewDefaults.PORTRAIT_ASPECT_RATIO
+    val renderPose = remember(phasePose.joints) {
+        DrillStudioPoseUtils.renderPoseWithFallback(
+            joints = phasePose.joints,
+            fallback = DrillStudioPosePresets.neutralUpright.joints,
+        )
+    }
+    val previewStyle = OverlaySkeletonPreviewStyle(
+        aspectRatio = drillStudioSkeletonPolicy.aspectRatio,
+        contentPaddingFraction = drillStudioSkeletonPolicy.contentPaddingFraction,
+        styleScaleMultiplier = drillStudioSkeletonPolicy.styleScaleMultiplier,
+    )
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(viewportAspectRatio)
+            .aspectRatio(previewStyle.aspectRatio)
             .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface),
+            .background(MaterialTheme.colorScheme.surface)
+            .pointerInput(phasePose.phaseId, phasePose.joints, referenceImage, previewStyle.contentPaddingFraction) {
+                detectDragGestures(
+                    onDragStart = { start ->
+                        val contentRect = previewContentRect(size.toSize(), previewStyle.contentPaddingFraction)
+                        val imageBounds = resolveImageBounds(size.toSize(), referenceImage, contentRect)
+                        val touch = toNormalizedPoint(start, imageBounds)
+                        activeJoint = DrillStudioPoseUtils.nearestJointWithinRadius(
+                            joints = renderPose,
+                            touch = touch,
+                            hitRadius = 0.08f,
+                        )
+                    },
+                    onDrag = { change, _ ->
+                        val joint = activeJoint ?: return@detectDragGestures
+                        val contentRect = previewContentRect(size.toSize(), previewStyle.contentPaddingFraction)
+                        val imageBounds = resolveImageBounds(size.toSize(), referenceImage, contentRect)
+                        val normalized = toNormalizedPoint(change.position, imageBounds)
+                        val constrained = DrillStudioPoseUtils.applyAnatomicalGuardrails(
+                            pose = renderPose,
+                            joint = joint,
+                            target = normalized,
+                            bodyProfile = bodyProfile,
+                        )
+                        onJointMoved(joint, constrained)
+                    },
+                    onDragEnd = { activeJoint = null },
+                    onDragCancel = { activeJoint = null },
+                )
+            },
     ) {
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(phasePose.phaseId, phasePose.joints, referenceImage) {
-                    detectDragGestures(
-                        onDragStart = { start ->
-                            val imageBounds = resolveImageBounds(size.toSize(), referenceImage)
-                            val touch = toNormalizedPoint(start, imageBounds)
-                            activeJoint = DrillStudioPoseUtils.nearestJointWithinRadius(
-                                joints = phasePose.joints,
-                                touch = touch,
-                                hitRadius = 0.08f,
-                            )
-                        },
-                        onDrag = { change, _ ->
-                            val joint = activeJoint ?: return@detectDragGestures
-                            val imageBounds = resolveImageBounds(size.toSize(), referenceImage)
-                            val normalized = toNormalizedPoint(change.position, imageBounds)
-                            val constrained = DrillStudioPoseUtils.applyAnatomicalGuardrails(
-                                pose = phasePose.joints,
-                                joint = joint,
-                                target = normalized,
-                                bodyProfile = bodyProfile,
-                            )
-                            onJointMoved(joint, constrained)
-                        },
-                        onDragEnd = { activeJoint = null },
-                        onDragCancel = { activeJoint = null },
-                    )
-                },
+        OverlaySkeletonPreview(
+            joints = renderPose,
+            style = previewStyle,
+            highlightedJoint = activeJoint,
+            showBackground = false,
         ) {
-            val imageBounds = resolveImageBounds(size, referenceImage)
-            val baseJointColor = Color(0xFFFFB300)
+            val contentRect = previewContentRect(size, previewStyle.contentPaddingFraction)
+            val imageBounds = resolveImageBounds(size, referenceImage, contentRect)
             if (referenceImage != null) {
                 drawImage(
                     image = referenceImage,
@@ -669,7 +682,6 @@ private fun PoseAuthoringViewport(
                         color = Color(0x44FFFFFF),
                         topLeft = Offset(imageBounds.left, imageBounds.top),
                         size = Size(imageBounds.width, imageBounds.height),
-                        style = Stroke(width = 2f),
                     )
                     val corner = 24f
                     val left = imageBounds.left
@@ -712,28 +724,6 @@ private fun PoseAuthoringViewport(
                         strokeWidth = 2f,
                     )
                 }
-            }
-            canonicalStudioBones().forEach { (start, end) ->
-                val a = phasePose.joints[start]
-                val b = phasePose.joints[end]
-                if (a != null && b != null) {
-                    drawLine(
-                        color = baseJointColor,
-                        start = imageBounds.normalizedToCanvas(a),
-                        end = imageBounds.normalizedToCanvas(b),
-                        strokeWidth = 4f,
-                        cap = StrokeCap.Round,
-                    )
-                }
-            }
-            phasePose.joints.forEach { (name, point) ->
-                val style = previewJointStyle(name = name, baseColor = baseJointColor, baseRadius = 6f, highlightedJoint = activeJoint)
-                drawCircle(
-                    color = style.color,
-                    radius = style.radius,
-                    center = imageBounds.normalizedToCanvas(point),
-                    style = Stroke(width = 3f),
-                )
             }
         }
     }
@@ -818,85 +808,50 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
     }
 }
 
-
-private fun canonicalStudioBones(): List<Pair<String, String>> {
-    val overlayToStudioAliases = mapOf(
-        "nose" to "head",
-        "left_shoulder" to "shoulder_left",
-        "right_shoulder" to "shoulder_right",
-        "left_elbow" to "elbow_left",
-        "right_elbow" to "elbow_right",
-        "left_wrist" to "wrist_left",
-        "right_wrist" to "wrist_right",
-        "left_hip" to "hip_left",
-        "right_hip" to "hip_right",
-        "left_knee" to "knee_left",
-        "right_knee" to "knee_right",
-        "left_ankle" to "ankle_left",
-        "right_ankle" to "ankle_right",
-    )
-    return OverlaySkeletonPreviewDefaults.canonicalBones.mapNotNull { (start, end) ->
-        val from = overlayToStudioAliases[start] ?: return@mapNotNull null
-        val to = overlayToStudioAliases[end] ?: return@mapNotNull null
-        from to to
-    }
-}
-
 private data class ImageBounds(
     val left: Float,
     val top: Float,
     val width: Float,
     val height: Float,
-) {
-    fun normalizedToCanvas(point: JointPoint): Offset {
-        return Offset(
-            x = left + (point.x.coerceIn(0f, 1f) * width),
-            y = top + (point.y.coerceIn(0f, 1f) * height),
-        )
-    }
-}
-
-private data class JointPreviewStyle(
-    val color: Color,
-    val radius: Float,
 )
 
-private fun previewJointStyle(
-    name: String,
-    baseColor: Color,
-    baseRadius: Float,
-    highlightedJoint: String?,
-): JointPreviewStyle {
-    return if (highlightedJoint == name) {
-        JointPreviewStyle(color = Color(0xFFFF5252), radius = baseRadius + 2f)
-    } else {
-        JointPreviewStyle(color = baseColor, radius = baseRadius)
-    }
-}
-
-private fun resolveImageBounds(canvasSize: Size, referenceImage: ImageBitmap?): ImageBounds {
-    if (referenceImage == null || referenceImage.width <= 0 || referenceImage.height <= 0) {
+private fun resolveImageBounds(canvasSize: Size, referenceImage: ImageBitmap?, contentRect: Rect): ImageBounds {
+    if (contentRect.width <= 0f || contentRect.height <= 0f) {
         return ImageBounds(0f, 0f, canvasSize.width, canvasSize.height)
     }
+    if (referenceImage == null || referenceImage.width <= 0 || referenceImage.height <= 0) {
+        return ImageBounds(contentRect.left, contentRect.top, contentRect.width, contentRect.height)
+    }
     val imageAspect = referenceImage.width.toFloat() / referenceImage.height.toFloat()
-    val canvasAspect = if (canvasSize.height == 0f) 1f else canvasSize.width / canvasSize.height
+    val canvasAspect = if (contentRect.height == 0f) 1f else contentRect.width / contentRect.height
     return if (imageAspect > canvasAspect) {
-        val height = canvasSize.width / imageAspect
+        val height = contentRect.width / imageAspect
         ImageBounds(
-            left = 0f,
-            top = (canvasSize.height - height) / 2f,
-            width = canvasSize.width,
+            left = contentRect.left,
+            top = contentRect.top + (contentRect.height - height) / 2f,
+            width = contentRect.width,
             height = height,
         )
     } else {
-        val width = canvasSize.height * imageAspect
+        val width = contentRect.height * imageAspect
         ImageBounds(
-            left = (canvasSize.width - width) / 2f,
-            top = 0f,
+            left = contentRect.left + (contentRect.width - width) / 2f,
+            top = contentRect.top,
             width = width,
-            height = canvasSize.height,
+            height = contentRect.height,
         )
     }
+}
+
+private fun previewContentRect(canvasSize: Size, contentPaddingFraction: Float): Rect {
+    val minDimension = minOf(canvasSize.width, canvasSize.height)
+    val padding = minDimension * contentPaddingFraction.coerceAtLeast(0f)
+    return Rect(
+        left = padding,
+        top = padding,
+        right = (canvasSize.width - padding).coerceAtLeast(padding + 1f),
+        bottom = (canvasSize.height - padding).coerceAtLeast(padding + 1f),
+    )
 }
 
 private fun toNormalizedPoint(position: Offset, bounds: ImageBounds): JointPoint {

@@ -67,4 +67,21 @@ class DrillStudioPoseUtilsTest {
         val length = kotlin.math.sqrt((constrained.x - shoulder.x) * (constrained.x - shoulder.x) + (constrained.y - shoulder.y) * (constrained.y - shoulder.y))
         assertTrue(length < 0.5f)
     }
+
+    @Test
+    fun renderPoseWithFallback_keepsCanonicalSkeletonWhenPoseIsSparse() {
+        val sparsePose = mapOf(
+            "head" to JointPoint(0.52f, 0.18f),
+            "wrist_left" to JointPoint(0.30f, 0.52f),
+        )
+
+        val renderPose = DrillStudioPoseUtils.renderPoseWithFallback(
+            joints = sparsePose,
+            fallback = DrillStudioPosePresets.neutralUpright.joints,
+        )
+
+        assertTrue(renderPose.keys.containsAll(DrillStudioPoseUtils.connectedPairs.flatMap { listOf(it.first, it.second) }.distinct()))
+        assertEquals(0.52f, renderPose.getValue("nose").x, 0.0001f)
+        assertEquals(0.30f, renderPose.getValue("left_wrist").x, 0.0001f)
+    }
 }

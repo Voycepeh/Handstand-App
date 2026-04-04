@@ -50,6 +50,15 @@ object DrillStudioPoseUtils {
             .toMap()
     }
 
+    fun renderPoseWithFallback(
+        joints: Map<String, JointPoint>,
+        fallback: Map<String, JointPoint>,
+    ): Map<String, JointPoint> {
+        val normalizedFallback = normalizeJointNames(fallback)
+        val normalizedJoints = normalizeJointNames(joints)
+        return normalizeJointNames(normalizedFallback + normalizedJoints)
+    }
+
     fun mirrorWithSemanticSwap(joints: Map<String, JointPoint>): Map<String, JointPoint> {
         val normalized = normalizeJointNames(joints).toMutableMap()
         mirrorPairs.forEach { (left, right) ->
