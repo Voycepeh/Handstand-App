@@ -55,7 +55,6 @@ import com.inversioncoach.app.ui.common.formatSessionDuration
 import com.inversioncoach.app.ui.common.parseSessionMetrics
 import com.inversioncoach.app.ui.common.buildSessionSummaryDisplay
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
-import com.inversioncoach.app.ui.upload.UploadJobCoordinator
 import com.inversioncoach.app.ui.components.DropdownOption
 import com.inversioncoach.app.ui.components.ReliableDropdownField
 import com.inversioncoach.app.ui.components.SessionMediaActionsCard
@@ -163,8 +162,8 @@ fun ResultsScreen(sessionId: Long, onDone: () -> Unit) {
             trigger = "results_hydration",
         )
         repository.reconcileActiveUploadJobs(
-            hasActiveWorker = UploadJobCoordinator.isActive(),
-            reason = "results_screen_load",
+            hasActiveWorker = false,
+            reason = "results_screen_load_in_app_upload",
         )
     }
 

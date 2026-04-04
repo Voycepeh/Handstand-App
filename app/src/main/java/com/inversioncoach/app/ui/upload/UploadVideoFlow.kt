@@ -80,9 +80,6 @@ import com.inversioncoach.app.recording.OverlayTimelineJson
 import com.inversioncoach.app.recording.toTimelineFrame
 import com.inversioncoach.app.model.toExportPreset
 import com.inversioncoach.app.storage.ServiceLocator
-import com.inversioncoach.app.upload.EnqueueResult
-import com.inversioncoach.app.upload.UploadAnalysisOrchestrator
-import com.inversioncoach.app.upload.UploadQueueCoordinator
 import com.inversioncoach.app.storage.repository.SessionRepository
 import com.inversioncoach.app.ui.components.ScaffoldedScreen
 import com.inversioncoach.app.ui.live.SessionDiagnostics
@@ -1408,7 +1405,6 @@ class UploadVideoViewModel(
     private val isReferenceUpload: Boolean,
     private val createDrillFromReferenceUpload: Boolean,
     private val pendingDrillName: String? = null,
-    private val queueCoordinator: UploadQueueCoordinator? = null,
     private val customRunner: UploadVideoAnalysisRunner? = null,
     private val resolveCanonicalUploadUri: suspend (Uri) -> Uri = { uri ->
         canonicalizeUploadUriForAnalysis(appContext, uri)
@@ -1444,7 +1440,6 @@ class UploadVideoViewModel(
         isReferenceUpload = false,
         createDrillFromReferenceUpload = false,
         pendingDrillName = null,
-        queueCoordinator = null,
         customRunner = runner,
     )
 
@@ -1476,17 +1471,10 @@ class UploadVideoViewModel(
         val repo = repository
         if (repo != null) {
             viewModelScope.launch {
-                if (observedSessionId == null) {
-                    val restored = repo.observeSessions().first().firstOrNull { session ->
-                        session.sessionSource == SessionSource.UPLOADED_VIDEO &&
-                            session.annotatedExportStatus in setOf(
-                                AnnotatedExportStatus.VALIDATING_INPUT,
-                                AnnotatedExportStatus.PROCESSING,
-                                AnnotatedExportStatus.PROCESSING_SLOW,
-                            )
-                    }
-                    if (restored != null) observedSessionId = restored.id
-                }
+                repo.reconcileActiveUploadJobs(
+                    hasActiveWorker = false,
+                    reason = "upload_screen_init_in_app",
+                )
                 repo.observeSessions().collectLatest { sessions ->
                     val sessionId = observedSessionId ?: return@collectLatest
                     val session = sessions.firstOrNull { it.id == sessionId } ?: return@collectLatest
@@ -1551,7 +1539,7 @@ class UploadVideoViewModel(
     }
 
     fun analyze(uri: Uri) {
-        if (runningJob?.isActive == true || UploadJobCoordinator.isActive()) {
+        if (runningJob?.isActive == true) {
             _state.update {
                 it.copy(
                     stageText = "Another upload is already in progress.",
@@ -1582,56 +1570,6 @@ class UploadVideoViewModel(
                     errorMessage = "Enter a drill name before uploading a new reference drill.",
                     canCancel = false,
                 )
-            }
-            return
-        }
-        if (queueCoordinator != null) {
-            viewModelScope.launch {
-                val canonicalUri = runCatching { resolveCanonicalUploadUri(uri) }
-                    .onFailure { error ->
-                        Log.e(TAG, "upload_intake_copy_failed uri=$uri", error)
-                        _state.update {
-                            it.copy(
-                                stage = UploadStage.FAILED,
-                                currentProcessingStage = UploadStage.FAILED,
-                                stageText = "Upload intake failed",
-                                errorMessage = error.message ?: "Unable to prepare selected video for upload.",
-                                canCancel = false,
-                            )
-                        }
-                    }
-                    .getOrNull() ?: return@launch
-                when (
-                    queueCoordinator.enqueue(
-                        sourceUri = canonicalUri.toString(),
-                        trackingMode = trackingMode.name,
-                        selectedDrillId = selectedDrillId,
-                        selectedReferenceTemplateId = selectedReferenceTemplateId,
-                        isReferenceUpload = isReferenceUpload,
-                        createDrillFromReferenceUpload = createDrillFromReferenceUpload,
-                        pendingDrillName = _state.value.pendingDrillName,
-                    )
-                ) {
-                    is EnqueueResult.Enqueued -> _state.update {
-                        it.copy(
-                            selectedVideoUri = canonicalUri,
-                            stage = UploadStage.PREPARING_ANALYSIS,
-                            currentProcessingStage = UploadStage.PREPARING_ANALYSIS,
-                            stageText = "Upload queued for background processing.",
-                            errorMessage = null,
-                            canCancel = true,
-                        )
-                    }
-                    EnqueueResult.QueueFull -> _state.update {
-                        it.copy(
-                            stage = UploadStage.FAILED,
-                            currentProcessingStage = UploadStage.FAILED,
-                            stageText = "Queue full",
-                            errorMessage = "Upload queue is full. Wait for current processing to finish.",
-                            canCancel = false,
-                        )
-                    }
-                }
             }
             return
         }
@@ -1667,7 +1605,7 @@ class UploadVideoViewModel(
                         technicalLog = if (current.technicalLog.isBlank()) intakeLog else "${current.technicalLog}\n$intakeLog",
                     )
                 }
-                UploadAnalysisOrchestrator(runner).execute(
+                runner.run(
                     uri = canonicalUri,
                     ownerToken = ownerToken,
                     trackingMode = trackingMode,
@@ -1677,7 +1615,6 @@ class UploadVideoViewModel(
                     createDrillFromReferenceUpload = createDrillFromReferenceUpload,
                     pendingDrillName = _state.value.pendingDrillName,
                     onSessionCreated = { sessionId ->
-                        UploadJobCoordinator.begin(sessionId, ownerToken)
                         observedSessionId = sessionId
                         _state.update { current -> current.copy(sessionId = sessionId) }
                     },
@@ -1730,7 +1667,6 @@ class UploadVideoViewModel(
                     },
                 )
             }.onSuccess { result ->
-                UploadJobCoordinator.clear()
                 val completionMessage = if (result.annotatedReady) {
                     "Annotated replay ready"
                 } else {
@@ -1757,7 +1693,6 @@ class UploadVideoViewModel(
                     )
                 }
             }.onFailure { error ->
-                UploadJobCoordinator.clear()
                 Log.e(TAG, "analysis_failed uri=$uri", error)
                 _state.update {
                     it.copy(
@@ -1786,7 +1721,6 @@ class UploadVideoViewModel(
 
     fun cancel() {
         runningJob?.cancel()
-        UploadJobCoordinator.clear()
         Log.i(TAG, "upload_cancel requested sessionId=${_state.value.sessionId ?: -1}")
         _state.value.sessionId?.let { sessionId ->
             viewModelScope.launch {
@@ -1946,7 +1880,6 @@ fun UploadVideoScreen(
             isReferenceUpload,
             createDrillFromReferenceUpload,
             pendingDrillName = defaultDraftName,
-            queueCoordinator = UploadQueueCoordinator.get(context),
         )
     }
     val state by viewModel.state.collectAsState()
@@ -2111,10 +2044,6 @@ fun UploadVideoScreen(
                     OutlinedButton(onClick = { onOpenDrillStudio(state.selectedDrillId!!, state.selectedReferenceTemplateId) }, modifier = Modifier.fillMaxWidth()) {
                         Text("Open Drill Studio")
                     }
-                }
-            } else if (resultSessionId != null) {
-                OutlinedButton(onClick = { onOpenResults(resultSessionId) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("View session")
                 }
             }
         }

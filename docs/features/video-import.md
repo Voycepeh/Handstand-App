@@ -25,8 +25,9 @@ Video Import supports offline review and reference-training preparation from upl
 - Output persists to session/replay/history surfaces.
 - Edge-frame bootstrap tolerates brief start/end occlusion; low-confidence boundary frames are skipped so short occlusions do not invalidate an otherwise usable upload.
 - Picker intake is `content://`-safe: read permission is persisted when available and source media is copied into app-owned storage before metadata/decode/analyze.
-- Upload processing treats the copied app-owned URI as the canonical analysis source for retries/reopens; provider URI permission is intake-only.
+- Upload processing treats the copied app-owned URI as the canonical in-app analysis source while the process stays alive; provider URI permission is intake-only.
 - Failures in intake/decode/analyze/export are contained into terminal failed states with explicit diagnostics/failure reasons so hydration/history/results remain safe for incomplete uploads.
+- If the app process dies mid-upload, the session is marked stalled/failed on next hydrate instead of attempting durable background recovery.
 - Reference-template creation is optional, drill-linked, and comparison-oriented.
 
 ## Integration points

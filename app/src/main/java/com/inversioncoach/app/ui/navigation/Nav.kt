@@ -11,7 +11,9 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -19,6 +21,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.model.LiveSessionOptions
+import com.inversioncoach.app.storage.ServiceLocator
+import com.inversioncoach.app.ui.common.canOpenResultsRoute
 import com.inversioncoach.app.ui.drilldetail.DrillDetailScreen
 import com.inversioncoach.app.ui.drills.ManageDrillsScreen
 import com.inversioncoach.app.ui.drillstudio.DrillStudioInitRequest
@@ -35,6 +39,8 @@ import com.inversioncoach.app.ui.settings.SettingsScreen
 import com.inversioncoach.app.ui.startdrill.StartDrillDestination
 import com.inversioncoach.app.ui.startdrill.StartDrillScreen
 import com.inversioncoach.app.ui.upload.UploadVideoScreen
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
 
 fun parseDrillTypeOrDefault(rawValue: String?, fallback: DrillType): DrillType =
     rawValue?.let(DrillType::fromStoredName) ?: fallback
@@ -82,8 +88,19 @@ sealed class Route(val value: String) {
 @Composable
 fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
     val navController = rememberNavController()
+    val context = LocalContext.current
+    val repository = ServiceLocator.repository(context)
+    val scope = rememberCoroutineScope()
+    val openResultsIfAllowed: (Long) -> Unit = { sessionId ->
+        scope.launch {
+            val session = repository.observeSession(sessionId).firstOrNull()
+            if (session == null || session.canOpenResultsRoute()) {
+                navController.navigate(Route.Results.create(sessionId))
+            }
+        }
+    }
     LaunchedEffect(initialSessionId) {
-        initialSessionId?.let { navController.navigate(Route.Results.create(it)) }
+        initialSessionId?.let(openResultsIfAllowed)
     }
     NavHost(navController = navController, startDestination = Route.Home.value, modifier = modifier) {
         composable(Route.Home.value) {
@@ -141,12 +158,12 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
             val mode = SessionHistoryMode.fromRoute(it.arguments?.getString(SessionHistoryRoutes.modeArg))
             HistoryScreen(
                 onBack = { navController.popBackStack() },
-                onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
+                onOpenSession = openResultsIfAllowed,
                 drillIdFilter = drillId,
                 comparisonMode = mode == SessionHistoryMode.COMPARE,
             )
         }
-        composable(Route.ProgressOverview.value) { HomeHistoryScreen(onBack = { navController.popBackStack() }, onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) }) }
+        composable(Route.ProgressOverview.value) { HomeHistoryScreen(onBack = { navController.popBackStack() }, onOpenSession = openResultsIfAllowed) }
         composable(Route.DrillStudio.value, arguments = listOf(
             navArgument("mode") { type = NavType.StringType; defaultValue = "drill" },
             navArgument("drillId") { type = NavType.StringType; defaultValue = "" },
@@ -179,7 +196,7 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
             )
         }
         composable(Route.DevTuning.value) { DeveloperTuningScreen(onBack = { navController.popBackStack() }) }
-        composable(Route.UploadVideo.value) { UploadVideoScreen(onBack = { navController.popBackStack() }, onOpenResults = { sessionId -> navController.navigate(Route.Results.create(sessionId)) }) }
+        composable(Route.UploadVideo.value) { UploadVideoScreen(onBack = { navController.popBackStack() }, onOpenResults = openResultsIfAllowed) }
         composable(Route.UploadVideoForDrill.value, arguments = listOf(
             navArgument("drillId") { type = NavType.StringType; defaultValue = "" },
             navArgument("referenceTemplateId") { type = NavType.StringType; defaultValue = "" },
@@ -189,7 +206,7 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
             val args = RouteArguments.parseUploadVideo(it.arguments)
             UploadVideoScreen(
                 onBack = { navController.popBackStack() },
-                onOpenResults = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
+                onOpenResults = openResultsIfAllowed,
                 onOpenDrillStudio = { drillId, templateId ->
                     navController.navigate(
                         if (templateId.isNullOrBlank()) Route.DrillStudio.createForDrill(drillId)
@@ -211,7 +228,7 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
                 onCompareAttempts = { selectedDrillId ->
                     navController.navigate(Route.SessionHistory.create(selectedDrillId, mode = SessionHistoryMode.COMPARE))
                 },
-                onOpenSession = { sessionId -> navController.navigate(Route.Results.create(sessionId)) },
+                onOpenSession = openResultsIfAllowed,
                 onStartLiveSession = { drillType ->
                     navController.navigate(Route.Live.create(drillType, LiveSessionOptions()))
                 },
