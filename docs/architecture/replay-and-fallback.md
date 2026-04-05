@@ -36,7 +36,7 @@ When persisted state is inconsistent (for example `rawPersistStatus=SUCCEEDED`, 
 
 Recovery runs during app startup and during hydration of Home, History, Results, and session-open flows so stale sessions cannot keep the app in a non-terminal crash-prone state.
 
-Upload-job stall detection now also checks whether the in-app upload coordinator is actively running work before marking a job stalled. This avoids false `UPLOAD_JOB_STALLED` writes while processing continues off-screen.
+Upload-job stall detection now also checks whether the WorkManager upload work is actively running before marking a job stalled. This avoids false `UPLOAD_JOB_STALLED` writes while processing continues off-screen.
 
 ## Contributor guidance
 

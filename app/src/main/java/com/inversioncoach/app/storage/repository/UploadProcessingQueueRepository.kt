@@ -58,6 +58,8 @@ class UploadProcessingQueueRepository(
 
     suspend fun getNonTerminalJobs(): List<UploadProcessingJob> = dao.getNonTerminalJobs()
 
+    suspend fun getLatestJob(): UploadProcessingJob? = dao.getLatestJob()
+
     suspend fun save(job: UploadProcessingJob) = dao.upsert(job)
 
     suspend fun cancel(jobId: String) {

@@ -31,7 +31,10 @@ interface UploadProcessingJobDao {
     @Query("SELECT * FROM upload_processing_jobs WHERE status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED') ORDER BY enqueueOrder ASC")
     suspend fun getNonTerminalJobs(): List<UploadProcessingJob>
 
-    @Query("SELECT COUNT(*) FROM upload_processing_jobs WHERE status IN ('QUEUED', 'RETRYING')")
+    @Query("SELECT * FROM upload_processing_jobs ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun getLatestJob(): UploadProcessingJob?
+
+    @Query("SELECT COUNT(*) FROM upload_processing_jobs WHERE status IN ('QUEUED', 'RETRYING', 'RUNNING', 'PROCESSING')")
     suspend fun getActiveQueueCount(): Int
 
     @Query("UPDATE upload_processing_jobs SET status = :status, updatedAt = :updatedAt WHERE jobId = :jobId")

@@ -3,8 +3,8 @@ package com.inversioncoach.app.ui.live
 
 object ExportWorkOwnership {
     /**
-     * Uploaded-video analysis is now in-app owned and non-durable, so only active in-process
-     * annotated export jobs are considered during stale-state recovery.
+     * Uploaded-video analysis is now app-owned and durable via WorkManager;
+     * this ownership helper remains scoped to annotated export jobs only.
      */
     fun activeSessionIds(): Set<Long> = AnnotatedExportJobTracker.activeSessionIds()
 

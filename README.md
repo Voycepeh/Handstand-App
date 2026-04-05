@@ -156,7 +156,7 @@ For detailed technical and sequence diagrams (including import/export internals)
 - Room database + blob/media storage
 - ML Kit on-device pose detection (landmark extraction)
 - Custom on-device motion analysis, biomechanics, and drill scoring modules
-- In-app upload analysis owned by `UploadVideoViewModel` (non-durable; fails safe on process death)
+- Durable uploaded-video analysis owned by WorkManager + repository/DB state (`UploadVideoProcessingWorker` + `UploadProcessingQueueRepository`); `UploadVideoViewModel` is launcher/observer only
 
 ## ML + movement analysis (current state)
 

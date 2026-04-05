@@ -12,8 +12,8 @@ import com.inversioncoach.app.calibration.storage.RoomDrillMovementProfileReposi
 import com.inversioncoach.app.storage.db.DatabaseMigrations
 import com.inversioncoach.app.storage.db.InversionCoachDatabase
 import com.inversioncoach.app.storage.repository.SessionRepository
+import com.inversioncoach.app.storage.repository.UploadProcessingQueueRepository
 import com.inversioncoach.app.ui.upload.ActiveUploadCoordinator
-import com.inversioncoach.app.ui.upload.DefaultUploadVideoAnalysisRunner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +29,8 @@ object ServiceLocator {
     private var drillMovementProfileRepository: DrillMovementProfileRepository? = null
     @Volatile
     private var activeUploadCoordinator: ActiveUploadCoordinator? = null
+    @Volatile
+    private var uploadProcessingQueueRepository: UploadProcessingQueueRepository? = null
     private val appScope: CoroutineScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
 
     fun db(context: Context): InversionCoachDatabase {
@@ -85,14 +87,23 @@ object ServiceLocator {
         }
     }
 
+
+    fun uploadProcessingQueueRepository(context: Context): UploadProcessingQueueRepository {
+        return uploadProcessingQueueRepository ?: synchronized(this) {
+            uploadProcessingQueueRepository ?: UploadProcessingQueueRepository(
+                dao = db(context).uploadProcessingJobDao(),
+                maxPendingJobs = 1,
+            ).also { uploadProcessingQueueRepository = it }
+        }
+    }
+
     fun activeUploadCoordinator(context: Context): ActiveUploadCoordinator {
         return activeUploadCoordinator ?: synchronized(this) {
             activeUploadCoordinator ?: ActiveUploadCoordinator(
+                appContext = context.applicationContext,
+                sessionRepository = repository(context),
+                queueRepository = uploadProcessingQueueRepository(context),
                 scope = appScope,
-                runner = DefaultUploadVideoAnalysisRunner(
-                    context = context.applicationContext,
-                    repository = repository(context),
-                ),
             ).also { activeUploadCoordinator = it }
         }
     }

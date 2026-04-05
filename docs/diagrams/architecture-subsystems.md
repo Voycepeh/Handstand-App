@@ -5,6 +5,9 @@ flowchart LR
     UI[UI Screens + Route Nav]
     LIVE[LiveCoachingViewModel]
     UPLOAD[UploadVideoViewModel]
+    UCOORD[ActiveUploadCoordinator]
+    UWORK[UploadVideoProcessingWorker]
+    WMAN[WorkManager]
     STUDIO[DrillStudioViewModel]
     DRILLPKG[drillpackage/* contract + mapping]
     RUNTIME[drills/runtime/*]
@@ -20,14 +23,16 @@ flowchart LR
 
     UI --> LIVE
     UI --> UPLOAD
+    UPLOAD --> UCOORD
+    UCOORD --> WMAN --> UWORK
     UI --> STUDIO
 
     LIVE --> POSEML --> ANALYSIS
     LIVE --> RECORD
 
-    UPLOAD --> MOVE
-    UPLOAD --> POSEML --> ANALYSIS
-    UPLOAD --> RECORD
+    UWORK --> MOVE
+    UWORK --> POSEML --> ANALYSIS
+    UWORK --> RECORD
 
     STUDIO --> DRILLS
     STUDIO --> DRILLPKG
@@ -38,6 +43,8 @@ flowchart LR
     MOVE --> REPO
     LIVE --> REPO
     UPLOAD --> REPO
+    UCOORD --> REPO
+    UWORK --> REPO
 
     RECORD --> MEDIA --> REPO
 

@@ -9,7 +9,9 @@ classDiagram
     class OverlaySkeletonPreview
     class SeededSkeletonPreview
     class UploadedVideoAnalyzer
-    class UploadedVideoAnalysisCoordinator
+    class ActiveUploadCoordinator
+    class UploadVideoProcessingWorker
+    class UploadProcessingQueueRepository
     class AnnotatedExportPipeline
     class SessionMediaResolver
     class SessionRepository
@@ -19,15 +21,16 @@ classDiagram
     LiveCoachingViewModel --> SessionMediaResolver
     LiveCoachingViewModel --> SessionRepository
 
-    UploadVideoViewModel --> UploadedVideoAnalyzer
-    UploadVideoViewModel --> UploadedVideoAnalysisCoordinator
-    UploadVideoViewModel --> AnnotatedExportPipeline
-    UploadVideoViewModel --> SessionMediaResolver
-    UploadVideoViewModel --> SessionRepository
+    UploadVideoViewModel --> ActiveUploadCoordinator
+    ActiveUploadCoordinator --> UploadProcessingQueueRepository
+    ActiveUploadCoordinator --> SessionRepository
+    UploadVideoProcessingWorker --> UploadedVideoAnalyzer
+    UploadVideoProcessingWorker --> AnnotatedExportPipeline
+    UploadVideoProcessingWorker --> SessionMediaResolver
+    UploadVideoProcessingWorker --> SessionRepository
 
     DrillStudioViewModel --> SessionRepository
     OverlaySkeletonPreview --> OverlayFrameRenderer
     SeededSkeletonPreview --> OverlaySkeletonPreview
-    UploadedVideoAnalysisCoordinator --> SessionRepository
     SessionRepository --> SessionBlobStorage
 ```

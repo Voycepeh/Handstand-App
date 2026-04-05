@@ -27,7 +27,7 @@ This document is the top-level architecture map for the current CaliVision imple
 - `SessionRepository` is the persistence boundary for sessions, drills, templates, and media status.
 - `SessionMediaResolver` resolves replay source from verified media candidates.
 - `AnnotatedExportPipeline` handles annotated replay generation.
-- `UploadedVideoAnalyzer` + `UploadVideoViewModel` drive upload/reference analysis flow.
+- `UploadedVideoAnalyzer` pipeline is executed by `UploadVideoProcessingWorker`; `UploadVideoViewModel` enqueues work and observes repository/DB state.
 
 ## Rules for contributors
 
