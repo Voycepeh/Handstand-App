@@ -106,7 +106,8 @@ class UploadedVideoSamplingPlanner(
         }
 
         val timeSinceLast = if (lastSampleTimestampMs == Long.MIN_VALUE) Long.MAX_VALUE else signal.timestampMs - lastSampleTimestampMs
-        val mustRefresh = timeSinceLast >= config.minRollingWindowSampleMs
+        val rollingGuardrailIntervalMs = minOf(config.minRollingWindowSampleMs, legacyIntervalMs())
+        val mustRefresh = timeSinceLast >= rollingGuardrailIntervalMs
         if (mustRefresh && lastSampleTimestampMs != Long.MIN_VALUE) {
             reasons += BurstTriggerReason.ROLLING_WINDOW_GUARDRAIL
         }

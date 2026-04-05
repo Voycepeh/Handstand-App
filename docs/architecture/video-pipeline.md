@@ -13,7 +13,7 @@ The media pipeline is shared by live-session finalization and upload/reference a
 
 1. **Source acceptance**: validate callback/import ownership and URI readiness.
 2. **Raw persistence**: copy/retain source media and persist status.
-3. **Input normalization (upload path)**: inspect source format and attempt canonical ingest normalization (portrait, SDR, 8-bit-compatible, single-video-track contract).
+3. **Input normalization (upload path)**: inspect source format and choose either metadata-compensation (cheap) or canonical transcode (expensive, when needed).
 4. **Timeline resolution**: freeze/serialize overlay timeline against session truth.
 5. **Normalization**: resolve duration/orientation/render constraints for export timeline.
 6. **Annotated render**: produce export output when possible.
@@ -32,7 +32,7 @@ The media pipeline is shared by live-session finalization and upload/reference a
 
 - Upload overlay timeline frames are keyed and rendered by presentation timestamps.
 - Timeline freeze/export uses the same timestamp basis for sampled frames, accepted overlays, and compositor resolution.
-- Upload diagnostics now log timing+density fields: source duration, estimated source frames, decoded/sampled counts, pose success, accepted overlays, density per second, first/last overlay timestamps, export fps/duration, and normalization mode.
+- Upload diagnostics now log timing+density fields: source duration, estimated source frames, decoded/sampled counts, accepted vs skipped overlays, density per second, first/last overlay timestamps, export fps/duration, and normalization decision/fallback reasons.
 - Upload diagnostics now include per-stage elapsed fields:
   - `input_intake_ms`
   - `normalization_ms`
@@ -44,6 +44,7 @@ The media pipeline is shared by live-session finalization and upload/reference a
 - Upload analysis now uses a centralized duration-aware sampling policy:
   - target analysis fps: `6` default, `4` for >=90s, `3` for >=180s
   - candidate decode fps: `target + 2`, capped at `10` and capped by source fps
+  - adaptive rolling-window guardrails are clamped to legacy cadence so sparse mode cannot undersample below intended overlay density.
   - this keeps decode + ML invocation bounded while preserving timestamp-monotonic overlays.
 - Low overlay density/coverage is treated as degraded (`OVERLAY_DENSITY_TOO_LOW`) and routed to raw fallback instead of healthy annotated success.
 - Current degraded thresholds:

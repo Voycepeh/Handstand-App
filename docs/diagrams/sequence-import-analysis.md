@@ -17,12 +17,12 @@ sequenceDiagram
     User->>UI: Select video + drill context
     UI->>VM: Start upload analysis
     VM->>Coord: Start or block single active upload
-    Coord->>Normalize: Inspect + normalize input media
-    Normalize-->>Coord: Working media uri + canonical specs
+    Coord->>Normalize: Inspect + choose metadata-compensation or transcode
+    Normalize-->>Coord: Working media uri + canonical specs + decision/fallback reason
     Coord->>Sample: Resolve targetAnalysisFps + candidateDecodeFps
     Sample-->>Coord: Bounded upload sampling policy
     Coord->>Analyzer: Decode/sample -> ML pose -> timeline postprocess
-    Analyzer-->>Coord: Metrics + timeline + stage timings
+    Analyzer-->>Coord: Metrics + timeline + stage timings + accepted/skipped counters
     Coord->>Repo: Persist candidate analysis
 
     opt Reference training enabled

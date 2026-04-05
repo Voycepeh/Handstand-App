@@ -130,6 +130,7 @@ class UploadedVideoAnalyzer(
             val phaseTimeline = mutableListOf<Pair<Long, String>>()
             var dropped = 0
             var edgeFramesSkipped = 0
+            var acceptedFrames = 0
             var timestampCorrections = 0
             var lastAcceptedTimestampMs = -1L
             var poseDetectionMs = 0L
@@ -211,6 +212,7 @@ class UploadedVideoAnalyzer(
                     phaseId = phase.name,
                     confidence = frame.confidence,
                 )
+                acceptedFrames += 1
                 progressObserver?.onProgress(
                     AnalysisProgressEvent(
                         stage = "analysis_frame_processed",
@@ -259,7 +261,8 @@ class UploadedVideoAnalyzer(
             Log.i(
                 UPLOAD_ANALYSIS_TAG,
                 "timing_diagnostics decode_ms=$decodeDuration pose_detection_ms=$poseDetectionMs postprocess_ms=$postProcessDuration total_ms=${System.currentTimeMillis() - totalStart} " +
-                    "frames=$processedFrames dropped=$dropped view=$view phases=${phaseTimeline.size} candidate=${template.status} calibrationVersion=${calibrationProfileVersion ?: -1}",
+                    "frames=$processedFrames accepted=$acceptedFrames dropped=$dropped edgeSkipped=$edgeFramesSkipped timestampCorrections=$timestampCorrections " +
+                    "view=$view phases=${phaseTimeline.size} candidate=${template.status} calibrationVersion=${calibrationProfileVersion ?: -1}",
             )
             progressObserver?.onProgress(
                 AnalysisProgressEvent(
@@ -281,6 +284,7 @@ class UploadedVideoAnalyzer(
                     "postprocess_ms" to postProcessDuration,
                     "analysis_time_ms" to analysisDuration,
                     "total_frames_processed" to processedFrames.toLong(),
+                    "frames_accepted" to acceptedFrames.toLong(),
                     "frames_dropped" to dropped.toLong(),
                     "edge_frames_skipped" to edgeFramesSkipped.toLong(),
                     "timestamp_corrections" to timestampCorrections.toLong(),

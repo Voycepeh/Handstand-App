@@ -2,6 +2,7 @@ package com.inversioncoach.app.movementprofile
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
@@ -26,6 +27,7 @@ import kotlin.system.measureNanoTime
 
 private const val TAG = "UploadPoseFrameSource"
 private const val MAX_ANALYSIS_DIMENSION = 720
+private const val SAMPLING_TELEMETRY_TAG = "UploadSamplingTelemetry"
 
 class MlKitVideoPoseFrameSource(
     private val context: Context,
@@ -126,7 +128,13 @@ class MlKitVideoPoseFrameSource(
                     config = activeAdaptiveConfig,
                     movementType = request.movementType,
                 )
-                Log.i(TAG, "decode_loop_start uri=$videoUri durationMs=$durationMs intervalMs=$candidateIntervalMs estimatedTotalFrames=$estimatedTotalFrames adaptive=${activeAdaptiveConfig.enabled} movementType=${request.movementType}")
+                val sourceRotationDegrees = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull()
+                    ?.let(::normalizeRotation)
+                    ?: 0
+                Log.i(
+                    TAG,
+                    "decode_loop_start uri=$videoUri durationMs=$durationMs intervalMs=$candidateIntervalMs estimatedTotalFrames=$estimatedTotalFrames adaptive=${activeAdaptiveConfig.enabled} movementType=${request.movementType} sourceRotation=$sourceRotationDegrees",
+                )
                 observer.onProgress(
                     AnalysisProgressEvent(
                         stage = "decode_start",
@@ -227,7 +235,7 @@ class MlKitVideoPoseFrameSource(
                                 val decodeNanos = measureNanoTime {
                                     bitmap = retriever.getFrameAtTime(
                                         frameTimeUs,
-                                        MediaMetadataRetriever.OPTION_CLOSEST,
+                                        MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
                                     )
                                 }
                                 totalDecodeNanos.addAndGet(decodeNanos)
@@ -265,7 +273,11 @@ class MlKitVideoPoseFrameSource(
                                         )
                                     }
                                     if (decision.sample) {
-                                        frameQueue.send(FramePacket(index = selectedIndex, timestampMs = timestampMs, bitmap = nonNullBitmap))
+                                        val analysisBitmap = rotateBitmapIfNeeded(nonNullBitmap, sourceRotationDegrees)
+                                        if (analysisBitmap !== nonNullBitmap) {
+                                            nonNullBitmap.recycle()
+                                        }
+                                        frameQueue.send(FramePacket(index = selectedIndex, timestampMs = timestampMs, bitmap = analysisBitmap))
                                         maxBacklog = maxOf(maxBacklog, backlog.incrementAndGet())
                                         activeSamples += activeWorkers.get().toLong()
                                         activeTicks += 1
@@ -365,6 +377,12 @@ class MlKitVideoPoseFrameSource(
                     maxSelectedIntervalMs = maxSelectedInterval,
                     decodeMs = (totalDecodeNanos.get() / 1_000_000.0).roundToLong(),
                     poseDetectionMs = (totalInferenceNanos.get() / 1_000_000.0).roundToLong(),
+                )
+                Log.i(
+                    SAMPLING_TELEMETRY_TAG,
+                    "decode_timing_summary candidate=$candidateFramesDecoded sampled=${frames.size} avgDecodeMs=${"%.2f".format(avgDecodeMs)} maxDecodeMs=${lastDecodeTelemetry.maxDecodeMs} " +
+                        "avgInferenceMs=${"%.2f".format(avgInferenceMs)} maxInferenceMs=${lastDecodeTelemetry.maxInferenceMs} maxBacklog=$maxBacklog " +
+                        "avgSelectedIntervalMs=$averageSelectedInterval maxSelectedIntervalMs=$maxSelectedInterval",
                 )
                 observer.onProgress(
                     AnalysisProgressEvent(
@@ -492,6 +510,19 @@ class MlKitVideoPoseFrameSource(
             (total / count.toDouble()) / 255.0
         }.getOrNull()
     }
+
+    private fun rotateBitmapIfNeeded(bitmap: Bitmap, rotationDegrees: Int): Bitmap {
+        if (rotationDegrees == 0) return bitmap
+        val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+        return runCatching {
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        }.getOrElse {
+            Log.w(TAG, "rotate_frame_failed rotationDegrees=$rotationDegrees message=${it.message}")
+            bitmap
+        }
+    }
+
+    private fun normalizeRotation(raw: Int): Int = ((raw % 360) + 360) % 360
 
 
 

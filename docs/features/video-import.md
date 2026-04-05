@@ -15,12 +15,13 @@ Video Import supports offline review and reference-training preparation from upl
 - Upload analysis is parallel in intent to live coaching but uses imported timing/media sources.
 - Imported media now runs through a dedicated ingest-normalization stage before pose analysis/export.
   - Canonical target contract: portrait pixels, SDR signaling, 8-bit-safe pipeline assumptions, single video track for analysis, stable analysis FPS.
-  - Source variants (rotation metadata, HEVC/H.265, HDR/10-bit signaling, extra metadata tracks) trigger normalization attempt instead of immediate failure.
-  - If canonical transcode is unavailable, pipeline continues with best-effort normalized metadata and records exact failure stage in diagnostics.
+  - Source variants requiring codec/range conversion (HEVC/H.265, HDR/10-bit signaling) trigger canonical transcode attempts.
+  - Rotation metadata and extra non-video tracks are handled with metadata compensation when possible (cheap path, no forced transcode).
+  - If transcode is unavailable/fails, pipeline falls back explicitly with diagnostics (`decisionReason`, `fallbackReason`, `failureStage`).
 - Uploaded frame selection now uses adaptive sampling (default on) instead of fixed cadence.
-  - Sparse steady-state targets: ~4 FPS for generic/rep uploads and ~3-4 FPS for hold drills.
+  - Sparse steady-state targets: ~4-6 FPS depending on duration + movement type.
   - Burst windows: temporarily ~10-12 FPS when motion/pose confidence changes.
-  - Guardrails: first segment, last segment, and rolling-window refresh are always sampled.
+  - Guardrails: first segment, last segment, and rolling-window refresh are always sampled (never slower than legacy fixed cadence).
   - Safety fallback: if adaptive signals are unavailable, the pipeline falls back to legacy fixed cadence.
 - Output persists to session/replay/history surfaces.
 - Edge-frame bootstrap tolerates brief start/end occlusion; low-confidence boundary frames are skipped so short occlusions do not invalidate an otherwise usable upload.

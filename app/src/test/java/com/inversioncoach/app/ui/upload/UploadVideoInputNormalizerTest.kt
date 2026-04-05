@@ -9,7 +9,7 @@ import org.junit.Test
 
 class UploadVideoInputNormalizerTest {
     @Test
-    fun portraitRotationMetadataRequiresNormalization() = runTest {
+    fun portraitRotationMetadataUsesMetadataCompensationWithoutTranscode() = runTest {
         val sourceUri = Uri.parse("content://video/rotation")
         val normalizer = normalizerFor(
             UploadVideoFormatDetails(
@@ -31,7 +31,10 @@ class UploadVideoInputNormalizerTest {
         val result = normalizer.normalize(sourceUri)
 
         assertTrue(result.normalizationRequired)
+        assertFalse(result.normalizationAttempted)
         assertTrue(result.reasons.contains("rotation_metadata"))
+        assertEquals("metadata_compensation_only", result.decisionReason)
+        assertTrue(result.normalizationSucceeded)
         assertEquals(1080, result.canonical.width)
         assertEquals(1920, result.canonical.height)
     }
@@ -63,6 +66,9 @@ class UploadVideoInputNormalizerTest {
         assertTrue(result.reasons.contains("ten_bit_source"))
         assertTrue(result.reasons.contains("hdr_metadata"))
         assertTrue(result.reasons.contains("noncanonical_tracks"))
+        assertEquals("transcode_required", result.decisionReason)
+        assertEquals("transcode_to_canonical", result.failureStage)
+        assertEquals("transcode_unavailable_or_failed", result.fallbackReason)
         assertEquals(30, result.canonical.frameRate)
         assertEquals("video/avc", result.canonical.videoMime)
         assertEquals(8, result.canonical.bitDepth)
@@ -94,6 +100,7 @@ class UploadVideoInputNormalizerTest {
         assertFalse(result.normalizationRequired)
         assertFalse(result.normalizationAttempted)
         assertTrue(result.normalizationSucceeded)
+        assertEquals("already_canonical", result.decisionReason)
         assertEquals(sourceUri, result.workingUri)
     }
 
@@ -121,6 +128,7 @@ class UploadVideoInputNormalizerTest {
 
         assertFalse(result.normalizationRequired)
         assertTrue(result.normalizationSucceeded)
+        assertEquals("already_canonical", result.decisionReason)
     }
 
     private fun normalizerFor(source: UploadVideoFormatDetails): DefaultUploadVideoInputNormalizer {

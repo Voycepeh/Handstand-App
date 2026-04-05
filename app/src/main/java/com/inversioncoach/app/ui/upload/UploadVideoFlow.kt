@@ -427,6 +427,8 @@ class DefaultUploadVideoAnalysisRunner(
                             "sourceVideoNormalizationAttempted" to normalization.normalizationAttempted.toString(),
                             "sourceVideoNormalizationSucceeded" to normalization.normalizationSucceeded.toString(),
                             "sourceVideoNormalizationReasons" to normalization.reasons.sorted().joinToString(","),
+                            "sourceVideoNormalizationDecisionReason" to normalization.decisionReason,
+                            "sourceVideoNormalizationFallbackReason" to (normalization.fallbackReason ?: ""),
                             "normalizedWidth" to workingMetadata.width.toString(),
                             "normalizedHeight" to workingMetadata.height.toString(),
                             "normalizedRotationDegrees" to workingMetadata.rotationDegrees.toString(),
@@ -452,6 +454,8 @@ class DefaultUploadVideoAnalysisRunner(
                     "normalizationRequired" to normalization.normalizationRequired.toString(),
                     "normalizationAttempted" to normalization.normalizationAttempted.toString(),
                     "normalizationSucceeded" to normalization.normalizationSucceeded.toString(),
+                    "normalizationDecisionReason" to normalization.decisionReason,
+                    "normalizationFallbackReason" to (normalization.fallbackReason ?: ""),
                     "normalizedWidth" to normalization.canonical.width.toString(),
                     "normalizedHeight" to normalization.canonical.height.toString(),
                     "normalizedFps" to normalization.canonical.frameRate.toString(),
@@ -463,7 +467,8 @@ class DefaultUploadVideoAnalysisRunner(
                 "metadata durationMs=${metadata.durationMs} width=${metadata.width} height=${metadata.height} rotation=${metadata.rotationDegrees} " +
                     "fps=${metadata.frameRate} " +
                     "normalizationRequired=${normalization.normalizationRequired} attempted=${normalization.normalizationAttempted} " +
-                    "succeeded=${normalization.normalizationSucceeded} reasons=${normalization.reasons.sorted().joinToString(",")}",
+                    "succeeded=${normalization.normalizationSucceeded} decision=${normalization.decisionReason} fallbackReason=${normalization.fallbackReason ?: "none"} " +
+                    "reasons=${normalization.reasons.sorted().joinToString(",")}",
             )
             currentStage = UploadStage.RAW_IMPORT_COMPLETE
             logStage("RAW_IMPORTED", "rawUri=$persistedRawUri durationMs=$sourceDurationMs width=${metadata.width} height=${metadata.height}")
@@ -745,6 +750,8 @@ class DefaultUploadVideoAnalysisRunner(
                     "overlayFrameCount" to analysis.overlayTimeline.size.toString(),
                     "droppedFrames" to analysis.droppedFrames.toString(),
                     "analysisDurationMs" to analysisMs.toString(),
+                    "acceptedFrames" to (analysis.telemetry["frames_accepted"] ?: 0L).toString(),
+                    "edgeFramesSkipped" to (analysis.telemetry["edge_frames_skipped"] ?: 0L).toString(),
                 ),
             )
             val extractor = MovementProfileExtractor()

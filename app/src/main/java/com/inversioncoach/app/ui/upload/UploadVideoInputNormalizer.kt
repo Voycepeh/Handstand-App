@@ -46,6 +46,8 @@ data class UploadVideoNormalizationResult(
     val normalizationAttempted: Boolean,
     val normalizationSucceeded: Boolean,
     val reasons: Set<String>,
+    val decisionReason: String,
+    val fallbackReason: String? = null,
     val failureStage: String? = null,
 )
 
@@ -168,13 +170,28 @@ class DefaultUploadVideoInputNormalizer(
     override suspend fun normalize(sourceUri: Uri): UploadVideoNormalizationResult = withContext(Dispatchers.IO) {
         val source = inspector.inspect(sourceUri)
         val reasons = mutableSetOf<String>()
-        if (source.rotationDegrees != 0) reasons += "rotation_metadata"
+        val advisoryReasons = mutableSetOf<String>()
+        val transcodeReasons = mutableSetOf<String>()
+        if (source.rotationDegrees != 0) {
+            reasons += "rotation_metadata"
+            advisoryReasons += "rotation_metadata"
+        }
         if (source.videoMime?.contains("hevc", ignoreCase = true) == true || source.videoMime?.contains("h265", ignoreCase = true) == true) {
             reasons += "hevc_source"
+            transcodeReasons += "hevc_source"
         }
-        if ((source.bitDepth ?: 8) > 8) reasons += "ten_bit_source"
-        if (source.hdrStaticInfoPresent || looksHdrTransfer(source.colorTransfer)) reasons += "hdr_metadata"
-        if (source.metadataTrackCount > 0 || source.videoTrackCount > 1) reasons += "noncanonical_tracks"
+        if ((source.bitDepth ?: 8) > 8) {
+            reasons += "ten_bit_source"
+            transcodeReasons += "ten_bit_source"
+        }
+        if (source.hdrStaticInfoPresent || looksHdrTransfer(source.colorTransfer)) {
+            reasons += "hdr_metadata"
+            transcodeReasons += "hdr_metadata"
+        }
+        if (source.metadataTrackCount > 0 || source.videoTrackCount > 1) {
+            reasons += "noncanonical_tracks"
+            advisoryReasons += "noncanonical_tracks"
+        }
 
         val portraitWidth = minOf(source.width, source.height).coerceAtLeast(1)
         val portraitHeight = maxOf(source.width, source.height).coerceAtLeast(1)
@@ -189,22 +206,31 @@ class DefaultUploadVideoInputNormalizer(
             videoTrackCount = 1,
         )
 
-        if (reasons.isEmpty()) {
+        if (transcodeReasons.isEmpty()) {
+            val decisionReason = if (advisoryReasons.isEmpty()) "already_canonical" else "metadata_compensation_only"
             return@withContext UploadVideoNormalizationResult(
                 sourceUri = sourceUri,
                 workingUri = sourceUri,
                 source = source,
                 canonical = canonical,
-                normalizationRequired = false,
+                normalizationRequired = advisoryReasons.isNotEmpty(),
                 normalizationAttempted = false,
                 normalizationSucceeded = true,
-                reasons = emptySet(),
+                reasons = reasons,
+                decisionReason = decisionReason,
             )
         }
 
         val transcoded = runCatching { transcoder.transcodeToCanonical(sourceUri, source, canonical) }
             .onFailure { Log.w(NORMALIZER_TAG, "normalize_attempt_failed uri=$sourceUri message=${it.message}", it) }
             .getOrNull()
+        val fallbackReason = if (transcoded == null) "transcode_unavailable_or_failed" else null
+        if (transcoded == null) {
+            Log.w(
+                NORMALIZER_TAG,
+                "normalize_fallback uri=$sourceUri reason=$fallbackReason transcodeReasons=${transcodeReasons.sorted().joinToString(",")} advisoryReasons=${advisoryReasons.sorted().joinToString(",")}",
+            )
+        }
 
         UploadVideoNormalizationResult(
             sourceUri = sourceUri,
@@ -215,6 +241,8 @@ class DefaultUploadVideoInputNormalizer(
             normalizationAttempted = true,
             normalizationSucceeded = transcoded != null,
             reasons = reasons,
+            decisionReason = "transcode_required",
+            fallbackReason = fallbackReason,
             failureStage = if (transcoded == null) "transcode_to_canonical" else null,
         )
     }

@@ -112,6 +112,24 @@ class UploadedVideoSamplingPlannerTest {
         assertEquals(SamplingMode.BURST, reliable.mode)
     }
 
+    @Test
+    fun rollingWindowGuardrailDoesNotUndersampleBelowLegacyCadence() {
+        val planner = UploadedVideoSamplingPlanner(
+            config = AdaptiveSamplingConfig(
+                enabled = true,
+                legacyFixedFps = 6,
+                minRollingWindowSampleMs = 333L,
+            ),
+            movementType = MovementType.HOLD,
+        )
+
+        val first = planner.decide(signal(0, visualDiff = 0.01))
+        val second = planner.decide(signal(167, visualDiff = 0.01))
+
+        assertTrue(first.sample)
+        assertTrue(second.sample)
+    }
+
     private fun signal(
         ts: Long,
         visualDiff: Double,
