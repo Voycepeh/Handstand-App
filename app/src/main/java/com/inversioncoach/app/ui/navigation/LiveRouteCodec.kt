@@ -34,4 +34,8 @@ object LiveRouteCodec {
         )
         return LiveRouteArgs(drillType = drillType, options = rawOptions.canonicalizeFor(drillType))
     }
+
+    private fun parseDrillTypeOrDefault(value: String?, default: DrillType): DrillType {
+        return value?.let { entry -> DrillType.entries.firstOrNull { it.name == entry } } ?: default
+    }
 }
