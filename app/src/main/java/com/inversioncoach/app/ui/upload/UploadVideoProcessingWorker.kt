@@ -111,18 +111,32 @@ class UploadVideoProcessingWorker(
             onFailure = { error ->
                 val now = System.currentTimeMillis()
                 val existing = queueRepo.getJob(jobId)
+                val shouldRetry = !isStopped && runAttemptCount < (existing?.maxRetries ?: 3)
                 if (existing != null) {
                     queueRepo.save(
                         existing.copy(
-                            status = if (isStopped) UploadJobStatus.CANCELLED else UploadJobStatus.FAILED,
-                            currentStage = if (isStopped) UploadJobStage.CANCELLED else UploadJobStage.FAILED,
+                            status = when {
+                                isStopped -> UploadJobStatus.CANCELLED
+                                shouldRetry -> UploadJobStatus.RETRYING
+                                else -> UploadJobStatus.FAILED
+                            },
+                            currentStage = when {
+                                isStopped -> UploadJobStage.CANCELLED
+                                shouldRetry -> existing.currentStage
+                                else -> UploadJobStage.FAILED
+                            },
                             updatedAt = now,
-                            completedAt = now,
+                            completedAt = if (isStopped || !shouldRetry) now else null,
+                            retryCount = if (shouldRetry) existing.retryCount + 1 else existing.retryCount,
                             failureReason = error.message ?: "Upload worker failed",
                         ),
                     )
                 }
-                if (isStopped) Result.failure() else Result.retry()
+                when {
+                    isStopped -> Result.failure()
+                    shouldRetry -> Result.retry()
+                    else -> Result.failure()
+                }
             },
         )
     }

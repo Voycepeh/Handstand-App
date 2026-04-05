@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.Uri
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.inversioncoach.app.model.SessionRecord
 import com.inversioncoach.app.model.UploadJobStage
@@ -24,8 +23,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class ActiveUploadSessionState(
     val ownerToken: String,
@@ -84,6 +83,7 @@ class ActiveUploadCoordinator {
     val state: StateFlow<ActiveUploadCoordinatorState> = _state.asStateFlow()
 
     private var activeJob: Job? = null
+    private val enqueueInFlight = AtomicBoolean(false)
     private val scope: CoroutineScope
     private val runner: UploadVideoAnalysisRunner?
     private val workDependencies: WorkDependencies?
@@ -124,33 +124,46 @@ class ActiveUploadCoordinator {
     }
 
     private fun startDurableWork(request: ActiveUploadRequest, deps: WorkDependencies): ActiveUploadStartResult {
-        val queued = runBlocking(Dispatchers.IO) {
-            deps.queueRepository.enqueue(
-                sourceUri = request.sourceUri.toString(),
-                trackingMode = request.trackingMode.name,
-                selectedDrillId = request.selectedDrillId,
-                selectedReferenceTemplateId = request.selectedReferenceTemplateId,
-                isReferenceUpload = request.isReferenceUpload,
-                createDrillFromReferenceUpload = request.createDrillFromReferenceUpload,
-                pendingDrillName = request.pendingDrillName,
-            )
-        }
-        if (queued == null) {
+        val active = _state.value.activeSession
+        if (enqueueInFlight.get() || (active != null && !active.isTerminal)) {
             val message = "Another upload is already in progress."
             _state.update { it.copy(blockedMessage = message) }
             return ActiveUploadStartResult.Blocked(message)
         }
+        val ownerToken = "enqueue-${UUID.randomUUID()}"
+        enqueueInFlight.set(true)
+        scope.launch(Dispatchers.IO) {
+            try {
+                val queued = deps.queueRepository.enqueue(
+                    sourceUri = request.sourceUri.toString(),
+                    trackingMode = request.trackingMode.name,
+                    selectedDrillId = request.selectedDrillId,
+                    selectedReferenceTemplateId = request.selectedReferenceTemplateId,
+                    isReferenceUpload = request.isReferenceUpload,
+                    createDrillFromReferenceUpload = request.createDrillFromReferenceUpload,
+                    pendingDrillName = request.pendingDrillName,
+                )
+                if (queued == null) {
+                    _state.update {
+                        it.copy(blockedMessage = "Another upload is already in progress.")
+                    }
+                    return@launch
+                }
 
-        val requestBuilder = OneTimeWorkRequestBuilder<UploadVideoProcessingWorker>()
-            .setInputData(UploadVideoProcessingWorker.inputData(queued.jobId))
-            .addTag(UploadVideoProcessingWorker.TAG)
-            .build()
-        deps.workManager.enqueueUniqueWork(
-            UploadVideoProcessingWorker.UNIQUE_WORK_NAME,
-            ExistingWorkPolicy.KEEP,
-            requestBuilder,
-        )
-        return ActiveUploadStartResult.Started(queued.jobId)
+                val requestBuilder = OneTimeWorkRequestBuilder<UploadVideoProcessingWorker>()
+                    .setInputData(UploadVideoProcessingWorker.inputData(queued.jobId))
+                    .addTag(UploadVideoProcessingWorker.TAG)
+                    .build()
+                deps.workManager.enqueueUniqueWork(
+                    UploadVideoProcessingWorker.UNIQUE_WORK_NAME,
+                    ExistingWorkPolicy.KEEP,
+                    requestBuilder,
+                )
+            } finally {
+                enqueueInFlight.set(false)
+            }
+        }
+        return ActiveUploadStartResult.Started(ownerToken)
     }
 
     private fun startInMemoryWork(request: ActiveUploadRequest): ActiveUploadStartResult {
@@ -264,7 +277,7 @@ class ActiveUploadCoordinator {
             deps.queueRepository.observeJobs()
                 .combine(deps.sessionRepository.observeSessions()) { jobs, sessions ->
                     val nonTerminal = jobs
-                        .filter { it.status !in setOf(UploadJobStatus.COMPLETED, UploadJobStatus.FAILED, UploadJobStatus.CANCELLED) }
+                        .filter { it.status !in setOf(UploadJobStatus.COMPLETED, UploadJobStatus.FAILED, UploadJobStatus.CANCELLED, UploadJobStatus.STALLED) }
                         .maxByOrNull { it.updatedAt }
                     val current = nonTerminal ?: jobs.maxByOrNull { it.updatedAt }
                     current?.toActiveState(sessions.firstOrNull { it.id == current.sessionId })
@@ -293,12 +306,9 @@ class ActiveUploadCoordinator {
     }
 
     fun hasActiveUpload(): Boolean {
-        val deps = workDependencies
-        if (deps != null) {
-            val info = runBlocking(Dispatchers.IO) {
-                deps.workManager.getWorkInfosForUniqueWork(UploadVideoProcessingWorker.UNIQUE_WORK_NAME).get()
-            }
-            return info.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
+        if (workDependencies != null) {
+            val active = _state.value.activeSession
+            return enqueueInFlight.get() || (active != null && !active.isTerminal)
         }
         if (activeJob?.isActive != true) return false
         val active = _state.value.activeSession ?: return false
