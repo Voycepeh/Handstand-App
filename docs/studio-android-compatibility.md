@@ -28,10 +28,11 @@ Expected path:
 2. Android imports package JSON and validates via `DrillPackageValidator`.
 3. Android maps portable drills into local runtime records/catalog-compatible structures.
 4. Runtime/live coaching/upload consume `RuntimeDrillDefinition`-style contracts rather than editor-specific assumptions.
+5. Legacy Android `LEFT`/`RIGHT` camera values are normalized to portable `SIDE`; portable `SIDE` is never re-expanded to artificial left/right during package mapping.
 
 ## Compatibility notes
 
 - `SchemaVersion` is explicit and required in package manifest.
-- Portable pose joints are canonicalized to avoid source-specific naming drift.
+- Portable pose joints are canonicalized to avoid source-specific naming drift, and portable camera perspective is neutralized (no LEFT/RIGHT laterality in portable view).
 - Portable model keeps extension key/value metadata for additive compatibility.
-- Conversion preserves supported runtime fields from current records to allow round-trip migration staging.
+- Conversion preserves authored portable fields by storing a portable payload bridge in legacy cue-config metadata when legacy tables cannot represent all contract fields directly.

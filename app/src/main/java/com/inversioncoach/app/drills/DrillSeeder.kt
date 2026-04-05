@@ -162,11 +162,9 @@ object DrillSeeder {
     }
 
     private fun com.inversioncoach.app.drillpackage.model.PortableViewType.toLegacyCameraView(): String = when (this) {
-        com.inversioncoach.app.drillpackage.model.PortableViewType.LEFT_PROFILE -> DrillCameraView.LEFT
-        com.inversioncoach.app.drillpackage.model.PortableViewType.RIGHT_PROFILE -> DrillCameraView.RIGHT
         com.inversioncoach.app.drillpackage.model.PortableViewType.FRONT -> DrillCameraView.FRONT
-        com.inversioncoach.app.drillpackage.model.PortableViewType.SIDE -> DrillCameraView.LEFT
-        com.inversioncoach.app.drillpackage.model.PortableViewType.ANY -> DrillCameraView.FREESTYLE
+        com.inversioncoach.app.drillpackage.model.PortableViewType.SIDE -> DrillCameraView.SIDE
+        com.inversioncoach.app.drillpackage.model.PortableViewType.BACK -> DrillCameraView.BACK
     }
 
     private fun shouldUpdateSeededRecord(

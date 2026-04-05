@@ -63,7 +63,7 @@ CaliVision keeps users in drill context from start to review:
 - **Drills**: user-facing drill browsing path for operational use. Selecting a drill opens **Drill Workspace**.
 - **Manage Drills**: create/edit path for drill packages (new/import/open to Drill Studio/export/delete).
 - **Drill Studio**: current in-app authoring path; future full authoring source of truth is planned for web Studio.
-- **Android runtime role**: runtime/live coaching client that consumes portable drill packages for compatibility with future web Studio exports.
+- **Android runtime role**: runtime/live coaching client that consumes portable drill packages for compatibility with future web Studio exports; portable camera views are neutral perspectives (`FRONT`, `SIDE`, `BACK`) and do not encode left/right laterality.
 - **Drill Workspace**: per-drill usage hub for coaching, upload attempts, and session review.
 - **Live Session**: countdown-gated real-time coaching with overlays.
 - **Upload / Reference Training**: analyze imported clips and optionally produce drill-linked references.

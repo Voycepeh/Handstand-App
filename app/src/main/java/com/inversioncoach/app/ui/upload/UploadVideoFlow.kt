@@ -1482,7 +1482,7 @@ class DefaultUploadVideoAnalysisRunner(
             DrillCameraView.RIGHT -> CameraViewConstraint.SIDE_RIGHT
             DrillCameraView.BACK -> CameraViewConstraint.BACK
             DrillCameraView.FREESTYLE -> CameraViewConstraint.ANY
-            "SIDE" -> CameraViewConstraint.SIDE_LEFT
+            DrillCameraView.SIDE -> CameraViewConstraint.SIDE_LEFT
             else -> CameraViewConstraint.ANY
         }
         return MovementProfile(
@@ -1499,7 +1499,7 @@ class DefaultUploadVideoAnalysisRunner(
                 minConfidence = 0.35f,
                 requiredLandmarks = setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip"),
                 minVisibleLandmarkCount = 3,
-                sideViewPrimary = drill.cameraView in setOf(DrillCameraView.LEFT, DrillCameraView.RIGHT, "SIDE"),
+                sideViewPrimary = drill.cameraView in setOf(DrillCameraView.LEFT, DrillCameraView.RIGHT, DrillCameraView.SIDE),
             ),
             keyJoints = drill.keyJoints.ifEmpty { setOf("left_shoulder", "right_shoulder", "left_hip", "right_hip") },
         )

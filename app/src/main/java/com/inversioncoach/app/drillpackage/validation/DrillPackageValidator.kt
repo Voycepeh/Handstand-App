@@ -18,6 +18,16 @@ object DrillPackageValidator {
             if (drill.id.isBlank()) errors += "Drill id is required."
             if (drill.title.isBlank()) errors += "Drill title is required for ${drill.id}."
 
+            if (drill.supportedViews.isEmpty()) {
+                errors += "Supported views are required for ${drill.id}."
+            }
+            if (drill.supportedViews.distinct().size != drill.supportedViews.size) {
+                errors += "Supported views must be unique for ${drill.id}."
+            }
+            if (drill.cameraView !in drill.supportedViews) {
+                errors += "Primary camera view must be included in supported views for ${drill.id}."
+            }
+
             val orders = drill.phases.map { it.order }
             if (orders.distinct().size != orders.size) {
                 errors += "Phase order must be unique for ${drill.id}."

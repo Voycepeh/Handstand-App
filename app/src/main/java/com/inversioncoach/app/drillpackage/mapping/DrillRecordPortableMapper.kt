@@ -4,22 +4,26 @@ import com.inversioncoach.app.drillpackage.model.PortableDrill
 import com.inversioncoach.app.drillpackage.model.PortablePhase
 import com.inversioncoach.app.drillpackage.model.PortableViewType
 import com.inversioncoach.app.drills.DrillCameraView
+import com.inversioncoach.app.drills.DrillCueConfigCodec
 import com.inversioncoach.app.drills.DrillSourceType
 import com.inversioncoach.app.model.DrillDefinitionRecord
 
 object DrillRecordPortableMapper {
     fun toPortableDrill(record: DrillDefinitionRecord): PortableDrill {
+        val preservedPortable = PortableDrillLegacyPayloadCodec.decodeFromCueConfig(record.cueConfigJson)
         val phases = record.phaseSchemaJson.split('|').filter { it.isNotBlank() }
         val keyJoints = record.keyJointsJson.split('|').filter { it.isNotBlank() }
-        return PortableDrill(
+        val parsedCue = DrillCueConfigCodec.parse(record.cueConfigJson)
+
+        val baseline = preservedPortable ?: PortableDrill(
             id = record.id,
             title = record.name,
             description = record.description,
             family = "runtime",
             movementType = record.movementMode,
             cameraView = record.cameraView.toPortableView(),
-            supportedViews = listOf(record.cameraView.toPortableView()),
-            comparisonMode = "POSE_TIMELINE",
+            supportedViews = listOf(record.cameraView.toPortableView()).distinct(),
+            comparisonMode = parsedCue.comparisonMode,
             normalizationBasis = record.normalizationBasisJson,
             keyJoints = keyJoints.map(PortableJointNames::canonicalize),
             tags = listOf(record.sourceType),
@@ -32,7 +36,24 @@ object DrillRecordPortableMapper {
             },
             poses = emptyList(),
             metricThresholds = emptyMap(),
-            extensions = mapOf(
+            extensions = emptyMap(),
+        )
+
+        return baseline.copy(
+            id = record.id,
+            title = record.name,
+            description = record.description,
+            movementType = record.movementMode,
+            normalizationBasis = record.normalizationBasisJson,
+            keyJoints = if (keyJoints.isNotEmpty()) keyJoints.map(PortableJointNames::canonicalize) else baseline.keyJoints,
+            phases = if (phases.isNotEmpty()) phases.mapIndexed { index, phase ->
+                baseline.phases.firstOrNull { it.id == phase }?.copy(order = index)
+                    ?: PortablePhase(id = phase, label = phase.replaceFirstChar { it.uppercase() }, order = index)
+            } else baseline.phases,
+            cameraView = baseline.cameraView,
+            supportedViews = baseline.supportedViews.ifEmpty { listOf(baseline.cameraView) }.distinct(),
+            comparisonMode = baseline.comparisonMode,
+            extensions = baseline.extensions + mapOf(
                 "sourceType" to record.sourceType,
                 "status" to record.status,
                 "cueConfig" to record.cueConfigJson,
@@ -48,6 +69,15 @@ object DrillRecordPortableMapper {
     ): DrillDefinitionRecord {
         val phaseSchemaJson = portable.phases.sortedBy { it.order }.joinToString("|") { it.id }
         val keyJointsJson = portable.keyJoints.joinToString("|")
+        val sourceType = portable.extensions["sourceType"] ?: existing?.sourceType ?: DrillSourceType.USER_CREATED
+        val status = portable.extensions["status"] ?: existing?.status ?: "DRAFT"
+        val version = portable.extensions["version"]?.toIntOrNull() ?: existing?.version ?: 1
+
+        val cueConfigWithPayload = PortableDrillLegacyPayloadCodec.mergeIntoCueConfig(
+            existingCueConfig = portable.extensions["cueConfig"] ?: existing?.cueConfigJson,
+            portable = portable,
+        )
+
         return DrillDefinitionRecord(
             id = portable.id,
             name = portable.title,
@@ -57,10 +87,10 @@ object DrillRecordPortableMapper {
             phaseSchemaJson = phaseSchemaJson,
             keyJointsJson = keyJointsJson,
             normalizationBasisJson = portable.normalizationBasis,
-            cueConfigJson = portable.extensions["cueConfig"].orEmpty(),
-            sourceType = portable.extensions["sourceType"] ?: existing?.sourceType ?: DrillSourceType.USER_CREATED,
-            status = portable.extensions["status"] ?: existing?.status ?: "DRAFT",
-            version = portable.extensions["version"]?.toIntOrNull() ?: existing?.version ?: 1,
+            cueConfigJson = cueConfigWithPayload,
+            sourceType = sourceType,
+            status = status,
+            version = version,
             createdAtMs = existing?.createdAtMs ?: nowMs,
             updatedAtMs = nowMs,
         )
@@ -68,18 +98,18 @@ object DrillRecordPortableMapper {
 
     private fun String.toPortableView(): PortableViewType = when (this) {
         DrillCameraView.FRONT -> PortableViewType.FRONT
-        DrillCameraView.LEFT -> PortableViewType.LEFT_PROFILE
-        DrillCameraView.RIGHT -> PortableViewType.RIGHT_PROFILE
-        DrillCameraView.BACK -> PortableViewType.SIDE
-        DrillCameraView.FREESTYLE -> PortableViewType.ANY
-        else -> PortableViewType.ANY
+        DrillCameraView.BACK -> PortableViewType.BACK
+        DrillCameraView.LEFT,
+        DrillCameraView.RIGHT,
+        DrillCameraView.SIDE,
+        -> PortableViewType.SIDE
+        DrillCameraView.FREESTYLE -> PortableViewType.SIDE
+        else -> PortableViewType.SIDE
     }
 
     private fun PortableViewType.toLegacyCameraView(): String = when (this) {
         PortableViewType.FRONT -> DrillCameraView.FRONT
-        PortableViewType.LEFT_PROFILE -> DrillCameraView.LEFT
-        PortableViewType.RIGHT_PROFILE -> DrillCameraView.RIGHT
-        PortableViewType.SIDE -> DrillCameraView.LEFT
-        PortableViewType.ANY -> DrillCameraView.FREESTYLE
+        PortableViewType.BACK -> DrillCameraView.BACK
+        PortableViewType.SIDE -> DrillCameraView.SIDE
     }
 }

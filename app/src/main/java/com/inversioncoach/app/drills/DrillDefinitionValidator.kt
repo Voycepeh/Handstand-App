@@ -14,6 +14,7 @@ object DrillDefinitionValidator {
                 DrillCameraView.RIGHT,
                 DrillCameraView.FRONT,
                 DrillCameraView.BACK,
+                DrillCameraView.SIDE,
                 DrillCameraView.FREESTYLE,
             )
         ) {

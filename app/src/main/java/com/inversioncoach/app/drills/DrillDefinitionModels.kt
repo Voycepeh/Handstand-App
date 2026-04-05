@@ -21,6 +21,7 @@ object DrillCameraView {
     const val LEFT = "LEFT"
     const val RIGHT = "RIGHT"
     const val FRONT = "FRONT"
+    const val SIDE = "SIDE"
     const val BACK = "BACK"
     const val FREESTYLE = "FREESTYLE"
 }

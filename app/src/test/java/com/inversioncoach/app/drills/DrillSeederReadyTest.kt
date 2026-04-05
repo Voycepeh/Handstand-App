@@ -44,6 +44,8 @@ class DrillSeederReadyTest {
         assertTrue(seeded.all { it.cueConfigJson.contains("seedSource:system") })
         assertTrue(seeded.all { it.cueConfigJson.contains("studioPayload:") })
         assertTrue(seeded.none { it.name.isBlank() || it.name.contains("draft", ignoreCase = true) })
+        assertTrue(seeded.none { it.cameraView == DrillCameraView.LEFT || it.cameraView == DrillCameraView.RIGHT })
+        assertTrue(seeded.any { it.cameraView == DrillCameraView.SIDE })
     }
 
     @Test

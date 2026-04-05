@@ -34,7 +34,7 @@ object DrillCatalogPortableMapper {
         family = drill.family,
         movementType = drill.movementType.name,
         cameraView = drill.cameraView.toPortableView(),
-        supportedViews = drill.supportedViews.map { it.toPortableView() }.ifEmpty { listOf(drill.cameraView.toPortableView()) },
+        supportedViews = drill.supportedViews.map { it.toPortableView() }.ifEmpty { listOf(drill.cameraView.toPortableView()) }.distinct(),
         comparisonMode = drill.comparisonMode.name,
         normalizationBasis = drill.normalizationBasis.name,
         keyJoints = drill.keyJoints.map(PortableJointNames::canonicalize),
@@ -42,6 +42,10 @@ object DrillCatalogPortableMapper {
         phases = drill.phases.map(::toPortablePhase),
         poses = drill.skeletonTemplate.phasePoses.map { it.toPortablePose(drill.cameraView.toPortableView()) },
         metricThresholds = drill.calibration.metricThresholds,
+        extensions = mapOf(
+            "legacyCatalogCameraView" to drill.cameraView.name,
+            "legacyCatalogSupportedViews" to drill.supportedViews.joinToString(",") { it.name },
+        ),
     )
 
     fun toCatalog(packageModel: DrillPackage): DrillCatalog = DrillCatalog(
@@ -52,6 +56,24 @@ object DrillCatalogPortableMapper {
 
     fun toCatalogDrill(drill: PortableDrill): DrillTemplate {
         val sortedPhases = drill.phases.sortedBy { it.order }
+        val restoredLegacyView = runCatching {
+            drill.extensions["legacyCatalogCameraView"]?.let(CatalogCameraView::valueOf)
+        }.getOrNull()
+
+        if (drill.cameraView == PortableViewType.BACK && restoredLegacyView == null) {
+            error("Portable BACK camera view cannot be mapped to current catalog schema without explicit legacyCatalogCameraView extension.")
+        }
+
+        val cameraView = restoredLegacyView ?: drill.cameraView.toCatalogView()
+        val restoredSupportedViews = drill.extensions["legacyCatalogSupportedViews"]
+            ?.split(',')
+            ?.mapNotNull { runCatching { CatalogCameraView.valueOf(it) }.getOrNull() }
+            .orEmpty()
+
+        val supportedViews = if (restoredSupportedViews.isNotEmpty()) restoredSupportedViews else {
+            drill.supportedViews.map { it.toCatalogView() }.ifEmpty { listOf(cameraView) }
+        }
+
         return DrillTemplate(
             id = drill.id,
             title = drill.title,
@@ -60,8 +82,8 @@ object DrillCatalogPortableMapper {
             movementType = runCatching { com.inversioncoach.app.drills.catalog.CatalogMovementType.valueOf(drill.movementType) }
                 .getOrDefault(com.inversioncoach.app.drills.catalog.CatalogMovementType.HOLD),
             tags = drill.tags,
-            cameraView = drill.cameraView.toCatalogView(),
-            supportedViews = drill.supportedViews.map { it.toCatalogView() }.ifEmpty { listOf(drill.cameraView.toCatalogView()) },
+            cameraView = cameraView,
+            supportedViews = supportedViews,
             analysisPlane = com.inversioncoach.app.drills.catalog.CatalogAnalysisPlane.SAGITTAL,
             comparisonMode = runCatching { com.inversioncoach.app.drills.catalog.CatalogComparisonMode.valueOf(drill.comparisonMode) }
                 .getOrDefault(com.inversioncoach.app.drills.catalog.CatalogComparisonMode.POSE_TIMELINE),
@@ -130,18 +152,16 @@ object DrillCatalogPortableMapper {
     }
 
     private fun CatalogCameraView.toPortableView(): PortableViewType = when (this) {
-        CatalogCameraView.SIDE -> PortableViewType.SIDE
         CatalogCameraView.FRONT -> PortableViewType.FRONT
-        CatalogCameraView.LEFT_PROFILE -> PortableViewType.LEFT_PROFILE
-        CatalogCameraView.RIGHT_PROFILE -> PortableViewType.RIGHT_PROFILE
+        CatalogCameraView.SIDE,
+        CatalogCameraView.LEFT_PROFILE,
+        CatalogCameraView.RIGHT_PROFILE,
+        -> PortableViewType.SIDE
     }
 
     private fun PortableViewType.toCatalogView(): CatalogCameraView = when (this) {
-        PortableViewType.SIDE,
-        PortableViewType.ANY,
-        -> CatalogCameraView.SIDE
         PortableViewType.FRONT -> CatalogCameraView.FRONT
-        PortableViewType.LEFT_PROFILE -> CatalogCameraView.LEFT_PROFILE
-        PortableViewType.RIGHT_PROFILE -> CatalogCameraView.RIGHT_PROFILE
+        PortableViewType.SIDE -> CatalogCameraView.SIDE
+        PortableViewType.BACK -> error("Portable BACK camera view requires explicit legacyCatalogCameraView extension for catalog mapping.")
     }
 }

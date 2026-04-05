@@ -7,12 +7,13 @@ data class SchemaVersion(
     val token: String = "$major.$minor"
 }
 
+/**
+ * Portable camera perspectives are neutral and do not encode laterality.
+ */
 enum class PortableViewType {
-    SIDE,
     FRONT,
-    LEFT_PROFILE,
-    RIGHT_PROFILE,
-    ANY,
+    SIDE,
+    BACK,
 }
 
 data class PortableAssetRef(

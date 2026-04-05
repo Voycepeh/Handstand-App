@@ -54,4 +54,33 @@ class DrillPackageValidatorTest {
 
         assertTrue(DrillPackageValidator.validate(pkg).isEmpty())
     }
+
+    @Test
+    fun rejectsPrimaryViewMissingFromSupportedViews() {
+        val pkg = DrillPackage(
+            manifest = DrillManifest("test", SchemaVersion(1, 0), "test", 1),
+            drills = listOf(
+                PortableDrill(
+                    id = "drill",
+                    title = "Drill",
+                    description = "",
+                    family = "core",
+                    movementType = "HOLD",
+                    cameraView = PortableViewType.BACK,
+                    supportedViews = listOf(PortableViewType.SIDE),
+                    comparisonMode = "POSE_TIMELINE",
+                    normalizationBasis = "HIPS",
+                    keyJoints = listOf("left_shoulder"),
+                    tags = emptyList(),
+                    phases = listOf(PortablePhase(id = "setup", label = "Setup", order = 0)),
+                    poses = emptyList(),
+                    metricThresholds = emptyMap(),
+                ),
+            ),
+        )
+
+        val errors = DrillPackageValidator.validate(pkg)
+        assertTrue(errors.any { it.contains("Primary camera view") })
+    }
+
 }

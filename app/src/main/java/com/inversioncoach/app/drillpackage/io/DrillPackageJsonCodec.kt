@@ -110,7 +110,7 @@ object DrillPackageJsonCodec {
         description = optString("description"),
         family = optString("family", "runtime"),
         movementType = getString("movementType"),
-        cameraView = PortableViewType.valueOf(optString("cameraView", PortableViewType.ANY.name)),
+        cameraView = PortableViewType.valueOf(optString("cameraView", PortableViewType.SIDE.name)),
         supportedViews = optJSONArray("supportedViews").toList { PortableViewType.valueOf(getString(it)) },
         comparisonMode = optString("comparisonMode", "POSE_TIMELINE"),
         normalizationBasis = optString("normalizationBasis", "HIPS"),
@@ -137,7 +137,7 @@ object DrillPackageJsonCodec {
     private fun JSONObject.toPose(): PortablePose = PortablePose(
         phaseId = getString("phaseId"),
         name = optString("name", getString("phaseId")),
-        viewType = PortableViewType.valueOf(optString("viewType", PortableViewType.ANY.name)),
+        viewType = PortableViewType.valueOf(optString("viewType", PortableViewType.SIDE.name)),
         joints = getJSONObject("joints").let { jointsJson ->
             jointsJson.keys().asSequence().associateWith { key -> jointsJson.getJSONObject(key).toJoint() }
         },
