@@ -233,6 +233,26 @@ class UploadedVideoAnalysisTest {
         assertTrue((result.telemetry["total_ms"] ?: -1L) >= (result.telemetry["decode_ms"] ?: 0L))
     }
 
+    @Test
+    fun analyzerTelemetryKeepsAcceptedCountsAlignedWithOverlayTimeline() {
+        val profile = ExistingDrillToProfileAdapter().fromDrill(DrillType.FREESTYLE)
+        val source = object : VideoPoseFrameSource {
+            override fun decode(videoUri: Uri): Sequence<PoseFrame> = sequence {
+                yield(frame(0, 0.9f))
+                yield(frame(120, 0.85f))
+                yield(frame(240, 0f))
+            }
+        }
+
+        val result = UploadedVideoAnalyzer(source).analyze(
+            videoUri = Uri.parse("file:///tmp/accepted-counts.mp4"),
+            profile = profile,
+        )
+
+        assertEquals(result.overlayTimeline.size.toLong(), result.telemetry["frames_accepted"])
+        assertEquals(3L, result.telemetry["total_frames_processed"])
+    }
+
     private fun frame(ts: Long, confidence: Float): PoseFrame = PoseFrame(
         timestampMs = ts,
         confidence = confidence,
