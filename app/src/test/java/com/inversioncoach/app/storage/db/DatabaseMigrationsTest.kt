@@ -60,12 +60,21 @@ class DatabaseMigrationsTest {
     }
 
     @Test
+    fun includesMigrationFrom21To22() {
+        val has21To22 = DatabaseMigrations.ALL.any { migration ->
+            migration.startVersion == 21 && migration.endVersion == 22
+        }
+
+        assertTrue("DatabaseMigrations.ALL must contain Migration(21, 22)", has21To22)
+    }
+
+    @Test
     fun migrationsAreUniqueAndContiguous() {
         val pairs = DatabaseMigrations.ALL.map { it.startVersion to it.endVersion }
         assertEquals("Migration pairs should be unique to avoid merge-conflict drift", pairs.toSet().size, pairs.size)
 
-        val expected = (11..20).map { it to it + 1 }
-        assertEquals("Migrations should cover every version hop from 11 to 21", expected, pairs)
+        val expected = (11..21).map { it to it + 1 }
+        assertEquals("Migrations should cover every version hop from 11 to 22", expected, pairs)
     }
 
     @Test

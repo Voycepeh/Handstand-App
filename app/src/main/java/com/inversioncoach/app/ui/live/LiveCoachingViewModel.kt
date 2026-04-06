@@ -196,6 +196,9 @@ class LiveCoachingViewModel(
     private val validFrameScores = mutableListOf<Int>()
     private var activeBodyProfile: UserBodyProfile? = null
     private val cueOrchestrator = SessionCueOrchestrator()
+    private var liveControlState = LiveCoachingControlState()
+    private var frameHintStreak = 0
+    private var currentFramingHint: String? = null
 
     val sessionTitle: String
         get() = if (sessionMode == SessionMode.FREESTYLE) "Freestyle Live Coaching session" else "${drillType.displayName} session"
@@ -228,6 +231,61 @@ class LiveCoachingViewModel(
 
     fun onCameraPermissionChanged(granted: Boolean) {
         _uiState.value = _uiState.value.copy(cameraPermissionGranted = granted)
+    }
+
+    fun applyPersistedLivePreferences(settings: UserSettings) {
+        val persistedFacing = LiveCoachingPreferenceCodec.cameraFacingFrom(settings.liveCoachingCameraFacing)
+        val persistedViewPreset = LiveCoachingPreferenceCodec.viewPresetFrom(settings.liveCoachingViewPreset)
+        val zoomByCamera = LiveCoachingPreferenceCodec.zoomByCameraFrom(settings.liveCoachingZoomSelections)
+        val persistedZoom = zoomByCamera[persistedFacing] ?: 1f
+        updateLiveControls(
+            selectedCameraFacing = persistedFacing,
+            selectedZoomRatio = persistedZoom,
+            selectedViewPreset = persistedViewPreset,
+            mirrorPreview = persistedFacing == LiveCameraFacing.FRONT,
+        )
+    }
+
+    fun updateLiveControls(
+        selectedCameraFacing: LiveCameraFacing = liveControlState.selectedCameraFacing,
+        selectedZoomRatio: Float = liveControlState.selectedZoomRatio,
+        selectedViewPreset: LiveViewPreset = liveControlState.selectedViewPreset,
+        mirrorPreview: Boolean = selectedCameraFacing == LiveCameraFacing.FRONT,
+        availableFacings: Set<LiveCameraFacing> = _uiState.value.availableCameraFacings.mapNotNull { raw ->
+            LiveCameraFacing.entries.firstOrNull { it.encoded == raw }
+        }.toSet(),
+        availableZoomRatios: List<Float> = _uiState.value.availableZoomRatios,
+    ) {
+        liveControlState = LiveCoachingControlState(
+            selectedCameraFacing = selectedCameraFacing,
+            selectedZoomRatio = selectedZoomRatio,
+            selectedViewPreset = selectedViewPreset,
+            mirrorPreview = mirrorPreview,
+        )
+        _uiState.value = _uiState.value.copy(
+            liveCameraFacing = selectedCameraFacing.encoded,
+            selectedZoomRatio = selectedZoomRatio,
+            liveViewPreset = selectedViewPreset.encoded,
+            mirrorPreview = mirrorPreview,
+            availableCameraFacings = availableFacings.map { it.encoded }.toSet(),
+            availableZoomRatios = availableZoomRatios,
+        )
+    }
+
+    fun onCameraBound(result: com.inversioncoach.app.camera.CameraBindResult) {
+        val resolvedZoom = resolvedZoomSelection(liveControlState.selectedZoomRatio, result.supportedZoomRatios)
+        updateLiveControls(
+            selectedCameraFacing = result.selectedCameraFacing,
+            selectedZoomRatio = resolvedZoom,
+            selectedViewPreset = liveControlState.selectedViewPreset,
+            mirrorPreview = result.selectedCameraFacing == LiveCameraFacing.FRONT,
+            availableFacings = result.availableCameraFacings,
+            availableZoomRatios = result.supportedZoomRatios,
+        )
+    }
+
+    fun selectViewPreset(preset: LiveViewPreset) {
+        updateLiveControls(selectedViewPreset = preset)
     }
 
     fun onCameraReady(ready: Boolean, error: String? = null) {
@@ -376,7 +434,7 @@ class LiveCoachingViewModel(
         val smoothed = smoother.smooth(corrected.frame)
         val calibration = UserCalibrationSettings()
         val motionEligible = sessionMode == SessionMode.DRILL && sessionIsActive && (readiness?.timerEligible ?: false)
-        val freestyleViewMode = if (sessionMode == SessionMode.FREESTYLE) freestyleOrientationClassifier.classify(smoothed.joints) else FreestyleViewMode.UNKNOWN
+        val freestyleViewMode = resolvedFreestyleMode(smoothed.joints)
         val motion = if (motionEligible) {
             motionPipeline.analyze(
                 frame = corrected.frame,
@@ -388,11 +446,16 @@ class LiveCoachingViewModel(
         }
         _smoothedFrame.value = smoothed
         if (!overlayCaptureFrozen && shouldCaptureOverlayFrame(smoothed.timestampMs)) {
+            val effectiveView = when (liveControlState.selectedViewPreset) {
+                LiveViewPreset.FRONT -> com.inversioncoach.app.overlay.EffectiveView.FRONT
+                LiveViewPreset.SIDE -> com.inversioncoach.app.overlay.EffectiveView.SIDE
+                LiveViewPreset.FREESTYLE -> sessionOptions.effectiveView
+            }
             val overlayFrame = overlayStabilizer.stabilize(
                 frame = smoothed,
                 sessionMode = sessionMode,
                 drillCameraSide = if (sessionMode == SessionMode.FREESTYLE) null else sessionOptions.drillCameraSide,
-                effectiveView = sessionOptions.effectiveView,
+                effectiveView = effectiveView,
                 showIdealLine = sessionOptions.showIdealLine,
                 showSkeleton = sessionOptions.showSkeletonOverlay,
                 showCenterOfGravity = sessionOptions.showCenterOfGravity,
@@ -442,7 +505,7 @@ class LiveCoachingViewModel(
         } else {
             null
         }
-        val rejectionMessage = setupMessage ?: rejectionMessageFor(rejectionReason)
+        val rejectionMessage = setupMessage ?: framingHintFor(smoothed, corrected.unreliableJointNames, rejectionReason)
         val readinessSummary = readiness?.let {
             "state=${it.state} preferred=${it.preferredSide} actual=${it.actualSide} left=${"%.2f".format(it.leftQuality.quality)} right=${"%.2f".format(it.rightQuality.quality)} timer=${it.timerEligible} rep=${it.repEligible} cue=${it.cueEligible} blocked=${it.blockedReason}"
         } ?: "state=unsupported"
@@ -601,6 +664,86 @@ class LiveCoachingViewModel(
         "wrong_orientation" -> "Wrong orientation for this drill. Use a clear side view."
         "frame_processing_failure" -> "Frame processing failure. Hold steady and retry."
         else -> null
+    }
+
+    private fun framingHintFor(
+        smoothed: SmoothedPoseFrame,
+        unreliableJointNames: Set<String>,
+        rejectionReason: String,
+    ): String? {
+        val nextHint = when {
+            rejectionReason == "too_far_from_camera" -> "Subject looks small in frame. Move closer or use 1x."
+            rejectionReason == "body_not_fully_visible" || bodyPartiallyOutOfFrame(smoothed) -> "Body is partially out of frame. Step back and center your full body."
+            rejectionReason == "low_confidence" || smoothed.confidence < 0.45f || unreliableJointNames.size > 6 -> "Tracking unstable. Improve lighting and hold a stable pose."
+            smoothed.joints.isNotEmpty() && smoothed.joints.map { it.y }.average().toFloat() > 0.72f -> "Move camera slightly higher for better full-body framing."
+            else -> null
+        }
+
+        if (nextHint == currentFramingHint) {
+            frameHintStreak += 1
+        } else {
+            currentFramingHint = nextHint
+            frameHintStreak = 1
+        }
+
+        return if (nextHint == null) {
+            null
+        } else if (frameHintStreak >= 6) {
+            nextHint
+        } else {
+            _uiState.value.warningMessage
+        }
+    }
+
+    private fun bodyPartiallyOutOfFrame(frame: SmoothedPoseFrame): Boolean {
+        val joints = frame.joints.filter { it.visibility > 0.35f }
+        if (joints.isEmpty()) return false
+        val minX = joints.minOf { it.x }
+        val maxX = joints.maxOf { it.x }
+        val minY = joints.minOf { it.y }
+        val maxY = joints.maxOf { it.y }
+        return minX < 0.03f || maxX > 0.97f || minY < 0.03f || maxY > 0.97f
+    }
+
+    private fun resolvedFreestyleMode(joints: List<com.inversioncoach.app.model.JointPoint>): FreestyleViewMode {
+        if (sessionMode != SessionMode.FREESTYLE) return FreestyleViewMode.UNKNOWN
+        return when (liveControlState.selectedViewPreset) {
+            LiveViewPreset.FREESTYLE -> freestyleOrientationClassifier.classify(joints)
+            LiveViewPreset.FRONT -> FreestyleViewMode.FRONT
+            LiveViewPreset.SIDE -> {
+                val adaptive = freestyleOrientationClassifier.classify(joints)
+                when (adaptive) {
+                    FreestyleViewMode.RIGHT_PROFILE,
+                    FreestyleViewMode.LEFT_PROFILE,
+                    -> adaptive
+                    else -> {
+                        val leftVisibility = joints.filter { it.name.startsWith("left_") }.sumOf { it.visibility.toDouble() }
+                        val rightVisibility = joints.filter { it.name.startsWith("right_") }.sumOf { it.visibility.toDouble() }
+                        if (rightVisibility > leftVisibility) FreestyleViewMode.RIGHT_PROFILE else FreestyleViewMode.LEFT_PROFILE
+                    }
+                }
+            }
+        }
+    }
+
+    fun persistLivePreferences(settings: UserSettings) {
+        viewModelScope.launch {
+            val zoomByCamera = LiveCoachingPreferenceCodec.zoomByCameraFrom(settings.liveCoachingZoomSelections).toMutableMap()
+            zoomByCamera[liveControlState.selectedCameraFacing] = liveControlState.selectedZoomRatio
+            repository.saveSettings(
+                settings.copy(
+                    liveCoachingCameraFacing = liveControlState.selectedCameraFacing.encoded,
+                    liveCoachingViewPreset = liveControlState.selectedViewPreset.encoded,
+                    liveCoachingZoomSelections = LiveCoachingPreferenceCodec.encodeZoomByCamera(zoomByCamera),
+                ),
+            )
+        }
+    }
+
+    private fun effectiveViewForCurrentPreset(): com.inversioncoach.app.overlay.EffectiveView = when (liveControlState.selectedViewPreset) {
+        LiveViewPreset.FRONT -> com.inversioncoach.app.overlay.EffectiveView.FRONT
+        LiveViewPreset.SIDE -> com.inversioncoach.app.overlay.EffectiveView.SIDE
+        LiveViewPreset.FREESTYLE -> sessionOptions.effectiveView
     }
 
 
@@ -1100,7 +1243,7 @@ class LiveCoachingViewModel(
 
     private fun calibrationMetadataJson(): String {
         val profile = activeMovementProfile ?: return ""
-        return "calibrationProfileVersion:${profile.profileVersion};calibrationUpdatedAtMs:${profile.updatedAtMs};effectiveView:${sessionOptions.effectiveView.name}"
+        return "calibrationProfileVersion:${profile.profileVersion};calibrationUpdatedAtMs:${profile.updatedAtMs};effectiveView:${effectiveViewForCurrentPreset().name}"
     }
 
     private suspend fun maybePersistLearnedRepTemplate(nowMs: Long): DrillMovementProfile? {

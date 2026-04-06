@@ -351,6 +351,14 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_21_22: Migration = object : Migration(21, 22) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE user_settings ADD COLUMN liveCoachingCameraFacing TEXT NOT NULL DEFAULT 'BACK'")
+            db.execSQL("ALTER TABLE user_settings ADD COLUMN liveCoachingViewPreset TEXT NOT NULL DEFAULT 'FREESTYLE'")
+            db.execSQL("ALTER TABLE user_settings ADD COLUMN liveCoachingZoomSelections TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
 
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_11_12,
@@ -363,5 +371,6 @@ object DatabaseMigrations {
         MIGRATION_18_19,
         MIGRATION_19_20,
         MIGRATION_20_21,
+        MIGRATION_21_22,
     )
 }

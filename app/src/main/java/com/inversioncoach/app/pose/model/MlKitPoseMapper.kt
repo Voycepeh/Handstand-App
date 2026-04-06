@@ -62,5 +62,6 @@ class MlKitPoseMapper {
         analysisWidth = frame.analysisWidth,
         analysisHeight = frame.analysisHeight,
         analysisRotationDegrees = frame.analysisRotationDegrees,
+        mirrored = frame.mirrored,
     )
 }

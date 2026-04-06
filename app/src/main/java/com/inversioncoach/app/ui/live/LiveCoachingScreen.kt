@@ -11,12 +11,14 @@ import androidx.camera.view.PreviewView
 import androidx.camera.view.PreviewView.ScaleType
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +26,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
@@ -43,6 +47,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,6 +65,7 @@ import com.inversioncoach.app.model.SessionMode
 import com.inversioncoach.app.model.canonicalizeFor
 import com.inversioncoach.app.motion.DrillCatalog
 import com.inversioncoach.app.motion.RepMode
+import com.inversioncoach.app.overlay.EffectiveView
 import com.inversioncoach.app.overlay.FreestyleViewMode
 import com.inversioncoach.app.overlay.OverlayRenderer
 import com.inversioncoach.app.pose.PoseAnalyzer
@@ -71,6 +78,7 @@ import com.inversioncoach.app.ui.common.computeSessionDurationMs
 import com.inversioncoach.app.ui.common.formatSessionDateTime
 import com.inversioncoach.app.ui.common.formatSessionDuration
 import java.util.concurrent.Executors
+import kotlin.math.abs
 
 private const val TAG = "LiveCoachingScreen"
 private val overlayPanelShape = RoundedCornerShape(14.dp)
@@ -109,6 +117,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val voiceCoach = remember(context) { VoiceCoach(context) }
     val sessionRecorder = remember(context) { SessionRecorder(context) }
+    val previewViewState = remember { mutableStateOf<PreviewView?>(null) }
     val currentSessionTitle by rememberUpdatedState(newValue = vm.sessionTitle)
     val currentUiState by rememberUpdatedState(newValue = uiState)
     val showDetailedStats = rememberSaveable { mutableStateOf(false) }
@@ -154,6 +163,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
             onPoseFrame = { vm.onPoseFrame(it, currentSettings) },
             onAnalyzerWarning = vm::onAnalyzerWarning,
             backgroundExecutor = analyzerExecutor,
+            isMirrored = { uiState.mirrorPreview },
         )
     }
 
@@ -173,6 +183,9 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         vm.onCameraPermissionChanged(granted)
         if (!granted) permissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+    LaunchedEffect(settings.id) {
+        vm.applyPersistedLivePreferences(settings)
     }
 
     DisposableEffect(Unit) {
@@ -244,15 +257,39 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                 factory = { ctx ->
                     PreviewView(ctx).apply {
                         scaleType = livePreviewScaleType
-                        post {
-                            cameraManager.bind(lifecycleOwner, this, analyzer, resolvedOptions.zoomOutCamera) { ready, error ->
-                                vm.onCameraReady(ready, error)
-                            }
-                        }
+                        previewViewState.value = this
                     }
                 },
             )
+            LaunchedEffect(
+                uiState.cameraPermissionGranted,
+                uiState.liveCameraFacing,
+                previewViewState.value,
+            ) {
+                val preview = previewViewState.value ?: return@LaunchedEffect
+                if (!uiState.cameraPermissionGranted) return@LaunchedEffect
+                preview.scaleX = if (uiState.mirrorPreview) -1f else 1f
+                val preferredFacing = LiveCameraFacing.entries.firstOrNull { it.encoded == uiState.liveCameraFacing } ?: LiveCameraFacing.BACK
+                cameraManager.bind(
+                    lifecycleOwner = lifecycleOwner,
+                    previewView = preview,
+                    analyzer = analyzer,
+                    preferredFacing = preferredFacing,
+                    preferredZoomRatio = uiState.selectedZoomRatio,
+                ) { ready, error, result ->
+                    vm.onCameraReady(ready, error)
+                    result?.let {
+                        vm.onCameraBound(it)
+                        vm.persistLivePreferences(settings)
+                    }
+                }
+            }
             if (resolvedOptions.showSkeletonOverlay) {
+                val effectiveView = when (uiState.liveViewPreset) {
+                    LiveViewPreset.FRONT.encoded -> EffectiveView.FRONT
+                    LiveViewPreset.SIDE.encoded -> EffectiveView.SIDE
+                    else -> resolvedOptions.effectiveView
+                }
                 OverlayRenderer(
                     frame = smoothed,
                     drillType = drillType,
@@ -268,7 +305,7 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                     activeFault = uiState.activeFault,
                     cueText = if (uiState.sessionMode == SessionMode.FREESTYLE) "" else uiState.currentCue,
                     drillCameraSide = resolvedOptions.drillCameraSide,
-                    effectiveView = resolvedOptions.effectiveView,
+                    effectiveView = effectiveView,
                     freestyleViewMode = uiState.freestyleViewMode,
                     unreliableJointNames = uiState.unreliableJointNames,
                 )
@@ -300,6 +337,35 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                 .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            LiveControlsBar(
+                uiState = uiState,
+                onSwitchCamera = {
+                    val available = uiState.availableCameraFacings
+                    val target = when {
+                        "FRONT" in available && uiState.liveCameraFacing != "FRONT" -> LiveCameraFacing.FRONT
+                        "BACK" in available && uiState.liveCameraFacing != "BACK" -> LiveCameraFacing.BACK
+                        else -> null
+                    }
+                    target?.let {
+                        vm.updateLiveControls(
+                            selectedCameraFacing = it,
+                            mirrorPreview = it == LiveCameraFacing.FRONT,
+                        )
+                        vm.persistLivePreferences(settings)
+                    }
+                },
+                onSelectZoom = { zoom ->
+                    cameraManager.updateZoom(zoom) { resolved ->
+                        val finalRatio = resolved ?: zoom
+                        vm.updateLiveControls(selectedZoomRatio = finalRatio)
+                        vm.persistLivePreferences(settings)
+                    }
+                },
+                onSelectPreset = { preset ->
+                    vm.selectViewPreset(preset)
+                    vm.persistLivePreferences(settings)
+                },
+            )
             vm.activeSessionId?.let { sid ->
                 val events = SessionDiagnostics.eventsForSession(sid)
                 val last = events.lastOrNull()
@@ -344,6 +410,66 @@ fun LiveCoachingScreen(drillType: DrillType, options: LiveSessionOptions, onStop
                         vm.stopSession(onStop)
                     }
                 }) { Text("Stop") }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LiveControlsBar(
+    uiState: com.inversioncoach.app.model.LiveSessionUiState,
+    onSwitchCamera: () -> Unit,
+    onSelectZoom: (Float) -> Unit,
+    onSelectPreset: (LiveViewPreset) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.Black.copy(alpha = 0.48f), overlayPanelShape)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (uiState.availableCameraFacings.size > 1) {
+                AssistChip(
+                    onClick = onSwitchCamera,
+                    label = {
+                        val nextLabel = if (uiState.liveCameraFacing == "FRONT") "Switch to back" else "Switch to front"
+                        Text(nextLabel)
+                    },
+                    colors = AssistChipDefaults.assistChipColors(containerColor = Color.White.copy(alpha = 0.15f)),
+                    modifier = Modifier.semantics { contentDescription = "Switch live camera" },
+                )
+            }
+            Text("Zoom", color = Color.White, fontSize = 12.sp)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                uiState.availableZoomRatios.forEach { ratio ->
+                    val selected = abs(uiState.selectedZoomRatio - ratio) < 0.05f
+                    AssistChip(
+                        onClick = { onSelectZoom(ratio) },
+                        label = { Text("${ratio}x") },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (selected) Color(0xFF2563EB) else Color.White.copy(alpha = 0.15f),
+                            labelColor = Color.White,
+                        ),
+                        modifier = Modifier.semantics { contentDescription = "Set zoom to ${ratio}x" },
+                    )
+                }
+            }
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            LiveViewPreset.entries.forEach { preset ->
+                val selected = uiState.liveViewPreset == preset.encoded
+                AssistChip(
+                    onClick = { onSelectPreset(preset) },
+                    label = { Text(preset.encoded.lowercase().replaceFirstChar { it.uppercase() }) },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (selected) Color(0xFF16A34A) else Color.White.copy(alpha = 0.15f),
+                        labelColor = Color.White,
+                    ),
+                    modifier = Modifier.semantics { contentDescription = "Set live view preset to ${preset.encoded.lowercase()}" },
+                )
             }
         }
     }

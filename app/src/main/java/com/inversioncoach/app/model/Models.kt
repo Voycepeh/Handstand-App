@@ -485,6 +485,9 @@ data class UserSettings(
     val drillCameraSideSelections: String = "",
     val activeUserProfileId: String? = null,
     val userBodyProfileJson: String? = null,
+    val liveCoachingCameraFacing: String = "BACK",
+    val liveCoachingViewPreset: String = "FREESTYLE",
+    val liveCoachingZoomSelections: String = "",
 )
 
 data class LiveSessionUiState(
@@ -527,6 +530,12 @@ data class LiveSessionUiState(
     val cameraPermissionGranted: Boolean = false,
     val warningMessage: String? = null,
     val errorMessage: String? = null,
+    val liveCameraFacing: String = "BACK",
+    val availableCameraFacings: Set<String> = setOf("BACK"),
+    val selectedZoomRatio: Float = 1f,
+    val availableZoomRatios: List<Float> = listOf(1f),
+    val liveViewPreset: String = "FREESTYLE",
+    val mirrorPreview: Boolean = false,
     val debugAngles: List<AngleDebugMetric> = emptyList(),
     val debugMetrics: List<AlignmentMetric> = emptyList(),
     val debugLandmarksDetected: Int = 0,

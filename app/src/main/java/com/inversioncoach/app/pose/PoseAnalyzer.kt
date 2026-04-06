@@ -21,6 +21,7 @@ class PoseAnalyzer(
     private val onPoseFrame: (PoseFrame) -> Unit,
     private val onAnalyzerWarning: (String) -> Unit,
     private val backgroundExecutor: ExecutorService,
+    private val isMirrored: () -> Boolean = { false },
 ) : ImageAnalysis.Analyzer {
 
     private data class PendingFrame(
@@ -165,6 +166,7 @@ class PoseAnalyzer(
                 normalizedWidth = normalizedWidth,
                 normalizedHeight = normalizedHeight,
                 rotationDegrees = rotationDegrees,
+                mirrored = isMirrored(),
             )
             onPoseFrame(poseMapper.toLegacy(internalFrame))
         }
@@ -191,6 +193,7 @@ class PoseAnalyzer(
         normalizedWidth: Int,
         normalizedHeight: Int,
         rotationDegrees: Int,
+        mirrored: Boolean,
     ): InternalPoseFrame = InternalPoseFrame(
         timestampMs = timestampMs,
         joints = joints.map {
@@ -210,6 +213,7 @@ class PoseAnalyzer(
         analysisWidth = normalizedWidth,
         analysisHeight = normalizedHeight,
         analysisRotationDegrees = rotationDegrees,
+        mirrored = mirrored,
     )
 
     private fun normalizeToUnit(value: Float, max: Int): Float {

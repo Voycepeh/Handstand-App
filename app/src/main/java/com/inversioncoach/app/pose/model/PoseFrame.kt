@@ -11,4 +11,5 @@ data class PoseFrame(
     val analysisWidth: Int = 0,
     val analysisHeight: Int = 0,
     val analysisRotationDegrees: Int = 0,
+    val mirrored: Boolean = false,
 )
