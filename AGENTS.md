@@ -2,7 +2,17 @@
 
 ## Project purpose
 
-CaliVision is a drill-centric Android app for calisthenics coaching and analysis. Product direction emphasizes connected workflows across live coaching, upload/reference training, replay/history.
+CaliVision Android is the **mobile runtime/live-coaching app** for the CaliVision ecosystem.
+
+- Primary role: edge-device coaching runtime with phone camera portability.
+- Ecosystem pairing: CaliVision-Studio web is the long-term authoring/upload/exchange counterpart.
+- Studio repo: https://github.com/Voycepeh/CaliVision-Studio
+
+## Product ownership split (required context)
+
+- **Android owns (primary):** live coaching runtime, package import/consumption, session replay/history, portable in-session UX.
+- **Studio owns (source of truth):** full drill authoring, richer drill management, browser-first upload analysis/exchange.
+- Existing Android authoring/upload surfaces may remain during transition, but heavy new investment in Android-first authoring should be treated cautiously and generally avoided unless needed for migration compatibility.
 
 ## Toolchain requirements
 
@@ -26,18 +36,21 @@ gradle :app:assembleDebug
 ## Architecture and coding guardrails
 
 - Preserve drill-centric flow integrity.
-- Keep terminology aligned with the current UX labels.
+- Keep terminology aligned with current UX labels and the Studio/mobile split.
 - Do not silently break drill metadata/catalog/schema behavior.
 - Do not silently break replay/export/upload workflows.
 - Avoid duplicate entry points or overlapping controls that create ambiguous outcomes.
+- Treat portable drill package compatibility with Studio as a critical contract.
 
 ## Documentation and diagrams rule (required)
 
-Any PR changing UX flow, navigation, architecture, media pipeline, or terminology **must** update relevant markdown docs and Mermaid diagrams in the same PR.
+Any PR changing UX flow, navigation, architecture, media pipeline, terminology, package contracts, import behavior, or upload/live ownership boundaries **must** update relevant markdown docs and Mermaid diagrams in the same PR.
+
+When boundaries affect Studio ↔ Android responsibilities, update documentation in both repos where relevant (or explicitly note follow-up docs required in Studio).
 
 ## Repo cleanup/doc-update behavior
 
-For cleanup and doc-focused tasks, proactively refresh `README.md`, architecture docs, feature docs, and diagrams so they match current code behavior.
+For cleanup and doc-focused tasks, proactively refresh `README.md`, architecture docs, feature docs, roadmap docs, and diagrams so they match current and target behavior.
 
 ## Owner preference
 

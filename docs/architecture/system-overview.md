@@ -1,44 +1,60 @@
 # System Overview
 
-CaliVision is a drill-centric coaching system with connected live, upload, and replay/history workflows.
+CaliVision now operates as a two-surface ecosystem:
 
-## Workflow surfaces
+- **CaliVision Android (this repo):** mobile runtime/live coaching app.
+- **CaliVision-Studio (web):** drill authoring/upload/exchange hub.
 
-- **Home / Drill Hub**: primary navigation and launch surface.
-- **Drills**: user-facing drill usage path into Drill Workspace.
-- **Manage Drills**: drill catalog authoring/admin path into Drill Studio.
-- **Drill Workspace**: per-drill usage hub for coaching/uploads/sessions.
-- **Drill Studio**: create/edit drill definitions.
-- **Live Session**: countdown-gated real-time coaching.
-- **Upload / Reference Training**: imported clip analysis and optional drill-linked reference creation.
-- **History Overview**: top-level Home history landing page for at-a-glance review.
-- **Session History**: drill-aware detailed history and compare surface.
-- **Results**: persisted per-session outcomes and replay access.
+Studio link: https://github.com/Voycepeh/CaliVision-Studio
+
+## Ecosystem overview
+
+```mermaid
+flowchart LR
+    STUDIO[CaliVision-Studio Web\nAuthoring / Upload / Exchange]
+    PACKAGE[Portable Drill Package]
+    MOBILE[CaliVision Android\nImport / Runtime / Live Coaching]
+    REVIEW[Session Results + History]
+
+    STUDIO --> PACKAGE --> MOBILE --> REVIEW
+```
+
+## Android workflow surfaces (primary)
+
+- **Home / Drill Hub:** primary navigation and launch surface.
+- **Drills / Drill Workspace:** drill selection and drill-scoped runtime actions.
+- **Live Session:** countdown-gated real-time coaching on-device.
+- **History + Results:** persisted outcomes, replay access, session review.
+- **Package import surfaces:** ingest Studio-authored drills into Android runtime.
+
+## Transitional Android surfaces (currently present)
+
+- **Manage Drills / Drill Studio:** available now, but no longer documented as long-term primary authoring home.
+- **Upload / Reference Training:** available now, directionally moving toward web/browser workflows in Studio.
 
 ## Runtime subsystems
 
-- **Navigation/UI**: `ui/navigation`, feature screens in `ui/**`.
-- **Workflow orchestrators**: `LiveCoachingViewModel`, `UploadVideoViewModel`, drill studio view models.
-- **Domain**: `drills`, `movementprofile`.
-- **Pose extraction (ML)**: on-device pose detection + landmark extraction in `pose`.
-- **Analysis (authored logic)**: `motion`, `biomechanics`, drill scoring, coaching cues.
-- **Media**: recording, overlay timeline, annotated export, replay resolver.
-- **Persistence**: Room + repository + blob storage.
+- **Navigation/UI:** `ui/navigation`, feature screens in `ui/**`.
+- **Workflow orchestrators:** live/upload/drill studio view models.
+- **Domain:** `drills`, `movementprofile`.
+- **Pose extraction (ML):** on-device pose detection + landmark extraction in `pose`.
+- **Analysis (authored logic):** `motion`, `biomechanics`, drill scoring, coaching cues.
+- **Media:** recording, overlay timeline, annotated export, replay resolver.
+- **Persistence:** Room + repository + blob storage.
 
-## ML + scoring boundary
+## Package contract role
 
-- Live and upload flows use on-device ML pose detection to produce landmarks.
-- Landmarks are inputs to CaliVision-authored movement analysis, biomechanics, drill heuristics, and scoring logic.
-- Seeded drill baselines and v1 templates are rule-authored today (not a fully self-learning end-to-end model).
-- Movement template workflows are being structured so the system can become more adaptive over time as drill data grows.
+Portable drill packages are the integration seam between Studio and Android.
+
+1. Studio authors and exports package JSON.
+2. Android imports and validates package JSON.
+3. Android maps portable structures into runtime drill records.
+4. Live coaching consumes mapped runtime drills.
 
 ## Operational invariants
 
-1. Drill context remains recoverable across live/upload/results/history flows.
-2. Countdown/start gating prevents premature active-session state.
-3. Session truth persists even if annotated export fails.
-4. Replay prefers verified annotated output, then verified raw fallback.
-5. Workflow/architecture naming changes require docs and diagrams updates in the same PR.
-6. Annotated export writes are attempt-owned; stale writers and superseded retries cannot overwrite newer session terminal state.
-7. Stale ACTIVE export states without a verifiable owner are recovered to a safe terminal failed/skipped path.
-8. Workflow/architecture naming changes require docs and diagrams updates in the same PR.
+1. Drill context remains recoverable across live/results/history flows.
+2. Session truth persists even if annotated export fails.
+3. Replay prefers verified annotated output, then verified raw fallback.
+4. Package compatibility with Studio is treated as a critical contract.
+5. Workflow/ownership naming changes require docs and diagrams updates in the same PR.

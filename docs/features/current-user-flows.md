@@ -1,85 +1,78 @@
-# Feature: Current User Flows
+# Feature: Current User Flows (Android Runtime Focus)
 
-This document captures the current end-to-end app workflows and route surfaces.
+This document captures current app workflows while clarifying the direction toward a Studio(web) + Android(runtime) split.
+
+Studio repo: https://github.com/Voycepeh/CaliVision-Studio
+
+## Ownership framing
+
+- **Android primary ownership:** import drills, run live coaching on-device, review sessions/history.
+- **Studio primary ownership (target):** full drill authoring + browser upload analysis/exchange.
+- **Transition reality:** Android still contains upload and Drill Studio surfaces today.
 
 ## Route-level flow map
 
 - `home` -> Home / Drill Hub
 - `start` -> Start Drill selector
+- `drill-workspace/{drillId}` -> Drill Workspace
 - `live/...` -> Live Session
 - `results/{sessionId}` -> Results
-- `history` -> History Overview (top-level home history landing page)
-- `session-history?...` -> Session History (drill-aware detailed history / compare surface)
+- `history` -> History Overview
+- `session-history?...` -> Session History
+
+### Transitional routes (present, de-emphasized)
+
 - `manage-drills` -> Manage Drills
 - `drill-studio?...` -> Drill Studio
-- `drill-workspace/{drillId}` -> Drill Workspace
 - `upload-video?...` -> Upload / Reference Training
 
-## 1) Home / Drill Hub
+## Mobile runtime workflow (target primary)
 
-Home is the primary entry point. It exposes both drill paths explicitly:
+```mermaid
+flowchart LR
+    IMPORT[Import Studio-authored Drill Package]
+    DRILLS[Browse / Choose Drill]
+    LIVE[Run Live Coaching]
+    RESULTS[Session Results]
+    HISTORY[Session History]
 
-- **Drills**: browse drills for usage and open Drill Workspace.
-- **Manage Drills**: create/import/edit/export/delete drill packages via Drill Studio.
+    IMPORT --> DRILLS --> LIVE --> RESULTS --> HISTORY
+```
 
-Home also keeps **Start Live Coaching**, **Upload Video**, **History**, and **Settings** as top-level actions.
+## Current mixed-state workflow (today)
 
-### First-launch recording preferences onboarding
+```mermaid
+flowchart TD
+    HOME[Home / Drill Hub]
+    DRILLS[Drills]
+    WORKSPACE[Drill Workspace]
+    LIVE[Live Coaching]
+    UPLOAD[Upload / Reference Training\nTransitional]
+    MANAGE[Manage Drills\nTransitional]
+    STUDIO[Drill Studio\nTransitional]
+    RESULTS[Results]
+    HISTORY[History]
 
-- On true first launch, Home shows a compact welcome dialog.
-- The dialog offers two paths:
-  - **Use recommended settings**: applies centralized recording/export defaults and completes onboarding.
-  - **Open recording settings**: routes directly to the existing Settings screen and completes onboarding.
-- The old duplicate first-launch settings form (export quality/countdown/storage controls inside onboarding) is removed.
-- Recording/export preference editing now lives only in **Settings**.
+    HOME --> DRILLS --> WORKSPACE --> LIVE --> RESULTS
+    WORKSPACE --> UPLOAD --> RESULTS
+    HOME --> MANAGE --> STUDIO
+    RESULTS --> HISTORY
+```
 
-## 2) Drills -> Drill Workspace
+## User story after split
 
-1. Open `start?destination=workspace` from Home's **Drills** action.
-2. Browse training drills.
-3. Select a drill to open `drill-workspace/{drillId}`.
-4. Use drill-scoped operational actions (live coaching, upload attempt, sessions, compare).
+1. User creates/maintains drills in Studio web.
+2. User imports package into Android.
+3. User uses Android camera workflow for live coaching.
+4. User reviews outcomes and history on mobile.
+5. Heavy authoring + browser upload analysis happen in Studio.
 
-## 3) Manage Drills -> Drill Studio
+## Migration guidance for existing users
 
-1. Open `manage-drills`.
-2. Use authoring/admin actions: New Drill, Import Drill Package, Open, Export, Delete.
-3. **Open** navigates to `drill-studio`.
-4. Save and return to Manage Drills.
-
-## 4) Drill Workspace
-
-For drill-specific context:
-
-- Start a live session for the drill.
-- Upload an attempt scoped to the drill.
-- Open drill comparison history.
-- Open drill editing in Drill Studio when needed.
-
-## 5) Live Session
-
-1. Start from Home or Drill Workspace.
-2. Pass countdown gate.
-3. Run active coaching loop.
-4. Stop and finalize media.
-5. Resolve replay source.
-6. Navigate to Results.
-
-## 6) Upload / Reference Training
-
-1. Select a video and drill context (optional or drill-scoped).
-2. Run sampled-frame analysis.
-3. Optionally create/update drill-linked reference artifacts.
-4. Export/verify replay candidates.
-5. Resolve replay source and open Results.
-
-## 7) Results / History split
-
-- **History Overview (`history`)**: top-level landing page opened from Home's History action.
-- **Session History (`session-history?...`)**: deeper drill-aware list/compare/reopen surface.
-- **Results**: immediate per-session outcome surface.
-- Replay uses resolver output (annotated preferred, raw fallback).
+- Existing Android upload/drill-authoring users can continue current flows during transition.
+- New docs and UX language should steer users toward Studio for heavy authoring and upload analysis.
+- Android should prioritize low-friction runtime actions: import, browse, run coaching, review.
 
 ## Maintenance rule
 
-When any route name, screen name, or navigation behavior changes, update this file and matching diagrams in the same PR.
+When route names, workflow boundaries, package behavior, or Studio/mobile ownership changes, update this file and related diagrams in the same PR.

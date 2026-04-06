@@ -1,17 +1,27 @@
 # Architecture Guide
 
-This document is the top-level architecture map for the current CaliVision implementation.
+This document is the top-level architecture map for CaliVision Android as the **runtime/live-coaching client** in a two-repo ecosystem.
 
-## Product workflow anchors
+- Android repo (this): runtime/live coaching/import consumption.
+- Studio repo (web): authoring/upload/exchange source of truth.
+- Studio link: https://github.com/Voycepeh/CaliVision-Studio
+
+## Product workflow anchors (Android)
 
 - **Home / Drill Hub** (`Route.Home`)
-- **Drills (usage path)** (`Route.Start` with workspace destination -> `Route.DrillWorkspace`)
-- **Manage Drills (create/edit path)** (`Route.ManageDrills`)
-- **Drill Studio** (`Route.DrillStudio`)
+- **Drills (usage path)** (`Route.Start` -> `Route.DrillWorkspace`)
 - **Drill Workspace** (`Route.DrillWorkspace`)
 - **Live Session** (`Route.Live`)
-- **Upload / Reference Training** (`Route.UploadVideo`, `Route.UploadVideoForDrill`)
 - **Results / History** (`Route.Results`, `Route.HistoryOverview`, `Route.SessionHistory`)
+- **Import/compatibility surfaces** (drill package import flows)
+
+### Transitional surfaces (present, directionally de-emphasized)
+
+- **Manage Drills** (`Route.ManageDrills`)
+- **Drill Studio** (`Route.DrillStudio`)
+- **Upload / Reference Training** (`Route.UploadVideo`, `Route.UploadVideoForDrill`)
+
+These remain in code today but are not the long-term primary ownership for Android.
 
 ## Runtime layers
 
@@ -22,25 +32,41 @@ This document is the top-level architecture map for the current CaliVision imple
 5. **Media/replay/export**: `recording/**`, `media/**`, `camera/**`, `overlay/**`
 6. **Persistence**: `storage/db/**`, `storage/repository/**`, `SessionBlobStorage`
 
-## Key boundaries
+## Ecosystem boundary (Studio ↔ Android)
+
+```mermaid
+flowchart LR
+    STUDIO[CaliVision-Studio Web\nAuthoring + Upload + Exchange]
+    PACKAGE[Portable Drill Package]
+    ANDROID[CaliVision Android\nImport + Runtime + Live Coaching]
+
+    STUDIO --> PACKAGE --> ANDROID
+```
+
+## Key boundaries and contracts
 
 - `SessionRepository` is the persistence boundary for sessions, drills, templates, and media status.
 - `SessionMediaResolver` resolves replay source from verified media candidates.
 - `AnnotatedExportPipeline` handles annotated replay generation.
 - `UploadedVideoAnalyzer` pipeline is executed by `UploadVideoProcessingWorker`; `UploadVideoViewModel` enqueues work and observes repository/DB state.
+- Portable package contract and validation define Studio↔Android compatibility (`drillpackage/*`, `DrillPackageValidator`).
 
 ## Rules for contributors
 
-- Keep drill-centric flow integrity intact.
-- Prefer one clear path for drill creation/editing outcomes.
+- Keep Android positioned as runtime/live-coaching first.
+- Preserve package compatibility with Studio as a critical contract.
+- Prefer one clear path for drill consumption and in-session outcomes.
+- Treat heavy Android-first drill authoring expansion as exceptional and transition-justified only.
 - Do not silently break drill metadata/catalog schema.
 - Do not silently break replay/export/upload flows.
-- Keep naming aligned with current UX terms.
-- Any PR that changes workflows, navigation, architecture, terminology, or media flow must update docs and diagrams in the same PR.
+- Keep naming aligned with current UX terms and ecosystem boundary language.
+- Any PR that changes workflows, navigation, architecture, terminology, package behavior, or media flow must update docs and diagrams in the same PR.
 
 ## Architecture docs index
 
 - [`docs/architecture/system-overview.md`](docs/architecture/system-overview.md)
+- [`docs/architecture/studio-mobile-boundary.md`](docs/architecture/studio-mobile-boundary.md)
+- [`docs/architecture/package-import-runtime-flow.md`](docs/architecture/package-import-runtime-flow.md)
 - [`docs/architecture/app-modules.md`](docs/architecture/app-modules.md)
 - [`docs/architecture/session-lifecycle.md`](docs/architecture/session-lifecycle.md)
 - [`docs/architecture/video-pipeline.md`](docs/architecture/video-pipeline.md)

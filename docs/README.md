@@ -1,18 +1,22 @@
 # Documentation Index
 
-Use this index as the entry point for repo documentation.
+Use this index as the entry point for CaliVision Android docs as the **mobile runtime/live-coaching** side of the ecosystem.
+
+- Studio counterpart (authoring/upload/exchange): https://github.com/Voycepeh/CaliVision-Studio
 
 ## Core docs
 
-- [`../README.md`](../README.md): public/product-facing project overview.
+- [`../README.md`](../README.md): product overview + ecosystem split.
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md): top-level architecture map.
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md): branch/PR and contributor expectations.
 - [`../TESTING.md`](../TESTING.md): build/test/manual validation guidance.
 
-## Interop
+## Ecosystem + interop
 
 - [`drill-package-contract.md`](drill-package-contract.md)
 - [`studio-android-compatibility.md`](studio-android-compatibility.md)
+- [`architecture/studio-mobile-boundary.md`](architecture/studio-mobile-boundary.md)
+- [`architecture/package-import-runtime-flow.md`](architecture/package-import-runtime-flow.md)
 
 ## Architecture
 
@@ -33,6 +37,10 @@ Use this index as the entry point for repo documentation.
 - [`features/reference-training.md`](features/reference-training.md)
 - [`features/session-history.md`](features/session-history.md)
 
+## Roadmap
+
+- [`roadmap/mobile-direction.md`](roadmap/mobile-direction.md)
+
 ## Diagrams
 
 - [`diagrams/ui-flow.md`](diagrams/ui-flow.md)
@@ -51,4 +59,4 @@ Use this index as the entry point for repo documentation.
 
 ## Maintenance rule
 
-When you change workflows, architecture, naming, navigation, media behavior, or analysis boundaries, update the relevant docs and diagrams in the same PR.
+When workflows, architecture, naming, package contracts, import behavior, or live/upload ownership boundaries change, update relevant docs and diagrams in this repo and ensure Studio docs are aligned where applicable.

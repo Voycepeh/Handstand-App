@@ -1,10 +1,12 @@
-# Drill Package Contract (Android)
+# Drill Package Contract (Android Runtime Consumer)
 
 ## Purpose
 
-This document defines the versioned portable drill package contract used to prepare Android for future web-based Studio interoperability.
+This document defines the versioned portable drill package contract used for Studio ↔ Android interoperability.
 
-Android remains a **runtime/import consumer** and can export/import package JSON for compatibility validation.
+- Android role: **runtime/import consumer**.
+- Studio role: **authoring/export source**.
+- Studio repo: https://github.com/Voycepeh/CaliVision-Studio
 
 ## Contract namespace
 
@@ -64,13 +66,12 @@ Left/right laterality remains an Android-internal compatibility concern and is n
 - Runtime-only shape from persisted records:
   - `RuntimeDrillMapper`
 
-## IO stubs
+## IO helpers
 
 - `DrillPackageJsonCodec` provides JSON encode/decode.
 - `DrillPackageFileIO` provides local file import/export helpers.
 - Remote sync is intentionally out-of-scope for this phase.
 
-
 ## Legacy persistence bridge
 
-Current legacy drill records cannot represent every authored portable field directly. `DrillRecordPortableMapper` preserves non-legacy fields by embedding a `portablePayload` token in cue-config metadata so package round-trips are explicit and non-lossy.
+Current legacy drill records cannot represent every authored portable field directly. `DrillRecordPortableMapper` preserves non-legacy fields by embedding a `portablePayload` token in cue-config metadata so package round-trips remain explicit and non-lossy.
