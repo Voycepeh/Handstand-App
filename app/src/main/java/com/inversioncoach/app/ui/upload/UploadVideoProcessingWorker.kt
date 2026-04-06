@@ -10,6 +10,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import com.inversioncoach.app.model.DrillType
 import com.inversioncoach.app.R
 import com.inversioncoach.app.model.UploadJobStage
 import com.inversioncoach.app.model.UploadJobStatus
@@ -89,6 +90,10 @@ class UploadVideoProcessingWorker(
                     SessionDiagnostics.logStructured(
                         event = "upload_worker_event",
                         sessionId = job.sessionId ?: -1L,
+                        drillType = DrillType.FREESTYLE,
+                        rawUri = null,
+                        annotatedUri = null,
+                        overlayFrameCount = 0,
                         failureReason = line,
                     )
                 },
