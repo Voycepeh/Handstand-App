@@ -1,6 +1,7 @@
 package com.inversioncoach.app.drillpackage.mapping
 
 import com.inversioncoach.app.drillpackage.model.DrillManifest
+import com.inversioncoach.app.drillpackage.model.DrillPackageContract
 import com.inversioncoach.app.drillpackage.model.DrillPackage
 import com.inversioncoach.app.drillpackage.model.PortableDrill
 import com.inversioncoach.app.drillpackage.model.PortableJoint2D
@@ -20,7 +21,7 @@ object DrillCatalogPortableMapper {
     fun toPortablePackage(catalog: DrillCatalog, source: String = "android_catalog"): DrillPackage = DrillPackage(
         manifest = DrillManifest(
             packageId = catalog.catalogId,
-            schemaVersion = SchemaVersion(major = catalog.schemaVersion),
+            schemaVersion = SchemaVersion(major = DrillPackageContract.CURRENT_SCHEMA_MAJOR, minor = DrillPackageContract.CURRENT_SCHEMA_MINOR),
             source = source,
             exportedAtMs = System.currentTimeMillis(),
         ),
@@ -37,7 +38,7 @@ object DrillCatalogPortableMapper {
         supportedViews = drill.supportedViews.map { it.toPortableView() }.ifEmpty { listOf(drill.cameraView.toPortableView()) }.distinct(),
         comparisonMode = drill.comparisonMode.name,
         normalizationBasis = drill.normalizationBasis.name,
-        keyJoints = drill.keyJoints.map(PortableJointNames::canonicalize),
+        keyJoints = drill.keyJoints.map(PortablePoseSemantics::canonicalJointName),
         tags = drill.tags,
         phases = drill.phases.map(::toPortablePhase),
         poses = drill.skeletonTemplate.phasePoses.map { it.toPortablePose(drill.cameraView.toPortableView()) },
@@ -131,7 +132,7 @@ object DrillCatalogPortableMapper {
     )
 
     private fun PhasePoseTemplate.toPortablePose(defaultView: PortableViewType): PortablePose {
-        val canonicalJoints = joints.mapKeys { (joint, _) -> PortableJointNames.canonicalize(joint) }
+        val canonicalJoints = PortablePoseSemantics.canonicalizeJointMap(joints)
         return PortablePose(
             phaseId = phaseId,
             name = name,

@@ -134,6 +134,19 @@ flowchart LR
     EXPORT --> IMPORT --> VALIDATE --> MAP --> COACH
 ```
 
+
+## Portable package boundary in code
+
+To keep Studio-authored package compatibility explicit, Android package handling is organized under `app/src/main/java/com/inversioncoach/app/drillpackage/*`:
+
+- `model/` - portable contract models + boundary constants
+- `io/` - package JSON/file codecs
+- `validation/` - contract validation rules/reports
+- `mapping/` - portable ↔ runtime/catalog mappers + canonical joint semantics
+- `importing/` - parse→validate→map import pipeline result seam
+
+This separation is intentional: runtime/live-coaching internals should consume mapped runtime structures, not directly depend on authoring-specific portable payload details.
+
 ## User migration story (mobile-first users)
 
 Users who previously relied on mobile upload/drill authoring can transition progressively:

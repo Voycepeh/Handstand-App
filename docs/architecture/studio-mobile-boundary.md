@@ -64,3 +64,8 @@ If boundary ownership changes, update both:
 
 - Android docs in this repo.
 - Studio docs in https://github.com/Voycepeh/CaliVision-Studio.
+
+
+## Implementation note
+
+Android contributors should route new drill package import work through `drillpackage/importing/DrillPackageImportPipeline` and keep mobile Drill Studio utilities scoped as transitional tooling, not long-term package authority.

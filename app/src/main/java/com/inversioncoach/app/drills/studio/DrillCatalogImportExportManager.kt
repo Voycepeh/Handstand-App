@@ -5,6 +5,12 @@ import android.net.Uri
 import java.io.File
 import org.json.JSONObject
 
+/**
+ * Transitional mobile authoring helper.
+ *
+ * Runtime package consumption should prefer the portable package import pipeline under
+ * `drillpackage/*` so Studio-authored packages stay the primary cross-repo contract.
+ */
 class DrillCatalogImportExportManager(private val context: Context, private val draftStore: DrillCatalogDraftStore) {
     private val exportDir = context.filesDir.resolve("drill_studio/exports").apply { mkdirs() }
 

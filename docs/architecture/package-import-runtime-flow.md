@@ -18,6 +18,19 @@ flowchart LR
     EXPORT --> IMPORT --> VALIDATE --> MAP --> CATALOG --> LIVE
 ```
 
+## Canonical Android import seam
+
+Android now keeps the package boundary in one explicit seam:
+
+`DrillPackageImportPipeline.parseAndValidate(rawJson)`
+
+- decode with `DrillPackageJsonCodec`
+- validate with `DrillPackageValidator`
+- map to runtime-ready catalog via `DrillCatalogPortableMapper`
+- return structured outcome (`Success`, decode/validation/mapping failure)
+
+This avoids scattering parse/validate/map logic across UI flows.
+
 ## Runtime consumption sequence
 
 1. Studio creates drill package using portable schema.
@@ -27,11 +40,28 @@ flowchart LR
 5. Drill appears in Android drill selection/workspace.
 6. Live coaching session consumes runtime drill definitions.
 
+## Portable package code map
+
+- Contract models/constants: `drillpackage/model/*`
+- JSON/file IO: `drillpackage/io/*`
+- Portable semantics + mapping: `drillpackage/mapping/*`
+- Validation: `drillpackage/validation/*`
+- Import seam result orchestration: `drillpackage/importing/*`
+
+## Canonical pose/joint semantics
+
+Portable pose assumptions are centralized for importer + mapper consistency:
+
+- canonical joint naming (`PortableJointNames`, `PortablePoseSemantics`)
+- normalized coordinate bounds (`DrillPackageContract`)
+- neutral portable views (`FRONT`, `SIDE`, `BACK`)
+
 ## Contract responsibilities
 
 - Preserve schema compatibility across app and Studio updates.
 - Treat compatibility regressions as high-priority integration defects.
 - Keep portable camera view semantics neutral (`FRONT`, `SIDE`, `BACK`).
+- Keep runtime models and portable models intentionally distinct.
 
 ## Why this matters for product split
 

@@ -55,3 +55,8 @@ For cleanup and doc-focused tasks, proactively refresh `README.md`, architecture
 ## Owner preference
 
 The repo owner prefers PR-ready execution against `main` (implemented changes + PR), not patch-only suggestions.
+
+
+## Portable package boundary guidance
+
+When touching package import behavior, prefer the explicit seam in `app/src/main/java/com/inversioncoach/app/drillpackage/importing/DrillPackageImportPipeline.kt` and keep parse/validate/map logic out of UI screens where possible.

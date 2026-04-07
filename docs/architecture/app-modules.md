@@ -12,6 +12,15 @@ This file maps current package boundaries to responsibilities.
 - `ui/results`, `ui/history`, `ui/historyoverview`: results plus detailed and overview history experiences.
 - `ui/settings`: settings and developer tuning surfaces.
 
+
+## Portable package boundary (Studio ↔ Android contract)
+
+- `drillpackage/model`: portable contract models and boundary constants.
+- `drillpackage/io`: package JSON/file encoding/decoding helpers.
+- `drillpackage/validation`: package validation and import safety report types.
+- `drillpackage/mapping`: portable↔catalog/runtime mapping + canonical joint semantics.
+- `drillpackage/importing`: explicit parse→validate→map import pipeline result seam.
+
 ## Domain and analysis
 
 - `drills/**`: drill definitions/catalog/studio models.

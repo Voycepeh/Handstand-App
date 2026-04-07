@@ -43,6 +43,15 @@ flowchart LR
     STUDIO --> PACKAGE --> ANDROID
 ```
 
+
+## Portable package boundary map
+
+- `drillpackage/model/*`: Studio↔Android portable contract types and schema/coordinate constants.
+- `drillpackage/io/*`: JSON/file package serialization helpers.
+- `drillpackage/validation/*`: validation rules and import reports.
+- `drillpackage/mapping/*`: portable↔catalog mapping and canonical joint semantics.
+- `drillpackage/importing/*`: canonical parse→validate→map import seam for UI callers.
+
 ## Key boundaries and contracts
 
 - `SessionRepository` is the persistence boundary for sessions, drills, templates, and media status.

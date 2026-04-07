@@ -16,6 +16,16 @@ Portable contract types live under:
 - `app/src/main/java/com/inversioncoach/app/drillpackage/mapping`
 - `app/src/main/java/com/inversioncoach/app/drillpackage/validation`
 - `app/src/main/java/com/inversioncoach/app/drillpackage/io`
+- `app/src/main/java/com/inversioncoach/app/drillpackage/importing`
+
+## Canonical boundary constants
+
+`DrillPackageContract` now centralizes package-level constants used across import/export/validation:
+
+- current supported schema major/minor
+- normalized coordinate bounds (`0f..1f`)
+
+This keeps Studio-facing contract assumptions out of runtime-only classes.
 
 ## Camera perspective rule
 
@@ -39,7 +49,7 @@ Left/right laterality remains an Android-internal compatibility concern and is n
 
 ## Pose contract guarantees
 
-`PortablePose` enforces portability-oriented rules:
+`PortablePose` portability semantics are normalized through `PortablePoseSemantics`:
 
 - canonical joint names (snake_case)
 - normalized 2D coordinates (`x`,`y` in `[0,1]`)
@@ -53,9 +63,22 @@ Left/right laterality remains an Android-internal compatibility concern and is n
 
 - required manifest/drill fields
 - schema version presence (`major > 0`)
+- schema compatibility warnings for out-of-band versions
 - unique phase ordering per drill
+- pose phase references must point to declared phases
 - normalized coordinates and confidence/visibility ranges
 - basic asset ref validity (`id`, `type`, `uri`)
+
+## Import seam
+
+`DrillPackageImportPipeline` is the canonical Android import seam:
+
+1. decode package JSON (`DrillPackageJsonCodec`)
+2. validate contract (`DrillPackageValidator`)
+3. map into Android runtime catalog (`DrillCatalogPortableMapper`)
+4. return structured result (`Success`, `DecodeFailure`, `ValidationFailure`, `MappingFailure`)
+
+UI flows should consume this boundary result type instead of spreading parse/validate/map logic across screens.
 
 ## Mapping boundaries
 

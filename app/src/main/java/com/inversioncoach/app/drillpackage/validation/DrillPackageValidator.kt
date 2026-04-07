@@ -1,12 +1,21 @@
 package com.inversioncoach.app.drillpackage.validation
 
+import com.inversioncoach.app.drillpackage.mapping.PortablePoseSemantics
 import com.inversioncoach.app.drillpackage.model.DrillPackage
+import com.inversioncoach.app.drillpackage.model.DrillPackageContract
 
 object DrillPackageValidator {
-    fun validate(pkg: DrillPackage): List<String> {
+    fun validate(pkg: DrillPackage): List<String> = validateDetailed(pkg).errors
+
+    fun validateDetailed(pkg: DrillPackage): DrillPackageValidationReport {
         val errors = mutableListOf<String>()
+        val warnings = mutableListOf<String>()
+
         if (pkg.manifest.packageId.isBlank()) errors += "Manifest packageId is required."
         if (pkg.manifest.schemaVersion.major <= 0) errors += "Schema version presence is required (major > 0)."
+        if (!DrillPackageContract.isSchemaSupported(pkg.manifest.schemaVersion)) {
+            warnings += "Schema ${pkg.manifest.schemaVersion.token} is outside Android's current tested major version ${DrillPackageContract.CURRENT_SCHEMA_MAJOR}."
+        }
 
         pkg.manifest.assets.forEach { asset ->
             if (asset.id.isBlank()) errors += "Asset id is required."
@@ -28,6 +37,7 @@ object DrillPackageValidator {
                 errors += "Primary camera view must be included in supported views for ${drill.id}."
             }
 
+            val phaseIds = drill.phases.map { it.id }.toSet()
             val orders = drill.phases.map { it.order }
             if (orders.distinct().size != orders.size) {
                 errors += "Phase order must be unique for ${drill.id}."
@@ -42,20 +52,30 @@ object DrillPackageValidator {
 
             drill.poses.forEach { pose ->
                 if (pose.phaseId.isBlank()) errors += "Pose phaseId is required for ${drill.id}."
+                if (pose.phaseId !in phaseIds) {
+                    errors += "Pose phaseId ${pose.phaseId} must reference a declared phase for ${drill.id}."
+                }
                 pose.joints.forEach { (jointName, point) ->
                     if (jointName.isBlank()) errors += "Pose joint names must be non-empty for ${drill.id}."
-                    if (point.x !in 0f..1f || point.y !in 0f..1f) {
+                    if (!PortablePoseSemantics.isNormalizedCoordinate(point.x) || !PortablePoseSemantics.isNormalizedCoordinate(point.y)) {
                         errors += "Joint coordinates must be normalized for ${drill.id}:${pose.phaseId}:$jointName."
                     }
-                    if (point.visibility != null && point.visibility !in 0f..1f) {
+                    if (point.visibility != null && !PortablePoseSemantics.isNormalizedCoordinate(point.visibility)) {
                         errors += "Joint visibility must be between 0 and 1 for ${drill.id}:${pose.phaseId}:$jointName."
                     }
-                    if (point.confidence != null && point.confidence !in 0f..1f) {
+                    if (point.confidence != null && !PortablePoseSemantics.isNormalizedCoordinate(point.confidence)) {
                         errors += "Joint confidence must be between 0 and 1 for ${drill.id}:${pose.phaseId}:$jointName."
                     }
                 }
             }
         }
-        return errors
+        return DrillPackageValidationReport(errors = errors, warnings = warnings)
     }
+}
+
+data class DrillPackageValidationReport(
+    val errors: List<String>,
+    val warnings: List<String>,
+) {
+    val isValid: Boolean get() = errors.isEmpty()
 }

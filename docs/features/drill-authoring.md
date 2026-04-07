@@ -2,6 +2,8 @@
 
 Drill Studio is the authoring workspace for creating and refining drill definitions used across live and upload workflows.
 
+> Ownership note: mobile Drill Studio remains available during transition, but CaliVision-Studio web is the long-term primary authoring home.
+
 ## What Drill Studio is for
 
 - Create new drill definitions.

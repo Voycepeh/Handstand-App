@@ -48,3 +48,11 @@ flowchart LR
 - New docs/code should reinforce runtime-first Android language.
 - Major authoring/upload investments on Android should include explicit transition rationale.
 - Changes to package contract/import flows must include doc updates.
+
+
+## Architecture cleanup focus (near-term)
+
+- Keep portable package contract logic centralized and reviewable.
+- Keep runtime drill consumption decoupled from mobile authoring internals.
+- Keep upload and mobile authoring surfaces explicitly transitional in docs and naming.
+- Keep Studio compatibility fixtures/tests healthy for import seams.

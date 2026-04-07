@@ -2,6 +2,8 @@
 
 Video Import supports offline review and reference-training preparation from uploaded clips.
 
+> Ownership note: upload analysis remains available in Android during transition, while Studio web is the long-term browser-first analysis and exchange home.
+
 ## User-facing flow
 
 1. Open Upload / Reference Training.
