@@ -254,4 +254,10 @@ class AnnotatedExportNormalizationTest {
         assertEquals(0.8f to 0.2f, mapTextureCoordinateToExportSpace(0.2f, 0.8f, 180))
         assertEquals(0.2f to 0.2f, mapTextureCoordinateToExportSpace(0.2f, 0.8f, 270))
     }
+
+    @Test
+    fun exportOverlayMirrorModeDisablesPreviewMirrorForMediaSpaceRendering() {
+        assertFalse(exportOverlayMirrorMode(mirrorMode = true))
+        assertFalse(exportOverlayMirrorMode(mirrorMode = false))
+    }
 }

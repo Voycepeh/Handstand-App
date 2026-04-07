@@ -379,7 +379,7 @@ class AnnotatedVideoCompositor(
             drawSkeleton = overlay.showSkeleton,
             drawIdealLine = overlay.showIdealLine,
             drawCenterOfGravity = overlay.showCenterOfGravity,
-            mirrored = overlay.mirrorMode,
+            mirrored = exportOverlayMirrorMode(overlay.mirrorMode),
             scaleMode = overlay.scaleMode,
             unreliableJointNames = overlay.unreliableJointNames,
         )

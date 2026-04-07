@@ -68,6 +68,14 @@ internal fun mapOverlayPointToExportSpace(point: JointPoint, transform: ExportTr
     )
 }
 
+/**
+ * Overlay timelines preserve the live preview mirror flag (`mirrorMode`) so on-screen coaching can
+ * align with selfie preview behavior. Annotated export renders into encoded media space, where the
+ * base video is not selfie-mirrored, so we always disable runtime mirror in the export compositor.
+ */
+@Suppress("UNUSED_PARAMETER")
+internal fun exportOverlayMirrorMode(mirrorMode: Boolean): Boolean = false
+
 internal fun mapNormalizedPointToExportSpace(
     x: Float,
     y: Float,
