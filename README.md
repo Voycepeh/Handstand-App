@@ -1,171 +1,99 @@
-# CaliVision (Android)
+# CaliVision Android
 
-CaliVision Android is the **mobile runtime and live-coaching client** in the broader CaliVision ecosystem.
+**Mobile live-coaching runtime for the CaliVision ecosystem.**
 
-- **Android app (this repo):** edge-device coaching runtime, camera-first feedback, portable drill package import/consumption.
-- **CaliVision-Studio (web):** long-term source of truth for drill authoring, upload/browser analysis, and drill exchange workflows.
+CaliVision Android is the edge-device companion to **CaliVision-Studio (web)**: Android handles in-session coaching execution, while Studio handles authoring and upload-driven analysis.
 
 👉 Studio repo: **https://github.com/Voycepeh/CaliVision-Studio**
 
-## Product direction (current → target)
+## Why I built CaliVision
 
-CaliVision currently contains a mixed set of capabilities (live coaching + upload flows + mobile drill authoring surfaces). The direction is to clarify ownership across two products:
+I built CaliVision because I wanted help visualizing my handstand stack.
+I was already recording and replaying videos manually. I wanted structured feedback fast enough to adjust in the next set.
 
-- **Keep and strengthen on Android:**
-  - live coaching on-device
-  - low-friction mobile drill usage
-  - runtime guidance with phone camera portability
-  - import and consume Studio-authored portable drill packages
-  - review session results/history
-- **Shift toward Studio web:**
-  - full drill authoring and management as primary source of truth
-  - browser-centered upload video analysis and exchange workflows
-  - heavier package publishing/management operations
+I also come from a data architecture / BI background rather than traditional app development, so CaliVision has become a practical human-led, AI-assisted software development experiment.
 
-This repo documents that transition honestly: some legacy/mobile authoring and upload paths still exist, but they are now treated as transitional rather than long-term Android ownership.
+## Product direction
+
+The product direction is intentional and explicit:
+
+- **Android (this repo):** live coaching runtime on device, portable in-session UX, session review/history, and consumption of Studio-authored portable drill packages.
+- **Studio web:** upload video analysis, drill authoring/drill management, package publishing/exchange, and heavier editing workflows.
+
+This split is not a missing feature or regression. It is the long-term product shape.
+
+## A short history
+
+CaliVision started as a broader Android experiment that combined live coaching, uploaded-video analysis, and mobile drill authoring in one app. That helped validate ideas quickly, but ownership became blurry and UX became less coherent.
+
+The cleaner model is now:
+
+- edge-device runtime on Android
+- web authoring/upload workflows in Studio
+
+Android is being simplified toward in-session coaching.
+
+## What Android is responsible for now
+
+- Real-time, in-session live coaching execution
+- Camera-first runtime feedback loops
+- Importing and consuming Studio-authored portable drill packages
+- Session replay, results, and history on device
+- Lightweight runtime drill usage flows needed for training continuity
+
+## What Studio is responsible for now
+
+- Upload video analysis workflows
+- Drill Studio authoring and drill management (source of truth)
+- Package publishing and exchange workflows
+- Heavier browser-first editing and lifecycle management
 
 ## Why mobile still matters
 
-Live coaching belongs on edge devices because phones provide:
+Phones are still the best runtime surface for coaching sessions:
 
-- instant camera access at training location
+- instant camera access at the training location
 - low setup friction between sets
-- portability for gym/park/home workflows
-- direct feedback loops without desktop dependency
+- portability across gym, park, and home contexts
+- direct feedback loops without switching to desktop
 
-Android remains the best place for **real-time, in-session coaching execution**.
-
-## Ecosystem relationship
+## Ecosystem relationship diagram
 
 ```mermaid
 flowchart LR
-    STUDIO[CaliVision-Studio Web\nAuthoring / Upload / Exchange]
-    PACKAGE[Portable Drill Package\nVersioned Contract]
-    MOBILE[CaliVision Android\nImport / Runtime / Live Coaching]
-    HISTORY[Session Results + History]
+    STUDIO[CaliVision-Studio Web]
+    PACKAGE[Portable Drill Package]
+    ANDROID[CaliVision Android Runtime]
+    HISTORY[Session Results / History]
 
-    STUDIO --> PACKAGE --> MOBILE --> HISTORY
+    STUDIO --> PACKAGE --> ANDROID --> HISTORY
 ```
 
-## Mobile runtime workflow
+## Human-led, AI-assisted build workflow
 
 ```mermaid
 flowchart LR
-    IMPORT[Import Studio Package]
-    BROWSE[Browse / Choose Drill]
-    LIVE[Live Coaching Session]
-    REVIEW[Session Review + History]
+    IDEA[Problem / Idea]
+    PLAN[Plan with ChatGPT]
+    EXEC[Execute with Codex]
+    BUILD[Compile / Integrate]
+    TEST[Manual Testing]
+    REVIEW[Review / Refine]
 
-    IMPORT --> BROWSE --> LIVE --> REVIEW
+    IDEA --> PLAN --> EXEC --> BUILD --> TEST --> REVIEW --> PLAN
 ```
 
-## Studio/mobile boundary split
+Workflow notes:
 
-```mermaid
-flowchart LR
-    subgraph WEB[Studio Web Ownership]
-      AUTHOR[Authoring]
-      UPLOAD[Upload Analysis]
-      EXCHANGE[Exchange]
-    end
+- ChatGPT is used for planning, framing tradeoffs, and review support.
+- Codex is used for scoped implementation tasks.
+- The human owner remains the decision-maker, integrator/compiler, and tester.
 
-    subgraph MOBILE[Android Ownership]
-      IMPORT[Import]
-      RUNTIME[Live Runtime]
-      REVIEW[Session Review]
-    end
+## Repo scope guardrail
 
-    AUTHOR --> EXCHANGE
-    UPLOAD --> EXCHANGE
-    EXCHANGE --> IMPORT --> RUNTIME --> REVIEW
-```
+This Android repo is not the long-term primary surface for upload analysis or full drill authoring. Those workflows belong to Studio web and should be described that way in docs and product decisions.
 
-## Transition snapshot (current → target)
-
-```mermaid
-flowchart LR
-    CURRENT[Current Android\nLive + Upload + Authoring]
-    TRANSITION[Transition\nGuide users to Studio]
-    TARGET[Target Android\nImport + Live Runtime + Review]
-
-    CURRENT --> TRANSITION --> TARGET
-```
-
-## Current state vs future direction
-
-### Current state in Android
-
-- Live coaching runtime and session review are actively used core surfaces.
-- Upload video and mobile drill-authoring capabilities still exist in parts of the app.
-- Portable drill package compatibility seams are already in place.
-
-### Target direction
-
-- Android becomes the clear runtime/live-coaching client.
-- Studio web becomes the primary authoring/upload/exchange hub.
-- Mobile drill actions trend toward lightweight operations (import, browse, preview, and minimal metadata operations where needed for runtime continuity).
-
-## How drill packages connect Studio and Android
-
-Portable drill packages are the bridge between repos:
-
-1. Studio authors and exports drill packages.
-2. Android imports and validates packages.
-3. Android maps package content into runtime drill records.
-4. Live coaching/session flows consume those runtime drills.
-
-See:
-
-- [`docs/drill-package-contract.md`](docs/drill-package-contract.md)
-- [`docs/architecture/package-import-runtime-flow.md`](docs/architecture/package-import-runtime-flow.md)
-- [`docs/architecture/studio-mobile-boundary.md`](docs/architecture/studio-mobile-boundary.md)
-- [`docs/studio-android-compatibility.md`](docs/studio-android-compatibility.md)
-
-## Package consumption flow
-
-```mermaid
-flowchart LR
-    EXPORT[Studio Export]
-    IMPORT[Android Import]
-    VALIDATE[Validate Package]
-    MAP[Map to Runtime Drill]
-    COACH[Live Coaching]
-
-    EXPORT --> IMPORT --> VALIDATE --> MAP --> COACH
-```
-
-
-## Portable package boundary in code
-
-To keep Studio-authored package compatibility explicit, Android package handling is organized under `app/src/main/java/com/inversioncoach/app/drillpackage/*`:
-
-- `model/` - portable contract models + boundary constants
-- `io/` - package JSON/file codecs
-- `validation/` - contract validation rules/reports
-- `mapping/` - portable ↔ runtime/catalog mappers + canonical joint semantics
-- `importing/` - parse→validate→map import pipeline result seam
-
-This separation is intentional: runtime/live-coaching internals should consume mapped runtime structures, not directly depend on authoring-specific portable payload details.
-
-## User migration story (mobile-first users)
-
-Users who previously relied on mobile upload/drill authoring can transition progressively:
-
-1. Continue using Android for live coaching and session review.
-2. Begin creating/refining drills in Studio web.
-3. Export/import packages into Android for runtime usage.
-4. Move heavier upload/authoring tasks to web while keeping mobile as the in-session coaching device.
-
-## Documentation map
-
-- Top-level architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
-- Docs index: [`docs/README.md`](docs/README.md)
-- Current user workflows: [`docs/features/current-user-flows.md`](docs/features/current-user-flows.md)
-- Studio/mobile split: [`docs/architecture/studio-mobile-boundary.md`](docs/architecture/studio-mobile-boundary.md)
-- Package import runtime flow: [`docs/architecture/package-import-runtime-flow.md`](docs/architecture/package-import-runtime-flow.md)
-- Mobile direction roadmap: [`docs/roadmap/mobile-direction.md`](docs/roadmap/mobile-direction.md)
-
-## Running locally
+## Development setup
 
 Prerequisites:
 
@@ -173,13 +101,17 @@ Prerequisites:
 - Android SDK 34 (compileSdk/targetSdk 34)
 - `gradle` on PATH (Gradle wrapper is not checked in)
 
-Commands:
+Main validation commands:
 
 ```bash
 gradle testDebugUnitTest
 gradle :app:assembleDebug
 ```
 
-## Documentation maintenance rule
+## Additional documentation
 
-If you change workflow ownership, navigation boundaries, package contract/import behavior, live vs upload scope, or terminology, update relevant docs/diagrams in this repo **and** cross-reference needed updates in Studio docs.
+- Top-level architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
+- Docs index: [`docs/README.md`](docs/README.md)
+- Studio/mobile boundary: [`docs/architecture/studio-mobile-boundary.md`](docs/architecture/studio-mobile-boundary.md)
+- Package import runtime flow: [`docs/architecture/package-import-runtime-flow.md`](docs/architecture/package-import-runtime-flow.md)
+- Drill package contract: [`docs/drill-package-contract.md`](docs/drill-package-contract.md)
