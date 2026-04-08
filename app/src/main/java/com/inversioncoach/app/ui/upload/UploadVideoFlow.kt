@@ -1531,7 +1531,7 @@ internal fun validateSelectedDrillForUpload(
     if (selectedDrillId == null) return null
     if (drillDefinition == null) return "Selected drill no longer exists. Please choose another drill."
     if (drillDefinition.status != DrillStatus.READY) {
-        return "Selected drill is not ready yet. Open Manage Drills and mark it ready first."
+        return "Selected drill is not ready yet. Open drill migration tools and mark it ready first."
     }
     return null
 }
@@ -2059,7 +2059,7 @@ fun UploadVideoScreen(
         UploadStage.VERIFYING_OUTPUT,
     )
 
-    ScaffoldedScreen(title = "Upload Video", onBack = onBack) { padding ->
+    ScaffoldedScreen(title = "Legacy Upload Analysis", onBack = onBack) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -2068,7 +2068,7 @@ fun UploadVideoScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Analyze a recorded video with pose overlay", style = MaterialTheme.typography.titleMedium)
+            Text("Legacy upload analysis (Studio web is the primary surface)", style = MaterialTheme.typography.titleMedium)
             Text(state.stageText, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Current stage: ${state.currentProcessingStage.label}", style = MaterialTheme.typography.bodySmall)
             Text(

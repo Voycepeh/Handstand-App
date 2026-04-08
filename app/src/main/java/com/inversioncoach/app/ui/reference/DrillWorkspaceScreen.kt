@@ -33,8 +33,10 @@ import com.inversioncoach.app.ui.history.selectCompareAttemptTargets
 
 
 internal object DrillWorkspacePrimaryActions {
-    val primary = listOf("Start Live Coaching", "Upload Attempt", "Manage This Drill")
+    val primary = listOf("Start Live Coaching", "Session History")
     val hiddenLegacy = listOf(
+        "Upload Attempt",
+        "Manage This Drill",
         "Upload New Reference",
         "Use Past Session as Reference",
         "Reference Template",
@@ -98,7 +100,7 @@ fun DrillWorkspaceScreen(
         }
     }
 
-    ScaffoldedScreen(title = "Drill Workspace", onBack = onBack) { padding ->
+    ScaffoldedScreen(title = "Drill Runtime", onBack = onBack) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -106,7 +108,7 @@ fun DrillWorkspaceScreen(
             Text(selectedDrill?.name ?: "Drill", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(
                 text = selectedDrill?.description.orEmpty().ifBlank {
-                    "Operational drill use hub: run coaching, upload attempts, and review session history."
+                    "Run live coaching for this drill and review prior sessions."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -115,7 +117,7 @@ fun DrillWorkspaceScreen(
             if (!isReady) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        "This drill is not READY yet. Live coaching and upload actions are currently disabled.",
+                        "This drill is not READY yet. Live coaching is currently disabled.",
                         modifier = Modifier.padding(12.dp),
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -132,7 +134,7 @@ fun DrillWorkspaceScreen(
             ) { Text(DrillWorkspacePrimaryActions.primary[0]) }
 
             Button(
-                onClick = { onUploadAttempt(drillId) },
+                onClick = { onCompareAttempts(drillId) },
                 enabled = isReady,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(DrillWorkspacePrimaryActions.primary[1]) }
@@ -140,7 +142,7 @@ fun DrillWorkspaceScreen(
             Button(
                 onClick = { onManageDrill(drillId) },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(DrillWorkspacePrimaryActions.primary[2]) }
+            ) { Text("Open drill migration tools") }
 
             DrillSessionsSection(
                 modifier = Modifier.weight(1f),

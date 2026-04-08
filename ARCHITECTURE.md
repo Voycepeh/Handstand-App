@@ -8,9 +8,9 @@ This document is the top-level architecture map for CaliVision Android as the **
 
 ## Product workflow anchors (Android)
 
-- **Home / Drill Hub** (`Route.Home`)
-- **Drills (usage path)** (`Route.Start` -> `Route.DrillWorkspace`)
-- **Drill Workspace** (`Route.DrillWorkspace`)
+- **Home / Live Coaching Hub** (`Route.Home`)
+- **Choose Drill (runtime path)** (`Route.Start` -> `Route.Live`)
+- **Drill Runtime Detail** (`Route.DrillWorkspace`)
 - **Live Session** (`Route.Live`)
 - **Results / History** (`Route.Results`, `Route.HistoryOverview`, `Route.SessionHistory`)
 - **Import/compatibility surfaces** (drill package import flows)

@@ -23,12 +23,13 @@ See [`TESTING.md`](TESTING.md) for a fuller validation checklist.
 
 Use current product terminology consistently:
 
-- Home / Drill Hub
-- Manage Drills
-- Drill Studio
+- Home / Live Coaching
+- Choose Drill
 - Live Session
-- Upload / Reference Training
 - Results / Session History
+- Drill packages / migration tools (legacy, de-emphasized)
+
+Do **not** re-expand Android into a full parallel workspace for authoring/upload/review without an explicit product decision. Prefer Studio web language for those responsibilities.
 
 ## Documentation and diagram update rule (required)
 

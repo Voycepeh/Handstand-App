@@ -22,8 +22,6 @@ import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -67,9 +65,7 @@ fun HomeScreen(
     onStartFreestyle: () -> Unit,
     onHistory: () -> Unit,
     onDrills: () -> Unit,
-    onManageDrills: () -> Unit,
     onSettings: () -> Unit,
-    onUploadVideo: () -> Unit,
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
@@ -100,9 +96,7 @@ fun HomeScreen(
             onStartFreestyle = onStartFreestyle,
             onHistory = onHistory,
             onDrills = onDrills,
-            onManageDrills = onManageDrills,
             onSettings = onSettings,
-            onUploadVideo = onUploadVideo,
             sessionSummaries = sessions,
         )
 
@@ -168,9 +162,7 @@ private fun Content(
     onStartFreestyle: () -> Unit,
     onHistory: () -> Unit,
     onDrills: () -> Unit,
-    onManageDrills: () -> Unit,
     onSettings: () -> Unit,
-    onUploadVideo: () -> Unit,
     sessionSummaries: List<SessionRecord>,
 ) {
     val historySummary = remember(sessionSummaries) { sessionSummaries.toHistorySummary() }
@@ -179,33 +171,21 @@ private fun Content(
         modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text("Train smarter", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Live coaching runtime", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
         ActionTile(
-            label = "Start Live Coaching",
-            subtitle = "Generic posture tracking",
+            label = "Start Instant Live Coaching",
+            subtitle = "Jump straight into camera-based feedback",
             icon = { Icon(Icons.Default.FitnessCenter, contentDescription = null) },
             onClick = onStartFreestyle,
             featured = true,
             hero = true,
         )
         ActionTile(
-            label = "Upload Video",
-            subtitle = "Analyze a recorded video with pose overlay",
-            icon = { Icon(Icons.Default.VideoLibrary, contentDescription = null) },
-            onClick = onUploadVideo,
-        )
-        ActionTile(
-            label = "Drills",
-            subtitle = "Browse drills for training and open Drill Workspace",
+            label = "Choose Drill",
+            subtitle = "Pick a drill, then launch live coaching",
             icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
             onClick = onDrills,
-        )
-        ActionTile(
-            label = "Manage Drills",
-            subtitle = "Create, edit, import, export, or delete drills",
-            icon = { Icon(Icons.Default.Build, contentDescription = null) },
-            onClick = onManageDrills,
         )
         HistorySummaryCard(summary = historySummary, onClick = onHistory, label = "History")
 

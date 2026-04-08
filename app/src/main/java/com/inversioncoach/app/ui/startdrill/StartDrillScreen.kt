@@ -82,7 +82,7 @@ fun StartDrillScreen(
         selectedView = if (drill.legacyDrillType == DrillType.FREESTYLE) EffectiveView.FREESTYLE else EffectiveView.SIDE
     }
 
-    ScaffoldedScreen(title = if (destination == StartDrillDestination.WORKSPACE) "Drills" else "Choose Drill", onBack = onBack) { padding ->
+    ScaffoldedScreen(title = if (destination == StartDrillDestination.WORKSPACE) "Drill Details" else "Choose Drill", onBack = onBack) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -91,15 +91,15 @@ fun StartDrillScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                if (destination == StartDrillDestination.WORKSPACE) "Drills for training" else "Choose your flow",
+                if (destination == StartDrillDestination.WORKSPACE) "Drill runtime details" else "Choose a drill for live coaching",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
             Text(
                 text = if (destination == StartDrillDestination.WORKSPACE) {
-                    "Tap a drill to open Drill Workspace for live coaching, attempt uploads, session history, and comparisons. Use Manage Drills for editing."
+                    "Open drill details to start coaching and review recent sessions. Create/edit drill definitions in CaliVision Studio (web)."
                 } else {
-                    "Tap a drill to select it, then start coaching."
+                    "Tap a drill, adjust coaching options, and start a live session."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -133,7 +133,7 @@ fun StartDrillScreen(
                     shape = RoundedCornerShape(16.dp),
                 ) {
                     Text(
-                        text = "No drills available yet. Create or import a drill to get started.",
+                        text = "No drills available yet. Import a package from CaliVision Studio (web) to start coaching.",
                         modifier = Modifier.padding(12.dp),
                         style = MaterialTheme.typography.bodyMedium,
                     )

@@ -1,8 +1,11 @@
 # CaliVision Android
 
-**Mobile live-coaching runtime for the CaliVision ecosystem.**
+**Native live-coaching runtime for the CaliVision ecosystem.**
 
-CaliVision Android is the edge-device companion to **CaliVision-Studio (web)**: Android handles in-session coaching execution, while Studio handles authoring and upload-driven analysis.
+CaliVision Android is the edge-device companion to **CaliVision-Studio (web)**:
+
+- Android handles **choose drill → run live coaching → review session feedback/history**.
+- Studio handles **drill library/authoring**, **upload + camera-capture analysis**, **package exchange**, and broader browser workspace workflows.
 
 👉 Studio repo: **https://github.com/Voycepeh/CaliVision-Studio**
 
@@ -17,8 +20,8 @@ I also come from a data architecture / BI background rather than traditional app
 
 The product direction is intentional and explicit:
 
-- **Android (this repo):** live coaching runtime on device, portable in-session UX, session review/history, and consumption of Studio-authored portable drill packages.
-- **Studio web:** upload video analysis, drill authoring/drill management, package publishing/exchange, and heavier editing workflows.
+- **Android (this repo):** native live coaching runtime on device, portable in-session UX, session review/history, and consumption of Studio-authored portable drill packages.
+- **Studio web:** primary cross-platform product for drill library, drill authoring/management, upload/camera-capture analysis, replay/review, and package publishing/exchange.
 
 This split is not a missing feature or regression. It is the long-term product shape.
 
@@ -31,7 +34,7 @@ The cleaner model is now:
 - edge-device runtime on Android
 - web authoring/upload workflows in Studio
 
-Android is being simplified toward in-session coaching.
+Android is intentionally narrowed toward in-session coaching.
 
 ## What Android is responsible for now
 
@@ -39,7 +42,7 @@ Android is being simplified toward in-session coaching.
 - Camera-first runtime feedback loops
 - Importing and consuming Studio-authored portable drill packages
 - Session replay, results, and history on device
-- Lightweight runtime drill usage flows needed for training continuity
+- Lightweight runtime drill usage flows needed for training continuity (not full workspace ownership)
 
 ## What Studio is responsible for now
 
@@ -47,6 +50,7 @@ Android is being simplified toward in-session coaching.
 - Drill Studio authoring and drill management (source of truth)
 - Package publishing and exchange workflows
 - Heavier browser-first editing and lifecycle management
+- Primary replay/review workspace for cross-platform workflows
 
 ## Why mobile still matters
 
@@ -91,7 +95,7 @@ Workflow notes:
 
 ## Repo scope guardrail
 
-This Android repo is not the long-term primary surface for upload analysis or full drill authoring. Those workflows belong to Studio web and should be described that way in docs and product decisions.
+This Android repo is not the long-term primary surface for upload analysis, full drill authoring, or broad workspace management. Those workflows belong to Studio web and should be described that way in docs, UX copy, and product decisions.
 
 ## Development setup
 

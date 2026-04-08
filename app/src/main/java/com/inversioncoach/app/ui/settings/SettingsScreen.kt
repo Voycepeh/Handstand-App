@@ -52,7 +52,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onDeveloperTuning: () -> Unit,
     onNavigateHome: () -> Unit,
-    onDrillStudio: () -> Unit,
+    onManageDrills: () -> Unit,
 ) {
     val context = LocalContext.current
     val repository = remember { ServiceLocator.repository(context) }
@@ -124,7 +124,7 @@ fun SettingsScreen(
 
             Button(onClick = { showSaveConfirmation = true }, modifier = Modifier.fillMaxWidth()) { Text("Save settings") }
             Button(onClick = onDeveloperTuning, modifier = Modifier.fillMaxWidth()) { Text("Developer threshold tuning") }
-            Button(onClick = onDrillStudio, modifier = Modifier.fillMaxWidth()) { Text("Drill Studio") }
+            Button(onClick = onManageDrills, modifier = Modifier.fillMaxWidth()) { Text("Drill packages & migration tools") }
         }
 
         if (showSaveConfirmation) {

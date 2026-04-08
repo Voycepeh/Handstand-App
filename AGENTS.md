@@ -13,6 +13,7 @@ CaliVision Android is the **mobile runtime/live-coaching app** for the CaliVisio
 - **Android owns (primary):** live coaching runtime, package import/consumption, session replay/history, portable in-session UX.
 - **Studio owns (source of truth):** full drill authoring, richer drill management, browser-first upload analysis/exchange.
 - Existing Android authoring/upload surfaces may remain during transition, but heavy new investment in Android-first authoring should be treated cautiously and generally avoided unless needed for migration compatibility.
+- Do not re-expand Android into a full parallel authoring/upload workspace unless there is an explicit product-direction decision documented in the PR.
 
 ## Toolchain requirements
 

@@ -12,9 +12,9 @@ Studio repo: https://github.com/Voycepeh/CaliVision-Studio
 
 ## Route-level flow map
 
-- `home` -> Home / Drill Hub
+- `home` -> Home / Live Coaching Hub
 - `start` -> Start Drill selector
-- `drill-workspace/{drillId}` -> Drill Workspace
+- `drill-workspace/{drillId}` -> Drill Runtime Detail
 - `live/...` -> Live Session
 - `results/{sessionId}` -> Results
 - `history` -> History Overview
@@ -43,9 +43,9 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    HOME[Home / Drill Hub]
-    DRILLS[Drills]
-    WORKSPACE[Drill Workspace]
+    HOME[Home / Live Coaching Hub]
+    START[Choose Drill]
+    WORKSPACE[Drill Runtime Detail]
     LIVE[Live Coaching]
     UPLOAD[Upload / Reference Training\nTransitional]
     MANAGE[Manage Drills\nTransitional]
@@ -53,7 +53,8 @@ flowchart TD
     RESULTS[Results]
     HISTORY[History]
 
-    HOME --> DRILLS --> WORKSPACE --> LIVE --> RESULTS
+    HOME --> START --> LIVE --> RESULTS
+    START --> WORKSPACE --> LIVE
     WORKSPACE --> UPLOAD --> RESULTS
     HOME --> MANAGE --> STUDIO
     RESULTS --> HISTORY

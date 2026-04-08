@@ -57,19 +57,19 @@ fun ManageDrillsScreen(
         }
     }
 
-    ScaffoldedScreen(title = "Manage Drills", onBack = onBack) { padding ->
+    ScaffoldedScreen(title = "Drill Packages & Migration", onBack = onBack) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                "Create and edit drills here. Open a drill to continue in Drill Studio.",
+                "Use this screen for migration support only. Primary drill authoring and upload analysis belong in CaliVision Studio (web).",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(onClick = onCreateDrill, modifier = Modifier.fillMaxWidth()) { Text("New Drill") }
+            Button(onClick = onCreateDrill, modifier = Modifier.fillMaxWidth()) { Text("Create drill (legacy)") }
             OutlinedButton(onClick = { importPicker.launch(arrayOf("application/json")) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Import Drill Package")
+                Text("Import package from Studio")
             }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(drills) { drill ->
@@ -82,7 +82,7 @@ fun ManageDrillsScreen(
                             Text(drill.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             Text(drill.description, style = MaterialTheme.typography.bodySmall)
                             Text("${drill.movementMode} • ${drill.cameraView} • ${drill.status}", style = MaterialTheme.typography.labelSmall)
-                            Button(onClick = { onOpenDrill(drill.id) }, modifier = Modifier.fillMaxWidth()) { Text("Open") }
+                            Button(onClick = { onOpenDrill(drill.id) }, modifier = Modifier.fillMaxWidth()) { Text("Open legacy editor") }
                             OutlinedButton(
                                 onClick = {
                                     scope.launch {

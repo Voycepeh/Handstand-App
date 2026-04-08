@@ -91,10 +91,8 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
             HomeScreen(
                 onStartFreestyle = { navController.navigate(Route.Live.create(DrillType.FREESTYLE, LiveSessionOptions.freestyleDefaults())) },
                 onHistory = { navController.navigate(Route.HistoryOverview.value) },
-                onDrills = { navController.navigate(Route.Start.create(StartDrillDestination.WORKSPACE)) },
-                onManageDrills = { navController.navigate(Route.ManageDrills.value) },
+                onDrills = { navController.navigate(Route.Start.create(StartDrillDestination.LIVE)) },
                 onSettings = { navController.navigate(Route.Settings.value) },
-                onUploadVideo = { navController.navigate(Route.UploadVideo.value) },
             )
         }
         composable(Route.Start.value, arguments = listOf(navArgument("destination") { type = NavType.StringType; defaultValue = "live" })) {
@@ -172,7 +170,7 @@ fun AppNavHost(modifier: Modifier = Modifier, initialSessionId: Long? = null) {
                 onBack = { navController.popBackStack() },
                 onDeveloperTuning = { navController.navigate(Route.DevTuning.value) },
                 onNavigateHome = { navController.popBackStack(Route.Home.value, false) },
-                onDrillStudio = { navController.navigate(Route.DrillStudio.createNew()) },
+                onManageDrills = { navController.navigate(Route.ManageDrills.value) },
             )
         }
         composable(Route.DevTuning.value) { DeveloperTuningScreen(onBack = { navController.popBackStack() }) }
